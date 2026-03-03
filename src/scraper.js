@@ -127,10 +127,8 @@ function parseTimestamp(val) {
 
 // --- Source 1: RapidAPI with MULTI-HOST ROTATION ---
 const IG_API_HOSTS = [
-    { host: 'instagram-scraper-api2.p.rapidapi.com', path: '/v1/hashtag', paramKey: 'hashtag', dataPath: 'data.items' },
-    { host: 'instagram-scraper-api3.p.rapidapi.com', path: '/hashtag_posts', paramKey: 'hashtag', dataPath: 'data' },
-    { host: 'instagram-bulk-scraper-latest.p.rapidapi.com', path: '/search_hashtag', paramKey: 'name', dataPath: 'data' },
-    { host: 'real-time-instagram-scraper-api.p.rapidapi.com', path: '/v1/hashtag/posts', paramKey: 'hashtag', dataPath: 'items' },
+    { host: 'instagram-scraper-api2.p.rapidapi.com', path: '/v1/hashtag', paramKey: 'hashtag', dataPath: 'data.items', method: 'GET' },
+    { host: 'instagram-scrapper-new.p.rapidapi.com', path: '/getFeedByHashtagLegacy', paramKey: 'hashtag', dataPath: 'items', method: 'POST' },
 ];
 
 async function igFromRapidAPI(hashtags, maxPosts) {
@@ -145,11 +143,22 @@ async function igFromRapidAPI(hashtags, maxPosts) {
 
             for (const hashtag of hashtags.slice(0, 5)) {
                 console.log(`[IG:RapidAPI]   → #${hashtag}`);
-                const resp = await axios.get(`https://${api.host}${api.path}`, {
+                const reqConfig = {
                     headers: { 'x-rapidapi-host': api.host, 'x-rapidapi-key': apiKey },
-                    params: { [api.paramKey]: hashtag },
                     timeout: 30000,
-                });
+                };
+                let resp;
+                if (api.method === 'POST') {
+                    resp = await axios.post(`https://${api.host}${api.path}`,
+                        { [api.paramKey]: hashtag },
+                        reqConfig
+                    );
+                } else {
+                    resp = await axios.get(`https://${api.host}${api.path}`, {
+                        ...reqConfig,
+                        params: { [api.paramKey]: hashtag },
+                    });
+                }
 
                 // Dynamic data extraction based on dataPath
                 let items = resp.data;
@@ -626,9 +635,7 @@ function extractFBFields(item) {
 // Each API has its own free monthly limit. When one hits 429, try the next!
 const FB_API_HOSTS = [
     { host: 'facebook-scraper3.p.rapidapi.com', path: '/search/posts', paramKey: 'query' },
-    { host: 'facebook-search1.p.rapidapi.com', path: '/posts/search', paramKey: 'query' },
-    { host: 'facebook-data-scraper.p.rapidapi.com', path: '/search', paramKey: 'query' },
-    { host: 'fresh-facebook-scraper.p.rapidapi.com', path: '/search/posts', paramKey: 'query' },
+    { host: 'facebook-pages-scraper2.p.rapidapi.com', path: '/search_facebook_posts', paramKey: 'query' },
 ];
 
 async function fbFromRapidAPI(keywords, maxPosts) {
