@@ -37,6 +37,9 @@ console.warn = (...args) => { captureLog('warn', args); origWarn.apply(console, 
 const app = express();
 let server = null; // keep reference for graceful shutdown
 
+// Trust proxy (Nginx reverse proxy on VPS)
+app.set('trust proxy', 1);
+
 // --- Middleware ---
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));

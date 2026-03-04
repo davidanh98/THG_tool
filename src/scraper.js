@@ -832,7 +832,7 @@ async function fbFromGroups(maxPostsPerGroup = 5) {
             maxPosts: maxPostsPerGroup,
             maxPostDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // Last 30 days only
             maxComments: 0, // Don't scrape comments to save credit
-        }, { timeoutSecs: 120 });
+        });
 
         const { items } = await client.dataset(run.defaultDatasetId).listItems();
         console.log(`[FB:Groups] 📥 Apify returned ${items.length} raw posts`);
@@ -877,7 +877,7 @@ async function fbFromGroups(maxPostsPerGroup = 5) {
                         startUrls: groupUrls.map(url => ({ url })),
                         maxPosts: maxPostsPerGroup,
                         maxComments: 0,
-                    }, { timeoutSecs: 120 });
+                    });
                     const { items } = await apify2.client.dataset(run.defaultDatasetId).listItems();
                     for (const item of items) {
                         const content = item.text || item.message || item.postText || '';
