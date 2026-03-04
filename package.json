@@ -1,6 +1,6 @@
 {
   "name": "thg-lead-gen",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "THG AI Cyborg Sales Pipeline — Lead Detection + AI Copilot",
   "main": "src/index.js",
   "scripts": {

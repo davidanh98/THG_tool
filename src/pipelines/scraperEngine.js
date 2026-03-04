@@ -61,12 +61,20 @@ function markRapidKeyExhausted(key) {
 }
 
 function getActiveApifyClient() {
+    if (APIFY_TOKENS.length === 0) {
+        console.log('[KeyPool] ⚠️ No Apify tokens configured (check APIFY_TOKEN in .env)');
+        return null;
+    }
     for (const token of APIFY_TOKENS) {
         if (!exhaustedApifyTokens.has(token)) {
             try {
                 const { ApifyClient } = require('apify-client');
                 return { client: new ApifyClient({ token }), token };
-            } catch (e) { continue; }
+            } catch (e) {
+                console.error(`[KeyPool] ❌ apify-client load failed: ${e.message}`);
+                console.error('[KeyPool] 💡 Fix: npm install apify-client');
+                return null; // Don't continue loop, package is missing
+            }
         }
     }
     return null;
@@ -84,7 +92,10 @@ function isApifyExhausted(errMsg) {
         || msg.includes('hard limit') || msg.includes('upgrade');
 }
 
+// Startup diagnostics
 console.log(`[KeyPool] Loaded: ${RAPIDAPI_KEYS.length} RapidAPI keys, ${APIFY_TOKENS.length} Apify tokens`);
+if (APIFY_TOKENS.length > 0) console.log(`[KeyPool] Apify token: ...${APIFY_TOKENS[0].slice(-6)}`);
+if (RAPIDAPI_KEYS.length > 0) console.log(`[KeyPool] RapidAPI key: ...${RAPIDAPI_KEYS[0].slice(-6)}`);
 
 function rapidHeaders(host) {
     const key = getActiveRapidKey();
