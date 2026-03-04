@@ -140,7 +140,7 @@ async function runPipeline(options = {}) {
         console.log('\n[Pipeline] 🧠 Step 2: Classifying posts with AI...');
         const classified = await classifyPosts(newPosts);
 
-        // Apply Time-Decay Score Penalty
+        // Apply Time-Decay Score Penalty (softened — keeps more value for older posts)
         const nowMs = Date.now();
         classified.forEach(post => {
             if (post.score > 0 && post.post_created_at) {
@@ -148,9 +148,10 @@ async function runPipeline(options = {}) {
                 const ageDays = (nowMs - postTimeMs) / (1000 * 60 * 60 * 24);
 
                 let penaltyMultiplier = 1;
-                if (ageDays > 30) penaltyMultiplier = 0.2; // -80% if older than 1 month
-                else if (ageDays > 7) penaltyMultiplier = 0.5;  // -50% if older than 1 week
-                else if (ageDays > 3) penaltyMultiplier = 0.8;  // -20% if older than 3 days
+                if (ageDays > 90) penaltyMultiplier = 0.3;      // -70% if older than 3 months
+                else if (ageDays > 30) penaltyMultiplier = 0.5;  // -50% if older than 1 month
+                else if (ageDays > 7) penaltyMultiplier = 0.7;   // -30% if older than 1 week
+                else if (ageDays > 3) penaltyMultiplier = 0.9;   // -10% if older than 3 days
 
                 if (penaltyMultiplier < 1) {
                     const originalScore = post.score;
@@ -164,9 +165,19 @@ async function runPipeline(options = {}) {
         // Filter: only BUYERS with good scores (exclude providers/competitors)
         const buyers = classified.filter(p => p.role === 'buyer');
         const providers = classified.filter(p => p.role === 'provider');
+        const irrelevant = classified.filter(p => p.role !== 'buyer' && p.role !== 'provider');
         const qualifiedLeads = buyers.filter(p => p.isLead && p.score >= config.LEAD_SCORE_THRESHOLD);
 
-        console.log(`[Pipeline] 📊 Buyers: ${buyers.length} | Providers (skipped): ${providers.length} | Irrelevant: ${classified.length - buyers.length - providers.length}`);
+        // DEBUG: Show classification results for ALL posts
+        console.log(`\n[Debug] 📋 Full classification breakdown:`);
+        classified.forEach((p, i) => {
+            const icon = p.role === 'buyer' ? '🎯' : p.role === 'provider' ? '🏢' : '⬜';
+            const content = (p.content || '').substring(0, 60).replace(/\n/g, ' ');
+            console.log(`[Debug]   ${icon} #${i + 1} [${p.role}] score=${p.score} | ${content}...`);
+        });
+        console.log('');
+
+        console.log(`[Pipeline] 📊 Buyers: ${buyers.length} | Providers (skipped): ${providers.length} | Irrelevant: ${irrelevant.length}`);
         console.log(`[Pipeline] 🎯 Qualified leads (buyers with score ≥ ${config.LEAD_SCORE_THRESHOLD}): ${qualifiedLeads.length}`);
 
         if (qualifiedLeads.length === 0) {
