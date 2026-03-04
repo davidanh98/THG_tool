@@ -214,6 +214,7 @@ function renderLeadCard(lead) {
 
       </div>
       <div class="lead-actions">
+        ${lead.author_url ? `<a href="${lead.author_url}" target="_blank" rel="noopener" class="action-btn" style="background:rgba(59,130,246,0.1);color:#3b82f6;font-weight:600;">👤 Profile</a>` : ''}
         ${lead.post_url ? `<a href="${lead.post_url}" target="_blank" rel="noopener" class="action-btn view-post-btn">🔗 View Post</a>` : ''}
         <button class="action-btn ${lead.status === 'contacted' ? 'active-contacted' : ''}" onclick="contactLead(${lead.id})">📞 Contacted</button>
         <button class="action-btn ${lead.status === 'converted' ? 'active-converted' : ''}" onclick="convertLead(${lead.id})">✅ Converted</button>
