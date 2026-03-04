@@ -33,6 +33,7 @@ const AI_MODELS = [
 
 const PROVIDER_REGEX = /(chúng tôi nhận gửi|quy trình gửi hàng|lợi ích khi gửi hàng với chúng tôi|nhận gửi hàng đi|chuyên tuyến việt|cước phí cạnh tranh|cam kết giao tận tay|hỗ trợ tư vấn, chăm sóc khách hàng 24\/7|we offer fulfillment|shipping services from us|dịch vụ vận chuyển uy tín|không phát sinh chi phí|bao thuế bao luật|nhận pick up|đóng gói miễn phí|hút chân không|lh em ngay|lh em|liên hệ em|ib em ngay|ib em|inbox em|cmt em|chấm em|check ib|check inbox|dạ em nhận|em chuyên nhận|gửi hàng đi mỹ inbox|nhận vận chuyển|zalo: 0)/i;
 const IRRELEVANT_REGEX = /(recipe|cooking|football|soccer|gaming|movie|trailer|music video|crypto airdrop|token launch|weight loss|diet pill)/i;
+const MARKETING_REGEX = /(link in bio|tap to shop|shop now|save for later|#ad\b|#sponsored|swipe up|limited time offer|use code|promo code|giveaway alert|we're hiring)/i;
 
 let currentModelIndex = 0;
 let consecutiveErrors = 0;
@@ -262,6 +263,10 @@ async function classifyPosts(posts) {
         }
         if (IRRELEVANT_REGEX.test(content)) {
             preFiltered.push({ ...post, ...makeFallback(), summary: 'Không liên quan' });
+            continue;
+        }
+        if (MARKETING_REGEX.test(content)) {
+            preFiltered.push({ ...post, ...makeFallback(), summary: 'Marketing content (brand page)' });
             continue;
         }
         toClassify.push(post);

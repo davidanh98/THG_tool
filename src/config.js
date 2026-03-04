@@ -54,20 +54,29 @@ module.exports = {
   ],
 
   // --- Target accounts to scrape (SociaVault = profile-based) ---
+  // TikTok: Logistics đối thủ + Top Sellers TikTok Shop US + Cộng đồng
   TT_TARGET_ACCOUNTS: [
-    'weshop.global',        // competitor - logistics VN
-    'printful',             // POD competitor
-    'tiktokshop_us',        // TikTok Shop official
-    'ecomvietnam',          // ecom community
-    'dropshippinglife',     // dropship niche
-    'amazonsellertips',     // amazon seller
+    // Logistics & 3PL (đối thủ / học hỏi)
+    'bestexpressvn',         // logistics hàng đầu VN, TikTok Shop
+    'boxmeglobal',           // fulfillment đa quốc gia SEA
+    'merchize',              // đối thủ POD Global, xưởng Hà Nội
+    // Top Sellers TikTok Shop US (khách hàng tiềm năng)
+    'tartecosmetics',        // #1 doanh số Mỹ, 3.9M+ đơn
+    'halara_us',             // thời trang $110M+ GMV
+    'microingredients',      // top seller thực phẩm chức năng
+    // Cộng đồng & Xu hướng
+    'findniche',             // phân tích TikTok Shop, xu hướng
   ],
+  // Instagram: POD/Ecom platforms + Logistics/Fulfillment chuyên nghiệp
   IG_TARGET_ACCOUNTS: [
-    'weshop.vn',            // competitor
-    'boxme.asia',           // competitor  
-    'printful',             // POD competitor
-    'shopify',              // ecom platform
-    'amazonfba',            // amazon seller community
+    // POD & Ecom Platforms
+    'printify',              // POD hàng đầu (phonecases, canvas)
+    'shopify',               // nền tảng seller global
+    'zdrop_official',        // Zendrop — dropship CN→US
+    // Logistics & Fulfillment
+    'salesupply_global',     // fulfillment quốc tế EU+US
+    'amzprep',               // 3PL cho FBA & Ecommerce
+    'shiphype',              // đóng gói & ship cho shop online
   ],
 
   // --- Search keywords (kept for reference) ---

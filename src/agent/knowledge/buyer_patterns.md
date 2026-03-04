@@ -41,6 +41,32 @@
 - "basecost tumbler bao nhiêu"
 - **Đặc điểm**: Rất ngắn nhưng ý định MUA rõ ràng
 
+## ═══ 4 NỖI ĐAU CHÍNH — Scoring theo Pain Point ═══
+
+### Pain Point A: Shipping chậm / Order tracking (Score 80-90) → Chào THG Express
+- "where is my order", "shipping is too slow", "đơn đi đâu rồi"
+- "tracking pending", "giao chậm", "bao giờ mới tới"
+- "order stuck", "delivery delay", "hàng bị kẹt"
+- **THG Solution**: Bay thẳng, tracking real-time, giao 2-5 ngày toàn US
+
+### Pain Point B: Tìm sản phẩm POD (Score 75-85) → Chào THG Fulfill
+- Post về sản phẩm: phonecase, jersey thêu, Hawaiian shirt, canvas prints
+- "tìm xưởng in", "basecost POD", "DTG prints"
+- "cần supplier POD", "xưởng in áo", "in thêu logo"
+- **THG Solution**: Basecost thấp, in tại VN/CN/US, quality control
+
+### Pain Point C: Quản lý kho & SKU (Score 80-90) → Chào THG Warehouse
+- "SKU management", "inventory errors", "hết hàng không biết"
+- "tồn kho sai", "OMS/WMS nào tốt", "quản lý đơn hàng phức tạp"
+- "need better warehouse", "FBA prep", "3PL cho amazon"
+- **THG Solution**: OMS/WMS real-time, kho kép PA+TX, miễn phí 90 ngày
+
+### Pain Point D: Chi phí vận chuyển cao (Score 75-85) → Chào THG Express/Warehouse
+- "shipping cost too high", "phí gửi hàng đắt quá"
+- "fulfill nội địa đắt", "giảm chi phí ship"
+- "tìm line giá rẻ", "epacket alternatives"
+- **THG Solution**: Fulfill từ $1.2/đơn, line riêng giá tốt
+
 ## Anti-Pattern: PROVIDER / Đối thủ (Score 0)
 - "bên mình nhận ship...", "chúng tôi cung cấp..."
 - "liên hệ em", "inbox em", "zalo: 0..."
@@ -54,3 +80,4 @@
 - Chia sẻ kiến thức chung, khoe đơn
 - Chủ đề không liên quan (gaming, crypto, cooking)
 - Review sản phẩm (không phải review dịch vụ ship)
+- Marketing content từ brand pages (quảng cáo sản phẩm, không có buyer intent)
