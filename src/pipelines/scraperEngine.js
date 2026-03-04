@@ -148,10 +148,9 @@ const IG_API_HOSTS = [
 ];
 
 async function igFromRapidAPI(hashtags, maxPosts) {
-    const apiKey = process.env.RAPIDAPI_KEY;
+    const apiKey = getActiveRapidKey();
     if (!apiKey) throw new Error('No RAPIDAPI_KEY');
     const allPosts = [];
-    // FIX: Chỉ lấy top 3 hashtag, không phải 5
     for (const api of IG_API_HOSTS) {
         try {
             for (const hashtag of hashtags.slice(0, 3)) {
@@ -380,7 +379,7 @@ const FB_API_HOSTS = [
 ];
 
 async function fbFromRapidAPI(keywords, maxPosts) {
-    const apiKey = process.env.RAPIDAPI_KEY;
+    const apiKey = getActiveRapidKey();
     if (!apiKey) throw new Error('No RAPIDAPI_KEY');
     const allPosts = [];
     for (const api of FB_API_HOSTS) {
