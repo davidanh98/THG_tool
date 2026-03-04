@@ -448,6 +448,25 @@ async function classifyPosts(posts) {
     console.log(`[Classifier] ✅ Done! ${leads.length} qualified leads (score ≥ ${config.LEAD_SCORE_THRESHOLD}) out of ${posts.length} total posts`);
     console.log(`[Classifier]    📊 Breakdown: ${preFiltered.length} pre-filtered, ${toClassify.length} sent to AI`);
 
+    // Debug: Show all buyer posts with scores
+    const buyerPosts = results.filter(r => r.role === 'buyer' || r.author_role === 'seller_ecom' || r.intent === 'seeking_service');
+    if (buyerPosts.length > 0) {
+        console.log(`[Classifier] 🎯 Buyer posts found: ${buyerPosts.length}`);
+        buyerPosts.forEach(p => {
+            const tag = p.score >= config.LEAD_SCORE_THRESHOLD ? '✅' : '⚠️';
+            console.log(`[Classifier]   ${tag} Score ${p.score} | ${(p.content || '').substring(0, 80)}`);
+        });
+    }
+
+    // Debug: Show borderline posts (score 40-59) that almost qualified
+    const borderline = results.filter(r => r.score >= 40 && r.score < config.LEAD_SCORE_THRESHOLD);
+    if (borderline.length > 0) {
+        console.log(`[Classifier] 🔶 Borderline posts (score 40-${config.LEAD_SCORE_THRESHOLD - 1}): ${borderline.length}`);
+        borderline.forEach(p => {
+            console.log(`[Classifier]   🔶 Score ${p.score} | ${(p.content || '').substring(0, 80)}`);
+        });
+    }
+
     return results;
 }
 

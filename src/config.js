@@ -43,28 +43,28 @@ module.exports = {
   // KHÔNG phải keywords của người CUNG CẤP dịch vụ (đối thủ)
   SEARCH_KEYWORDS: {
     facebook: [
-      // Vietnamese — tìm DVVC/fulfill/kho TOÀN CẦU (không chỉ Mỹ)
-      'cần tìm đơn vị vận chuyển quốc tế',
-      'tìm kho fulfillment',
-      'cần dịch vụ 3PL',
-      'tìm supplier POD dropship',
-      'cần vận chuyển từ Việt Nam',
-      'tìm đơn vị vận chuyển Trung Quốc',
-      // English — global shipping/fulfillment
-      'need fulfillment center',
-      'looking for 3PL shipping',
+      // Seller đang than thở / hỏi
+      'ship hàng Mỹ bị delay',
+      'ai dùng fulfill nào ổn không',
+      'kho Mỹ giá bao nhiêu',
+      'TikTok shop US tracking không active',
+      'POD basecost rẻ',
+      'đơn hàng Mỹ bị stuck',
+      // Câu hỏi thực tế
+      'recommend đơn vị ship',
+      'ai đang dùng THG',
     ],
     instagram: [
-      'vanchuyenquocte',
-      'fulfillment',
-      'shippingworldwide',
-      'dropshipping',
-      'PODfulfillment',
+      // Hashtag của SELLER, không phải provider
+      'sellertiktokus',
+      'podvietnam',
+      'dropshipvietnam',
+      'kinhdoanhonlineus',
     ],
     tiktok: [
-      'tìm đơn vị vận chuyển',
-      'fulfillment warehouse',
-      'ship hàng quốc tế',
+      'POD Vietnam review',
+      'ship hàng Mỹ như thế nào',
+      'bán hàng TikTok US',
     ],
   },
 
