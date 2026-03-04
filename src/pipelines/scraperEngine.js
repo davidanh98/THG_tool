@@ -339,46 +339,6 @@ async function scrapeTikTok(keywords, maxPosts = 20) {
 }
 
 // ╔══════════════════════════════════════════════════════╗
-// ║  REDDIT — 100% FREE                                  ║
-// ╚══════════════════════════════════════════════════════╝
-async function scrapeReddit(keywords, maxPosts = 30) {
-    console.log(`[Scraper:Reddit] 🟠 Free JSON API...`);
-    const allPosts = [];
-    const headers = { 'User-Agent': 'THGLeadBot/1.0', 'Accept': 'application/json' };
-    for (const keyword of keywords.slice(0, 3)) {
-        try {
-            const resp = await axios.get(
-                `https://www.reddit.com/search.json?q=${encodeURIComponent(keyword)}&sort=new&t=week&limit=10`,
-                { headers, timeout: 15000 }
-            );
-            const posts = (resp.data?.data?.children || [])
-                .filter(c => c.kind === 't3').map(c => c.data)
-                .map(item => ({
-                    platform: 'reddit',
-                    post_url: `https://www.reddit.com${item.permalink}`,
-                    author_name: item.author || 'Unknown',
-                    content: [item.title, item.selftext || ''].filter(Boolean).join('\n\n'),
-                    post_created_at: parseTimestamp(item.created_utc),
-                    scraped_at: new Date().toISOString(),
-                })).filter(p => p.content.length > 15);
-            allPosts.push(...posts);
-            await delay(2000);
-        } catch (err) { console.error(`[Reddit] ✗ "${keyword}": ${err.message}`); }
-    }
-    return dedup(allPosts);
-}
-
-// ╔══════════════════════════════════════════════════════╗
-// ║  TWITTER — DISABLED                                  ║
-// ╚══════════════════════════════════════════════════════╝
-// FIX: Tắt hoàn toàn. $0.40/run, không phù hợp với target audience (seller Việt).
-// Seller Việt dùng Facebook và TikTok, không dùng Twitter.
-async function scrapeTwitter(keywords, maxPosts = 50) {
-    console.log('[Scraper:X] ⏭️  Twitter/X disabled — không phù hợp với target. Skipping.');
-    return [];
-}
-
-// ╔══════════════════════════════════════════════════════╗
 // ║  FACEBOOK                                            ║
 // ╚══════════════════════════════════════════════════════╝
 
@@ -542,16 +502,13 @@ function dedup(posts) {
 // ║  FULL SCAN                                           ║
 // ╚══════════════════════════════════════════════════════╝
 const SCRAPERS = {
-    // FIX: Twitter removed từ SCRAPERS map
     facebook: { fn: scrapeFacebook, getKeywords: () => config.SEARCH_KEYWORDS.facebook },
     instagram: { fn: scrapeInstagram, getKeywords: () => config.SEARCH_KEYWORDS.instagram },
     tiktok: { fn: scrapeTikTok, getKeywords: () => config.SEARCH_KEYWORDS.tiktok },
-    reddit: { fn: scrapeReddit, getKeywords: () => config.SEARCH_KEYWORDS.reddit },
 };
 
 async function runFullScan(options = {}) {
-    // FIX: Default platforms không còn twitter
-    const platforms = options.platforms || ['facebook', 'instagram', 'tiktok', 'reddit'];
+    const platforms = options.platforms || ['facebook', 'tiktok', 'instagram'];
     const maxPerPlatform = options.maxPosts || 20;
 
     console.log(`\n${'═'.repeat(55)}`);
@@ -585,8 +542,7 @@ async function runFullScan(options = {}) {
 }
 
 module.exports = {
-    scrapeFacebook, scrapeInstagram, scrapeReddit,
-    scrapeTwitter, // stub — returns []
+    scrapeFacebook, scrapeInstagram,
     scrapeTikTok, runFullScan,
-    fbFromGroups: fbGroupsDisabled, // stub
+    fbFromGroups: fbGroupsDisabled,
 };

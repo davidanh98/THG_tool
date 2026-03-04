@@ -30,15 +30,8 @@ module.exports = {
 
   // --- Apify Actor IDs ---
   APIFY_ACTORS: {
-    // Facebook
     FB_SEARCH: 'apify/facebook-search-scraper',
-    // Instagram
     IG_HASHTAG: 'apify/instagram-hashtag-scraper',
-    // Reddit
-    REDDIT_SEARCH: 'trudax/reddit-scraper',
-    // Twitter / X
-    TWITTER_SEARCH: 'apidojo/tweet-scraper',
-    // TikTok
     TIKTOK_SEARCH: 'clockworks/tiktok-scraper',
   },
 
@@ -102,22 +95,7 @@ module.exports = {
       'fulfillment warehouse',
       'ship hàng quốc tế',
     ],
-    reddit: [
-      'need fulfillment center USA',
-      'looking for 3PL warehouse',
-      'POD supplier Vietnam',
-    ],
   },
-
-  // --- Reddit subreddits where BUYERS ask questions ---
-  REDDIT_SUBREDDITS: [
-    // Top 5 (Reddit is free but still want to keep AI classify volume low)
-    'ecommerce',
-    'FulfillmentByAmazon',
-    'shopify',
-    'Entrepreneur',
-    'smallbusiness',
-  ],
 
   // --- THG business context for AI ---
   THG_CONTEXT: `
