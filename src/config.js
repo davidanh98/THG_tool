@@ -1,15 +1,8 @@
 require('dotenv').config();
 
 module.exports = {
-  // --- Apify (primary scraping) ---
-  APIFY_TOKEN: process.env.APIFY_TOKEN,
-
-  // --- RapidAPI (fallback for TikTok/IG) ---
-  RAPIDAPI_KEY: process.env.RAPIDAPI_KEY,
-
-  // --- PhantomBuster (FB Group scraping) ---
+  // --- PhantomBuster (all scraping) ---
   PHANTOMBUSTER_API_KEY: process.env.PHANTOMBUSTER_API_KEY,
-  // Set these after creating Phantoms in PB dashboard
   PB_FB_GROUP_AGENT_ID: process.env.PB_FB_GROUP_AGENT_ID || '',
   PB_IG_AGENT_ID: process.env.PB_IG_AGENT_ID || '',
   PB_TT_AGENT_ID: process.env.PB_TT_AGENT_ID || '',
