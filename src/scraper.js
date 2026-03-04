@@ -801,66 +801,108 @@ async function fbFromApify(keywords, maxPosts) {
     return allPosts;
 }
 
-// --- Source 3: Direct Group Scraping (HIGH PRIORITY) ---
+// --- Source 3: Direct Group Scraping via APIFY (HIGH PRIORITY) ---
 async function fbFromGroups(maxPostsPerGroup = 5) {
     const groups = config.FB_TARGET_GROUPS || [];
     if (groups.length === 0) return [];
 
-    const apiKey = process.env.RAPIDAPI_KEY;
-    if (!apiKey) return [];
+    // Use Apify for REAL group scraping
+    const apify = getActiveApifyClient();
+    if (!apify) {
+        console.log('[FB:Groups] ⚠️ No Apify tokens available — skipping group scraping');
+        return [];
+    }
+    const { client, token } = apify;
 
-    console.log(`[FB:Groups] 📋 Scraping ${groups.length} target groups...`);
+    console.log(`[FB:Groups] 📋 Scraping ${groups.length} target groups via Apify...`);
     const allPosts = [];
 
-    for (const group of groups) {
-        try {
-            console.log(`[FB:Groups]   → ${group.name} (${group.id})`);
+    // Build group URLs
+    const groupUrls = groups.map(g => `https://www.facebook.com/groups/${g.id}`);
 
-            // Try facebook-scraper3 group posts endpoint
-            const resp = await axios.get(
-                `https://facebook-scraper3.p.rapidapi.com/group/posts`,
-                {
-                    headers: {
-                        'x-rapidapi-host': 'facebook-scraper3.p.rapidapi.com',
-                        'x-rapidapi-key': apiKey,
-                    },
-                    params: { group_id: group.id, page: 1 },
-                    timeout: 30000,
+    // Map group ids to names for tagging
+    const groupNameMap = {};
+    groups.forEach(g => { groupNameMap[g.id] = g.name; });
+
+    try {
+        // Run Apify Facebook Groups Scraper
+        console.log(`[FB:Groups] 🚀 Starting Apify actor (${groupUrls.length} groups)...`);
+        const run = await client.actor('apify/facebook-groups-scraper').call({
+            startUrls: groupUrls.map(url => ({ url })),
+            maxPosts: maxPostsPerGroup,
+            maxPostDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // Last 30 days only
+            maxComments: 0, // Don't scrape comments to save credit
+        }, { timeoutSecs: 120 });
+
+        const { items } = await client.dataset(run.defaultDatasetId).listItems();
+        console.log(`[FB:Groups] 📥 Apify returned ${items.length} raw posts`);
+
+        for (const item of items) {
+            const content = item.text || item.message || item.postText || '';
+            if (!content || content.length < 15) continue;
+
+            // Try to match source group
+            const postUrl = item.url || item.postUrl || '';
+            let sourceGroup = 'Unknown Group';
+            for (const g of groups) {
+                if (postUrl.includes(g.id) || (item.groupName && item.groupName.includes(g.id))) {
+                    sourceGroup = g.name;
+                    break;
                 }
-            );
-
-            const results = resp.data?.results || resp.data?.data || resp.data?.posts || [];
-            const posts = (Array.isArray(results) ? results : [])
-                .slice(0, maxPostsPerGroup)
-                .map((item) => {
-                    const extracted = extractFBFields(item);
-                    return {
-                        platform: 'facebook',
-                        post_url: extracted.postUrl,
-                        author_name: extracted.authorName,
-                        author_url: extracted.authorUrl,
-                        author_avatar: extracted.authorAvatar,
-                        content: extracted.content,
-                        post_created_at: parseTimestamp(extracted.rawDate),
-                        scraped_at: new Date().toISOString(),
-                        source_group: group.name, // Tag for priority tracking
-                    };
-                })
-                .filter((p) => p.content && p.content.length > 15);
-
-            allPosts.push(...posts);
-            console.log(`[FB:Groups]   ✓ ${posts.length} posts from ${group.name}`);
-        } catch (err) {
-            if (isRateLimited(err)) {
-                console.log(`[FB:Groups]   ❌ Rate limited — stopping group scan`);
-                break;
             }
-            console.log(`[FB:Groups]   ⚠️ ${group.name}: ${err.response?.status || err.message}`);
+
+            allPosts.push({
+                platform: 'facebook',
+                post_url: postUrl,
+                author_name: item.authorName || item.userName || item.user?.name || 'Unknown',
+                author_url: item.authorUrl || item.userUrl || '',
+                author_avatar: item.userProfilePic || item.authorProfilePic || '',
+                content,
+                post_created_at: parseTimestamp(item.time || item.date || item.timestamp || item.createdAt),
+                scraped_at: new Date().toISOString(),
+                source_group: sourceGroup,
+            });
         }
-        await new Promise((r) => setTimeout(r, 1500)); // Slower to avoid rate limit
+
+        console.log(`[FB:Groups] ✅ ${allPosts.length} qualified posts from groups`);
+    } catch (err) {
+        if (err.message?.includes('usage') || err.message?.includes('limit')) {
+            markApifyTokenExhausted(token);
+            console.log(`[FB:Groups] ❌ Apify token exhausted — trying next token...`);
+            // Try with next token
+            const apify2 = getActiveApifyClient();
+            if (apify2) {
+                try {
+                    const run = await apify2.client.actor('apify/facebook-groups-scraper').call({
+                        startUrls: groupUrls.map(url => ({ url })),
+                        maxPosts: maxPostsPerGroup,
+                        maxComments: 0,
+                    }, { timeoutSecs: 120 });
+                    const { items } = await apify2.client.dataset(run.defaultDatasetId).listItems();
+                    for (const item of items) {
+                        const content = item.text || item.message || item.postText || '';
+                        if (!content || content.length < 15) continue;
+                        allPosts.push({
+                            platform: 'facebook',
+                            post_url: item.url || item.postUrl || '',
+                            author_name: item.authorName || item.userName || 'Unknown',
+                            author_url: item.authorUrl || '',
+                            content,
+                            post_created_at: parseTimestamp(item.time || item.date || item.timestamp),
+                            scraped_at: new Date().toISOString(),
+                            source_group: 'From Apify',
+                        });
+                    }
+                    console.log(`[FB:Groups] ✅ Retry worked: ${allPosts.length} posts`);
+                } catch (retryErr) {
+                    console.log(`[FB:Groups] ❌ Retry also failed: ${retryErr.message}`);
+                }
+            }
+        } else {
+            console.log(`[FB:Groups] ❌ Apify error: ${err.message}`);
+        }
     }
 
-    console.log(`[FB:Groups] ✅ Total from groups: ${allPosts.length} posts`);
     return allPosts;
 }
 
