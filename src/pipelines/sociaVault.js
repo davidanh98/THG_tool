@@ -1,15 +1,13 @@
 /**
- * THG Lead Gen — SociaVault API Integration
+ * SociaVault API Scraper v3
  * 
- * REST API for all platforms:
- * - Facebook: /v1/scrape/facebook/group/posts  (by group URL)
- * - Instagram: /v1/scrape/instagram/posts       (by handle/account)
- * - TikTok: /v1/scrape/tiktok/videos            (by handle/account)
+ * Strategy:
+ * - Facebook: Groups (buyer posts) + Competitor Pages (comment mining)
+ * - TikTok: Keyword search (preferred) → Account fallback
+ * - Instagram: Hashtag search (preferred) → Account fallback
  * 
- * API: https://api.sociavault.com
- * Auth: X-API-Key header
- * Pricing: 1 credit per standard request
- * Docs: https://docs.sociavault.com
+ * SociaVault docs: profile-based API
+ * Keyword/hashtag search will be tried first for future-proofing
  */
 
 const axios = require('axios');
@@ -40,7 +38,7 @@ function track404(handle, is404) {
 }
 
 /**
- * Generic SociaVault API call
+ * Generic SociaVault GET request
  */
 async function svRequest(endpoint, params = {}) {
     if (!SV_KEY) throw new Error('SOCIAVAULT_API_KEY not set');
@@ -60,8 +58,6 @@ async function svRequest(endpoint, params = {}) {
 
 // ═══════════════════════════════════════════════════════
 // FACEBOOK — Group Posts
-// Endpoint: facebook/group/posts?url=<group_url>&sort_by=RECENT_ACTIVITY
-// Returns ~3 posts per call (Facebook API limit)
 // ═══════════════════════════════════════════════════════
 
 async function scrapeFacebookGroups(maxPosts = 30) {
@@ -80,7 +76,6 @@ async function scrapeFacebookGroups(maxPosts = 30) {
                 sort_by: 'RECENT_ACTIVITY',
             });
 
-            // SociaVault returns posts as object {0: {...}, 1: {...}, ...}
             const postsObj = data.posts || {};
             const postsArr = typeof postsObj === 'object' && !Array.isArray(postsObj)
                 ? Object.values(postsObj)
@@ -115,62 +110,95 @@ async function scrapeFacebookGroups(maxPosts = 30) {
 }
 
 // ═══════════════════════════════════════════════════════
-// INSTAGRAM — Posts by Account
-// Endpoint: instagram/posts?handle=<username>
-// Scrapes posts from target seller/competitor accounts
+// INSTAGRAM — Hashtag Search + Account Fallback
 // ═══════════════════════════════════════════════════════
 
+function parseIGPost(node, source) {
+    const rawCap = node.caption;
+    const content = (typeof rawCap === 'string' ? rawCap : rawCap?.text)
+        || node.text || node.description
+        || (node.edge_media_to_caption?.edges?.[0]?.node?.text) || '';
+    const contentStr = String(content);
+    return {
+        platform: 'instagram',
+        post_url: (node.code || node.shortcode)
+            ? `https://www.instagram.com/p/${node.code || node.shortcode}/`
+            : (node.url || node.link || ''),
+        author_name: node.user?.username || source,
+        author_url: `https://www.instagram.com/${node.user?.username || source}/`,
+        content: contentStr.includes('[object') ? '' : contentStr,
+        post_created_at: (node.taken_at || node.taken_at_timestamp)
+            ? new Date((node.taken_at || node.taken_at_timestamp) * 1000).toISOString()
+            : (node.date || node.timestamp || new Date().toISOString()),
+        scraped_at: new Date().toISOString(),
+        source: `sv:ig:${source}`,
+        likes: node.like_count || node.edge_liked_by?.count || node.likes || 0,
+        comments: node.comment_count || node.edge_media_to_comment?.count || node.comments || 0,
+    };
+}
+
 async function scrapeInstagram(maxPosts = 30) {
-    const accounts = config.IG_TARGET_ACCOUNTS || [];
-    if (accounts.length === 0) { console.log('[SV:IG] ⚠️ No IG accounts configured'); return []; }
     if (!SV_KEY) { console.warn('[SV:IG] ⚠️ No API key'); return []; }
-
-    console.log(`[SV:IG] 📷 Scraping ${accounts.length} Instagram accounts...`);
     const allPosts = [];
+    let hashtagSupported = true;
 
-    for (const handle of accounts.slice(0, 5)) {
-        try {
-            console.log(`[SV:IG] @${handle}...`);
-            const data = await svRequest('instagram/posts', { handle });
-
-            const postsRaw = data.posts || data.items || data.edges || [];
-            const postsArr = Array.isArray(postsRaw) ? postsRaw : Object.values(postsRaw);
-
-            const posts = postsArr.map(item => {
-                const node = item.node || item;
-                // SociaVault IG: caption is object {text:'...'}, not string!
-                const rawCap = node.caption;
-                const content = (typeof rawCap === 'string' ? rawCap : rawCap?.text)
-                    || node.text
-                    || node.description
-                    || (node.edge_media_to_caption?.edges?.[0]?.node?.text)
-                    || '';
-                return {
-                    platform: 'instagram',
-                    post_url: (node.code || node.shortcode)
-                        ? `https://www.instagram.com/p/${node.code || node.shortcode}/`
-                        : (node.url || node.link || ''),
-                    author_name: node.user?.username || handle,
-                    author_url: `https://www.instagram.com/${node.user?.username || handle}/`,
-                    content: String(content),
-                    post_created_at: (node.taken_at || node.taken_at_timestamp)
-                        ? new Date((node.taken_at || node.taken_at_timestamp) * 1000).toISOString()
-                        : (node.date || node.timestamp || new Date().toISOString()),
-                    scraped_at: new Date().toISOString(),
-                    source: `sv:ig:@${handle}`,
-                    likes: node.like_count || node.edge_liked_by?.count || node.likes || 0,
-                    comments: node.comment_count || node.edge_media_to_comment?.count || node.comments || 0,
-                };
-            }).filter(p => p.content && p.content.length > 10 && !p.content.includes('[object'));
-
-            allPosts.push(...posts);
-            console.log(`[SV:IG] ✅ ${posts.length} posts from @${handle}`);
-            track404(handle, false);
-            await delay(2000);
-        } catch (err) {
-            console.warn(`[SV:IG] ⚠️ @${handle}: ${err.message}`);
-            if (err.message?.includes('404')) track404(handle, true);
+    // --- Strategy 1: Hashtag search ---
+    const hashtags = config.IG_SEARCH_HASHTAGS || [];
+    if (hashtags.length > 0) {
+        console.log(`[SV:IG] 📷 Trying hashtag search (${hashtags.length} tags)...`);
+        for (const tag of hashtags.slice(0, 5)) {
+            if (!hashtagSupported) break;
+            try {
+                const resp = await axios.get(`${SV_API}/instagram/hashtag`, {
+                    headers: headers(),
+                    params: { hashtag: tag },
+                    timeout: 15000,
+                });
+                if (resp.data?.success && resp.data?.data) {
+                    const raw = resp.data.data.posts || resp.data.data.items || resp.data.data;
+                    const items = Array.isArray(raw) ? raw : Object.values(raw);
+                    const posts = items.map(item => parseIGPost(item.node || item, `#${tag}`))
+                        .filter(p => p.content && p.content.length > 10);
+                    allPosts.push(...posts);
+                    console.log(`[SV:IG] ✅ #${tag}: ${posts.length} posts`);
+                }
+                await delay(2000);
+            } catch (err) {
+                if (err.response?.status === 404) {
+                    console.log(`[SV:IG] ℹ️  Hashtag search not supported — switching to account fallback`);
+                    hashtagSupported = false;
+                } else {
+                    console.warn(`[SV:IG] ⚠️ #${tag}: ${err.message}`);
+                }
+            }
         }
+    }
+
+    // --- Strategy 2: Account fallback ---
+    const accounts = config.IG_TARGET_ACCOUNTS || [];
+    if (allPosts.length === 0 && accounts.length > 0) {
+        console.log(`[SV:IG] 📷 Account fallback: ${accounts.length} accounts...`);
+        for (const handle of accounts.slice(0, 5)) {
+            try {
+                console.log(`[SV:IG] @${handle}...`);
+                const data = await svRequest('instagram/posts', { handle });
+                const postsRaw = data.posts || data.items || data.edges || [];
+                const postsArr = Array.isArray(postsRaw) ? postsRaw : Object.values(postsRaw);
+                const posts = postsArr.map(item => parseIGPost(item.node || item, handle))
+                    .filter(p => p.content && p.content.length > 10);
+                allPosts.push(...posts);
+                console.log(`[SV:IG] ✅ ${posts.length} posts from @${handle}`);
+                track404(handle, false);
+                await delay(2000);
+            } catch (err) {
+                console.warn(`[SV:IG] ⚠️ @${handle}: ${err.message}`);
+                if (err.message?.includes('404')) track404(handle, true);
+            }
+        }
+    }
+
+    if (allPosts.length === 0) {
+        console.log('[SV:IG] ⚠️ No IG data scraped (hashtags not supported + no accounts configured)');
     }
 
     const result = allPosts.slice(0, maxPosts);
@@ -179,54 +207,91 @@ async function scrapeInstagram(maxPosts = 30) {
 }
 
 // ═══════════════════════════════════════════════════════
-// TIKTOK — Videos by Account
-// Endpoint: tiktok/videos?handle=<username>
-// Scrapes videos from target seller/competitor accounts
+// TIKTOK — Keyword Search + Account Fallback
 // ═══════════════════════════════════════════════════════
 
+function parseTTVideo(item, source) {
+    return {
+        platform: 'tiktok',
+        post_url: item.share_url || item.video_url || item.url ||
+            (item.aweme_id ? `https://www.tiktok.com/@${source}/video/${item.aweme_id}` : ''),
+        author_name: item.author?.nickname || item.author?.unique_id || source,
+        author_url: `https://www.tiktok.com/@${item.author?.unique_id || source}`,
+        author_avatar: item.author?.avatar_thumb?.url_list?.[0] || '',
+        content: item.desc || item.description || item.text || item.caption || '',
+        post_created_at: item.create_time
+            ? new Date(item.create_time * 1000).toISOString()
+            : (item.date || new Date().toISOString()),
+        scraped_at: new Date().toISOString(),
+        source: `sv:tt:${source}`,
+        likes: item.statistics?.digg_count || item.stats?.diggCount || 0,
+        comments: item.statistics?.comment_count || item.stats?.commentCount || 0,
+        views: item.statistics?.play_count || item.stats?.playCount || 0,
+    };
+}
+
 async function scrapeTikTok(maxPosts = 20) {
-    const accounts = config.TT_TARGET_ACCOUNTS || [];
-    if (accounts.length === 0) { console.log('[SV:TT] ⚠️ No TT accounts configured'); return []; }
     if (!SV_KEY) { console.warn('[SV:TT] ⚠️ No API key'); return []; }
-
-    console.log(`[SV:TT] 🎵 Scraping ${accounts.length} TikTok accounts...`);
     const allPosts = [];
+    let keywordSupported = true;
 
-    for (const handle of accounts.slice(0, 4)) {
-        try {
-            console.log(`[SV:TT] @${handle}...`);
-            const data = await svRequest('tiktok/videos', { handle });
-
-            // SociaVault TikTok returns data in aweme_list (object indexed)
-            const videosRaw = data.aweme_list || data.videos || data.items || data.itemList || [];
-            const videosArr = Array.isArray(videosRaw) ? videosRaw : Object.values(videosRaw);
-
-            const videos = videosArr.map(item => ({
-                platform: 'tiktok',
-                post_url: item.share_url || item.video_url || item.url ||
-                    (item.aweme_id ? `https://www.tiktok.com/@${handle}/video/${item.aweme_id}` : ''),
-                author_name: item.author?.nickname || item.author?.unique_id || handle,
-                author_url: `https://www.tiktok.com/@${item.author?.unique_id || handle}`,
-                author_avatar: item.author?.avatar_thumb?.url_list?.[0] || '',
-                content: item.desc || item.description || item.text || item.caption || '',
-                post_created_at: item.create_time
-                    ? new Date(item.create_time * 1000).toISOString()
-                    : (item.date || new Date().toISOString()),
-                scraped_at: new Date().toISOString(),
-                source: `sv:tt:@${handle}`,
-                likes: item.statistics?.digg_count || item.stats?.diggCount || 0,
-                comments: item.statistics?.comment_count || item.stats?.commentCount || 0,
-                views: item.statistics?.play_count || item.stats?.playCount || 0,
-            })).filter(p => p.content && p.content.length > 5);
-
-            allPosts.push(...videos);
-            console.log(`[SV:TT] ✅ ${videos.length} videos from @${handle}`);
-            track404(handle, false);
-            await delay(2000);
-        } catch (err) {
-            console.warn(`[SV:TT] ⚠️ @${handle}: ${err.message}`);
-            if (err.message?.includes('404')) track404(handle, true);
+    // --- Strategy 1: Keyword search ---
+    const keywords = config.TT_SEARCH_KEYWORDS || [];
+    if (keywords.length > 0) {
+        console.log(`[SV:TT] 🎵 Trying keyword search (${keywords.length} keywords)...`);
+        for (const kw of keywords.slice(0, 5)) {
+            if (!keywordSupported) break;
+            try {
+                const resp = await axios.get(`${SV_API}/tiktok/search`, {
+                    headers: headers(),
+                    params: { keyword: kw },
+                    timeout: 15000,
+                });
+                if (resp.data?.success && resp.data?.data) {
+                    const raw = resp.data.data.aweme_list || resp.data.data.videos || resp.data.data.items || resp.data.data;
+                    const items = Array.isArray(raw) ? raw : Object.values(raw);
+                    const videos = items.map(item => parseTTVideo(item, `kw:${kw.substring(0, 20)}`))
+                        .filter(p => p.content && p.content.length > 5);
+                    allPosts.push(...videos);
+                    console.log(`[SV:TT] ✅ "${kw}": ${videos.length} videos`);
+                }
+                await delay(2000);
+            } catch (err) {
+                if (err.response?.status === 404) {
+                    console.log(`[SV:TT] ℹ️  Keyword search not supported — switching to account fallback`);
+                    keywordSupported = false;
+                } else {
+                    console.warn(`[SV:TT] ⚠️ "${kw}": ${err.message}`);
+                }
+            }
         }
+    }
+
+    // --- Strategy 2: Account fallback ---
+    const accounts = config.TT_TARGET_ACCOUNTS || [];
+    if (allPosts.length === 0 && accounts.length > 0) {
+        console.log(`[SV:TT] 🎵 Account fallback: ${accounts.length} accounts...`);
+        for (const handle of accounts.slice(0, 4)) {
+            try {
+                console.log(`[SV:TT] @${handle}...`);
+                const data = await svRequest('tiktok/videos', { handle });
+                const videosRaw = data.aweme_list || data.videos || data.items || data.itemList || [];
+                const videosArr = Array.isArray(videosRaw) ? videosRaw : Object.values(videosRaw);
+                const videos = videosArr.map(item => parseTTVideo(item, handle))
+                    .filter(p => p.content && p.content.length > 5);
+                allPosts.push(...videos);
+                console.log(`[SV:TT] ✅ ${videos.length} videos from @${handle}`);
+                track404(handle, false);
+                await delay(2000);
+            } catch (err) {
+                console.warn(`[SV:TT] ⚠️ @${handle}: ${err.message}`);
+                if (err.message?.includes('404')) track404(handle, true);
+            }
+        }
+    }
+
+    if (allPosts.length === 0) {
+        console.log('[SV:TT] ⚠️ No TT data scraped (keywords not supported + no accounts configured)');
     }
 
     const result = allPosts.slice(0, maxPosts);
