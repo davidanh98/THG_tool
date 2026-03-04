@@ -64,6 +64,10 @@ module.exports = {
     { name: 'Sưu Nhi OU SA', id: 'suunhiousa' },
     { name: 'Seller E-commerce VN', id: '494286704652111' },
     { name: 'Vận chuyển Quốc tế', id: '914341367037223' },
+    // --- Nhóm mới (đợt 3) ---
+    { name: 'E-commerce Sellers VN', id: '437505323460908' },
+    { name: 'MMO Darkness', id: 'mmo.darkness' },
+    { name: 'Dropship & Fulfill VN', id: '646444174604027' },
   ],
 
   // --- Platforms to enable (toggle on/off) ---
