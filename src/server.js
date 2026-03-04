@@ -8,6 +8,32 @@ const logger = require('./logger');
 const { generateCopilotReply, classifyIntent } = require('./copilot');
 const { listDataFiles, readDataFile, cleanOldData, saveConversationToFile } = require('./dataManager');
 
+// ╔═══════════════════════════════════════════════════════════╗
+// ║  IN-MEMORY LOG CAPTURE (for Dev Dashboard)                ║
+// ╚═══════════════════════════════════════════════════════════╝
+const LOG_BUFFER_SIZE = 500;
+const logBuffer = [];
+const DEV_PASSWORD = process.env.DEV_PASSWORD || 'thg@dev2024';
+
+// Intercept console output
+const origLog = console.log;
+const origError = console.error;
+const origWarn = console.warn;
+
+function captureLog(level, args) {
+    const line = {
+        time: new Date().toISOString(),
+        level,
+        msg: args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' '),
+    };
+    logBuffer.push(line);
+    if (logBuffer.length > LOG_BUFFER_SIZE) logBuffer.shift();
+}
+
+console.log = (...args) => { captureLog('info', args); origLog.apply(console, args); };
+console.error = (...args) => { captureLog('error', args); origError.apply(console, args); };
+console.warn = (...args) => { captureLog('warn', args); origWarn.apply(console, args); };
+
 const app = express();
 let server = null; // keep reference for graceful shutdown
 
@@ -71,6 +97,27 @@ app.get('/health', (req, res) => {
     } catch (err) {
         res.status(500).json({ status: 'error', error: err.message });
     }
+});
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║  DEV LOGS (password-protected)                            ║
+// ╚═══════════════════════════════════════════════════════════╝
+
+app.get('/api/dev/logs', (req, res) => {
+    const pw = req.query.password || req.headers['x-dev-password'];
+    if (pw !== DEV_PASSWORD) {
+        return res.status(401).json({ success: false, error: 'Wrong password' });
+    }
+    const level = req.query.level; // optional filter: info, warn, error
+    const search = req.query.search; // optional text search
+    let logs = [...logBuffer];
+    if (level) logs = logs.filter(l => l.level === level);
+    if (search) logs = logs.filter(l => l.msg.toLowerCase().includes(search.toLowerCase()));
+    res.json({ success: true, total: logs.length, data: logs });
+});
+
+app.get('/dev', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'dev.html'));
 });
 
 function formatUptime(ms) {

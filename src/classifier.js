@@ -17,9 +17,10 @@ try {
 // Fallback models: try main model first, then smaller/cheaper models
 const AI_MODELS = [
     config.AI_MODEL || 'llama-3.3-70b-versatile',
+    'llama-3.3-70b-specdec',   // Fast speculative decoding variant
     'llama-3.1-8b-instant',    // Smaller, uses fewer tokens
-    'llama-3.2-3b-preview',    // Tiny, very fast (replaced gemma2 — decommissioned)
-    'meta-llama/llama-4-scout-17b-16e-instruct', // New Llama 4 fallback
+    'meta-llama/llama-4-scout-17b-16e-instruct', // Llama 4
+    'qwen-qwq-32b',           // Alibaba Qwen (good Vietnamese)
 ];
 
 const SYSTEM_PROMPT = `Bạn là Kỹ sư Data E-commerce làm việc cho THG Logistics. Nhiệm vụ của bạn là đọc bài đăng mạng xã hội và lọc ra CHÍNH XÁC những Seller/Doanh nghiệp đang CÓ NHU CẦU TÌM KIẾM dịch vụ hậu cần (Người mua).
