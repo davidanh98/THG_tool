@@ -123,28 +123,30 @@ async function scrapeInstagram(maxPosts = 30) {
 
             const posts = postsArr.map(item => {
                 const node = item.node || item;
-                const caption = node.caption
+                // SociaVault IG: caption is object {text:'...'}, not string!
+                const rawCap = node.caption;
+                const content = (typeof rawCap === 'string' ? rawCap : rawCap?.text)
                     || node.text
                     || node.description
                     || (node.edge_media_to_caption?.edges?.[0]?.node?.text)
                     || '';
                 return {
                     platform: 'instagram',
-                    post_url: (node.shortcode || node.code)
-                        ? `https://www.instagram.com/p/${node.shortcode || node.code}/`
+                    post_url: (node.code || node.shortcode)
+                        ? `https://www.instagram.com/p/${node.code || node.shortcode}/`
                         : (node.url || node.link || ''),
-                    author_name: handle,
-                    author_url: `https://www.instagram.com/${handle}/`,
-                    content: typeof caption === 'string' ? caption : String(caption || ''),
-                    post_created_at: node.taken_at_timestamp
-                        ? new Date(node.taken_at_timestamp * 1000).toISOString()
+                    author_name: node.user?.username || handle,
+                    author_url: `https://www.instagram.com/${node.user?.username || handle}/`,
+                    content: String(content),
+                    post_created_at: (node.taken_at || node.taken_at_timestamp)
+                        ? new Date((node.taken_at || node.taken_at_timestamp) * 1000).toISOString()
                         : (node.date || node.timestamp || new Date().toISOString()),
                     scraped_at: new Date().toISOString(),
                     source: `sv:ig:@${handle}`,
-                    likes: node.edge_liked_by?.count || node.like_count || node.likes || 0,
-                    comments: node.edge_media_to_comment?.count || node.comment_count || node.comments || 0,
+                    likes: node.like_count || node.edge_liked_by?.count || node.likes || 0,
+                    comments: node.comment_count || node.edge_media_to_comment?.count || node.comments || 0,
                 };
-            }).filter(p => p.content && p.content.length > 10);
+            }).filter(p => p.content && p.content.length > 10 && !p.content.includes('[object'));
 
             allPosts.push(...posts);
             console.log(`[SV:IG] ✅ ${posts.length} posts from @${handle}`);
