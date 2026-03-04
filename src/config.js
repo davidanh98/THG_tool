@@ -25,12 +25,12 @@ module.exports = {
   SV_DAILY_LIMIT: parseInt(process.env.SV_DAILY_LIMIT || '200'),
 
   // ════════════════════════════════════════════════════
-  // FACEBOOK GROUPS — 12 groups
-  // ~4 credits/group × 12 × 2 lần/ngày = ~96 credits/ngày
+  // FACEBOOK GROUPS — 10 groups
+  // ~4 credits/group × 10 × 2 lần/ngày = ~80 credits/ngày
   // ════════════════════════════════════════════════════
   FB_TARGET_GROUPS: [
     { name: 'Cộng đồng Etsy VN', url: 'https://www.facebook.com/groups/congdongetsyvietnam' },
-    { name: 'TikTok Shop US Underground', url: 'https://www.facebook.com/groups/tiktokshopusunderground' },
+    { name: 'TikTok Shop US Underground', url: 'https://www.facebook.com/groups/1631859190422638' },
     { name: 'Tìm Supplier Fulfill POD/Drop', url: 'https://www.facebook.com/groups/timsupplierfulfillpoddropvnusuk' },
     { name: 'Dropship & Fulfill VN', url: 'https://www.facebook.com/groups/646444174604027' },
     { name: 'Seller E-commerce VN', url: 'https://www.facebook.com/groups/494286704652111' },
@@ -39,8 +39,6 @@ module.exports = {
     { name: 'Vận chuyển Quốc tế VN', url: 'https://www.facebook.com/groups/914341367037223' },
     { name: 'POD & Print on Demand VN', url: 'https://www.facebook.com/groups/podvietnam' },
     { name: 'Dropship Vietnam', url: 'https://www.facebook.com/groups/dropshipvietnam' },
-    { name: 'Hỏi đáp Fulfillment & Logistics', url: 'https://www.facebook.com/groups/fulfillmentlogisticsvn' },
-    { name: 'Seller TikTok Shop Vietnam', url: 'https://www.facebook.com/groups/sellertiktokshopvietnam' },
   ],
 
   // ════════════════════════════════════════════════════
@@ -88,11 +86,11 @@ module.exports = {
 
   // ════════════════════════════════════════════════════
   // TỔNG KẾT CREDIT/NGÀY
-  //   FB Groups:      ~96 cr
+  //   FB Groups:      ~80 cr
   //   FB Competitors: ~60 cr
   //   TikTok:         ~20 cr
   //   Instagram:      ~24 cr
-  //   TỔNG:          ~200 cr ✅ (= 6000 / 30 ngày)
+  //   TỔNG:          ~184 cr ✅ (< 200 cr/ngày budget)
   // ════════════════════════════════════════════════════
 
   THG_CONTEXT: `

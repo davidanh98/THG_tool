@@ -19,7 +19,7 @@ const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Credit tracking
 let creditsUsedToday = 0;
-const DAILY_CREDIT_LIMIT = parseInt(process.env.SV_DAILY_LIMIT || '60');
+const DAILY_CREDIT_LIMIT = parseInt(process.env.SV_DAILY_LIMIT || config.SV_DAILY_LIMIT || '200');
 function canSpend() {
     if (creditsUsedToday >= DAILY_CREDIT_LIMIT) {
         console.warn(`[SV] 🚫 Daily limit ${DAILY_CREDIT_LIMIT} reached`);
