@@ -1,6 +1,22 @@
-# THG Pricing — Bảng giá tham khảo
+# THG Pricing — Bảng giá thực tế
 
-## THG Express (Vận chuyển)
+## THG Warehouse / Fulfillment US (Data thực tế)
+| Dịch vụ | Giá | Ghi chú |
+|---------|-----|---------|
+| **Fulfill nội địa US** | **từ $1.2/đơn** | Chi phí cạnh tranh, không phí ẩn |
+| Nhập kho (receiving) | **MIỄN PHÍ** | Free nhận hàng |
+| Lưu kho (storage) | **MIỄN PHÍ 90 ngày** | Sau 90 ngày tính phí |
+| Pick & Pack | Đã bao gồm trong $1.2/đơn | |
+| Ship nội địa US | 2-5 ngày | USPS/UPS/FedEx tùy vùng |
+| Amazon FBA prep | Liên hệ báo giá | Dán label, đóng gói theo chuẩn FBA |
+| Amazon FBM fulfill | Từ $1.2/đơn | Giống fulfill thường |
+| Video đóng gói | **MIỄN PHÍ** | Quay video từng đơn |
+
+### Vị trí kho
+- **Pennsylvania (PA)** — phủ Bờ Đông US
+- **Texas (TX)** — phủ Bờ Tây & miền Nam US
+
+## THG Express (Vận chuyển quốc tế)
 | Tuyến | Trọng lượng | Giá/kg | Thời gian |
 |-------|-------------|--------|-----------|
 | VN → US | 0-5kg | $6-8/kg | 7-12 ngày |
@@ -27,15 +43,5 @@
 | Sticker sheet | $1.50-2.50 | Die-cut |
 | Ornament | $4.00-5.50 | Ceramic/Acrylic |
 | Car Air Freshener | $2.00-3.00 | Custom print |
-
-## THG Warehouse / 3PL
-| Dịch vụ | Giá |
-|---------|-----|
-| Nhận hàng (receiving) | $0.25-0.50/unit |
-| Lưu kho (storage) | $15-25/pallet/tháng |
-| Pick & Pack | $1.00-2.00/đơn |
-| Ship nội địa US (USPS) | $3.50-6.00/gói |
-| Return handling | $1.50-2.50/đơn |
-| FBA prep | $0.50-1.00/unit |
 
 *Giá có thể thay đổi — liên hệ THG để báo giá chính xác theo volume.*
