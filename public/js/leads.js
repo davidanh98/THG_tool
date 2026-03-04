@@ -130,7 +130,7 @@ function timeAgo(dateStr) {
 
 function renderLeadCard(lead) {
   const scoreClass = lead.score >= 80 ? 'score-high' : lead.score >= 60 ? 'score-med' : 'score-low';
-  const platformIcons = { facebook: '📘', instagram: '📷', reddit: '🟠', twitter: '🐦', tiktok: '🎵' };
+  const platformIcons = { facebook: '📘', instagram: '📷', tiktok: '🎵' };
   const categoryEmojis = { POD: '🖨️', Dropship: '📦', Fulfillment: '🏭', Express: '✈️', Warehouse: '🏢', General: '🔄' };
   const content = escapeHtml(lead.content || '');
   const summary = escapeHtml(lead.summary || '');

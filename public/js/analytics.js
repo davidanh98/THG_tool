@@ -122,8 +122,7 @@ function drawPlatformChart(platforms) {
     const ctx = document.getElementById('platformChart').getContext('2d');
     const c = chartColors();
     const platColors = {
-        facebook: '#1877f2', instagram: '#e1306c', reddit: '#ff4500',
-        twitter: '#1da1f2', tiktok: '#fe2c55',
+        facebook: '#1877f2', instagram: '#e1306c', tiktok: '#fe2c55',
     };
     if (platformChart) platformChart.destroy();
     platformChart = new Chart(ctx, {

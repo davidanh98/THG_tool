@@ -294,39 +294,7 @@ app.post('/api/scan', async (req, res) => {
 });
 
 app.post('/api/scan/groups', async (req, res) => {
-    try {
-        const { fbFromGroups } = require('./pipelines/scraperEngine');
-        const { classifyPosts } = require('./prompts/leadQualifier');
-        const config = require('./config');
-        res.json({ success: true, message: 'Group scan started in background (Apify)' });
-
-        // Run async in background
-        (async () => {
-            try {
-                console.log('[Manual] 📋 Manual group scan triggered...');
-                const groupPosts = await fbFromGroups(5);
-                if (groupPosts.length > 0) {
-                    console.log(`[Manual] 📥 ${groupPosts.length} posts from groups — classifying...`);
-                    const classified = await classifyPosts(groupPosts);
-                    const leads = classified.filter(c => c.isLead && c.score >= (config.LEAD_SCORE_THRESHOLD || 60));
-                    if (leads.length > 0) {
-                        for (const lead of leads) {
-                            database.insertLead(lead);
-                        }
-                        console.log(`[Manual] ✅ ${leads.length} new leads from groups!`);
-                    } else {
-                        console.log(`[Manual] ⚠️ 0 qualified leads from groups`);
-                    }
-                } else {
-                    console.log(`[Manual] ⚠️ 0 posts returned from groups`);
-                }
-            } catch (err) {
-                console.error(`[Manual] ❌ Group scan error:`, err.message);
-            }
-        })();
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
+    res.json({ success: true, message: 'Group scan disabled — using keyword search instead (saves Apify credit)' });
 });
 
 app.get('/api/scan/next', (req, res) => {

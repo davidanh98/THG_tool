@@ -224,31 +224,9 @@ async function triggerScan() {
     }
 }
 
+// Group scan disabled — button removed from UI
 async function triggerGroupScan() {
-    const btn = document.getElementById('groupScanBtn');
-    const statusEl = document.getElementById('scanStatus');
-    btn.disabled = true;
-    btn.innerHTML = '⏳ Scanning groups...';
-    statusEl.textContent = 'Group scanning (Apify)...';
-
-    try {
-        await fetch('/api/scan/groups', { method: 'POST' });
-        showToast('Group scan started via Apify! This may take 1-2 minutes.', 'info');
-        let pollCount = 0;
-        const poll = setInterval(async () => {
-            pollCount++;
-            await loadStats();
-            await loadLeads();
-            if (pollCount >= 60) {
-                clearInterval(poll);
-                btn.disabled = false; btn.innerHTML = '📋 Group Scan'; statusEl.textContent = 'Ready';
-            }
-        }, 5000);
-        setTimeout(() => { btn.disabled = false; btn.innerHTML = '📋 Group Scan'; statusEl.textContent = 'Ready'; }, 120000);
-    } catch (err) {
-        showToast('Failed to start group scan', 'error');
-        btn.disabled = false; btn.innerHTML = '📋 Group Scan'; statusEl.textContent = 'Ready';
-    }
+    showToast('Group scan disabled — using keyword search instead', 'info');
 }
 
 // --- Conversations ---

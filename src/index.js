@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const config = require('./config');
-const { runFullScan, fbFromGroups } = require('./pipelines/scraperEngine');
+const { runFullScan } = require('./pipelines/scraperEngine');
 const { classifyPosts } = require('./prompts/leadQualifier');
 const { generateResponses } = require('./prompts/salesCopilot');
 const { sendMessage, notifyAlert } = require('./integrations/telegramBot');
@@ -24,7 +24,7 @@ async function sendTelegramDigest(leads, stats) {
     leads.forEach(l => {
         byPlatform[l.platform] = (byPlatform[l.platform] || 0) + 1;
     });
-    const platformEmojis = { facebook: '📘', instagram: '📷', reddit: '🟠', twitter: '🐦', tiktok: '🎵' };
+    const platformEmojis = { facebook: '📘', instagram: '📷', tiktok: '🎵' };
     const platformLines = Object.entries(byPlatform)
         .map(([p, count]) => `  ${platformEmojis[p] || '🌐'} ${p}: ${count} lead`)
         .join('\n');
@@ -261,9 +261,9 @@ async function main() {
     const args = process.argv.slice(2);
 
     console.log('╔══════════════════════════════════════════════════════╗');
-    console.log('║  🔍 THG Lead Detection Tool v2.0                    ║');
-    console.log('║  FB • IG • Reddit • Twitter/X • TikTok              ║');
-    console.log('║  Powered by Apify + OpenAI + Telegram               ║');
+    console.log('║  🔍 THG Lead Detection Tool v3.0                    ║');
+    console.log('║  FB • IG • TikTok                                   ║');
+    console.log('║  Powered by Apify + Groq/Gemini + Telegram          ║');
     console.log('╚══════════════════════════════════════════════════════╝');
     console.log('');
 
@@ -290,33 +290,6 @@ async function main() {
         await runPipeline();
     });
 
-    // Schedule group scraping separately (every 6 hours — saves Apify credit)
-    const GROUP_CRON = '0 */6 * * *'; // Every 6 hours
-    console.log(`[Main] ⏰ Group scan (Apify): ${GROUP_CRON}`);
-    cron.schedule(GROUP_CRON, async () => {
-        console.log('[Cron:Groups] 📋 Running 6-hourly group scan via Apify...');
-        try {
-            const groupPosts = await fbFromGroups(5);
-            if (groupPosts.length > 0) {
-                console.log(`[Cron:Groups] 📥 ${groupPosts.length} posts from groups — classifying...`);
-                const { classifyPosts: classify } = require('./prompts/leadQualifier');
-                const classified = await classify(groupPosts);
-                const leads = classified.filter(c => c.isLead && c.score >= config.LEAD_SCORE_THRESHOLD);
-                if (leads.length > 0) {
-                    for (const lead of leads) {
-                        database.insertLead(lead);
-                    }
-                    console.log(`[Cron:Groups] ✅ ${leads.length} new leads from groups!`);
-                } else {
-                    console.log(`[Cron:Groups] ⚠️ 0 qualified leads from groups this cycle`);
-                }
-            } else {
-                console.log(`[Cron:Groups] ⚠️ 0 posts returned from groups`);
-            }
-        } catch (err) {
-            console.error(`[Cron:Groups] ❌ Error:`, err.message);
-        }
-    });
 
     global.getNextScanTime = () => {
         if (!scanJob) return null;
@@ -328,7 +301,7 @@ async function main() {
     console.log(`[Main] 🟢 System ready! Platforms: ${config.ENABLED_PLATFORMS.join(', ')}`);
     console.log(`[Main] Dashboard: http://localhost:${config.PORT}`);
     console.log('[Main] Use --scan-once to run immediately');
-    console.log('[Main] Use --platform=reddit to scan single platform');
+    console.log('[Main] Use --platform=facebook to scan single platform');
 }
 
 main().catch(err => {

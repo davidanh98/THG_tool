@@ -67,12 +67,9 @@
           <small>Next auto-scan in:</small>
           <strong id="scanCountdownTime">--:--</strong>
         </div>
-        <button class="btn btn-primary btn-scan" id="scanBtn" onclick="triggerScan()" title="RapidAPI keyword search">
-          🔍 Keyword Scan
-        </button>
-        <button class="btn btn-scan" id="groupScanBtn" onclick="triggerGroupScan()"
-          style="background:#7c3aed;color:#fff;margin-top:6px;" title="Apify group scraper (22 groups)">
-          📋 Group Scan
+        <button class="btn btn-primary btn-scan" id="scanBtn" onclick="triggerScan()"
+          title="Scan Facebook, Instagram, TikTok">
+          � Keyword Scan
         </button>
       </div>
     </aside>
@@ -133,8 +130,6 @@
               <option value="">All Platforms</option>
               <option value="facebook">📘 Facebook</option>
               <option value="instagram">📷 Instagram</option>
-              <option value="reddit">🟠 Reddit</option>
-              <option value="twitter">🐦 Twitter/X</option>
               <option value="tiktok">🎵 TikTok</option>
             </select>
             <select class="filter-select" id="filterCategory" onchange="loadLeads()">
