@@ -1,12 +1,11 @@
 /**
- * THG Lead Gen — Multi-Platform Scraper v4 (Credit-Optimized)
+ * THG Lead Gen — Multi-Platform Scraper v5 (PhantomBuster)
  * 
- * VẤN ĐỀ ĐÃ FIX:
- * 1. Twitter/X DISABLED hoàn toàn — $0.40/run, không phù hợp target
- * 2. FB Groups scraper DISABLED — 22 groups × $X/group = credit killer
- * 3. TikTok Apify dùng 2 actor/keyword — giờ chỉ dùng 1
- * 4. Thiếu delay giữa Apify calls — giờ có 2s delay
- * 5. maxPosts không được enforce chặt — giờ có hard limit
+ * DATA SOURCES:
+ * - Facebook: PhantomBuster Group Posts Extractor (primary)
+ * - Instagram: PhantomBuster Hashtag Search → RapidAPI fallback
+ * - TikTok: PhantomBuster Search Export → RapidAPI fallback
+ * - Apify: REMOVED — replaced by PhantomBuster
  */
 
 const axios = require('axios');
@@ -234,11 +233,20 @@ async function igFromApify(hashtags, maxPosts) {
 }
 
 async function scrapeInstagram(hashtags, maxPosts = 30) {
-    console.log(`[Scraper:IG] 📷 ${hashtags.length} hashtags...`);
-    return await fetchWithFallback('IG',
-        () => igFromRapidAPI(hashtags, maxPosts),
-        () => igFromApify(hashtags, maxPosts),
-    );
+    console.log(`[Scraper:IG] 📷 Scraping Instagram...`);
+    // PhantomBuster primary
+    try {
+        const pb = require('./phantomBuster');
+        const posts = await pb.scrapeInstagram(maxPosts);
+        if (posts.length > 0) { console.log(`[IG] ✅ PhantomBuster → ${posts.length} posts`); return dedup(posts); }
+        console.log('[IG] ⚠️ PhantomBuster → 0, trying RapidAPI...');
+    } catch (err) { console.warn(`[IG] ⚠️ PB failed: ${err.message}, trying RapidAPI...`); }
+    // RapidAPI fallback
+    try {
+        const posts = await igFromRapidAPI(hashtags, maxPosts);
+        if (posts.length > 0) { console.log(`[IG] ✅ RapidAPI → ${posts.length} posts`); return dedup(posts); }
+    } catch (err) { console.warn(`[IG] ⚠️ RapidAPI failed: ${err.message}`); }
+    return [];
 }
 
 // ╔══════════════════════════════════════════════════════╗
@@ -341,11 +349,20 @@ async function ttFromApify(keywords, maxPosts) {
 }
 
 async function scrapeTikTok(keywords, maxPosts = 20) {
-    console.log(`[Scraper:TikTok] 🎵 ${keywords.length} keywords...`);
-    return await fetchWithFallback('TikTok',
-        () => ttFromRapidAPI(keywords, maxPosts),
-        () => ttFromApify(keywords, maxPosts),
-    );
+    console.log(`[Scraper:TT] 🎵 Scraping TikTok...`);
+    // PhantomBuster primary
+    try {
+        const pb = require('./phantomBuster');
+        const posts = await pb.scrapeTikTok(maxPosts);
+        if (posts.length > 0) { console.log(`[TT] ✅ PhantomBuster → ${posts.length} posts`); return dedup(posts); }
+        console.log('[TT] ⚠️ PhantomBuster → 0, trying RapidAPI...');
+    } catch (err) { console.warn(`[TT] ⚠️ PB failed: ${err.message}, trying RapidAPI...`); }
+    // RapidAPI fallback
+    try {
+        const posts = await ttFromRapidAPI(keywords, maxPosts);
+        if (posts.length > 0) { console.log(`[TT] ✅ RapidAPI → ${posts.length} posts`); return dedup(posts); }
+    } catch (err) { console.warn(`[TT] ⚠️ RapidAPI failed: ${err.message}`); }
+    return [];
 }
 
 // ╔══════════════════════════════════════════════════════╗
@@ -527,12 +544,20 @@ async function fbFromPageComments(maxPosts = 10) {
 }
 
 async function scrapeFacebook(_keywords, maxPosts = 20) {
-    console.log(`[Scraper:FB] 📘 Scraping ${(config.FB_TARGET_GROUPS || []).length} groups + ${(config.FB_COMPETITOR_PAGES || []).length} competitor pages...`);
+    console.log('[Scraper:FB] 📘 Scraping Facebook...');
+    // PhantomBuster primary
+    try {
+        const pb = require('./phantomBuster');
+        const posts = await pb.scrapeFacebookGroups(maxPosts);
+        if (posts.length > 0) { console.log(`[FB] ✅ PhantomBuster → ${posts.length} posts`); return dedup(posts); }
+        console.log('[FB] ⚠️ PhantomBuster → 0, trying old method...');
+    } catch (err) { console.warn(`[FB] ⚠️ PB failed: ${err.message}, trying old method...`); }
+    // Fallback: existing fbFromGroups + comments
     const groupPosts = await fbFromGroups(maxPosts);
     const commentPosts = await fbFromPageComments(Math.ceil(maxPosts / 2));
     const all = [...groupPosts, ...commentPosts];
-    console.log(`[Scraper:FB] 📊 Total FB: ${all.length} posts (${groupPosts.length} from groups, ${commentPosts.length} from page comments)`);
-    return all;
+    console.log(`[Scraper:FB] 📊 Total FB: ${all.length}`);
+    return dedup(all);
 }
 
 // ╔══════════════════════════════════════════════════════╗
@@ -582,7 +607,7 @@ async function runFullScan(options = {}) {
     const maxPerPlatform = options.maxPosts || 20;
 
     console.log(`\n${'═'.repeat(55)}`);
-    console.log(`  💰 Daily Apify budget: $${DAILY_APIFY_BUDGET_USD}`);
+    console.log(`  🟣 PhantomBuster (primary) + RapidAPI (fallback)`);
     console.log(`  📊 Max per platform: ${maxPerPlatform} posts`);
     console.log(`${'═'.repeat(55)}\n`);
 

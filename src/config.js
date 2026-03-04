@@ -9,8 +9,10 @@ module.exports = {
 
   // --- PhantomBuster (FB Group scraping) ---
   PHANTOMBUSTER_API_KEY: process.env.PHANTOMBUSTER_API_KEY,
-  // Set this after creating "Facebook Group Posts Extractor" phantom in PB dashboard
+  // Set these after creating Phantoms in PB dashboard
   PB_FB_GROUP_AGENT_ID: process.env.PB_FB_GROUP_AGENT_ID || '',
+  PB_IG_AGENT_ID: process.env.PB_IG_AGENT_ID || '',
+  PB_TT_AGENT_ID: process.env.PB_TT_AGENT_ID || '',
 
   // --- AI (Groq — scan & classify) ---
   GROQ_API_KEY: process.env.GROQ_API_KEY,

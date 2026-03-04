@@ -1,127 +1,129 @@
 /**
- * THG Lead Gen — PhantomBuster Integration
+ * THG Lead Gen — PhantomBuster Integration v2
  * 
- * Replaces Apify for Facebook Group scraping.
- * PhantomBuster is better for FB because it uses session cookies
- * and can access private groups.
+ * Replaces Apify for ALL platforms:
+ * - Facebook Groups: "Facebook Group Posts Extractor"
+ * - Instagram: "Instagram Hashtag Search Export"
+ * - TikTok: "TikTok Search Export"
  * 
- * Setup required in PhantomBuster dashboard:
- * 1. Create "Facebook Group Posts Extractor" phantom
- * 2. Configure with FB session cookie
- * 3. Add target group URLs
- * 4. Get the Phantom Agent ID
- * 
- * API Flow:
+ * API v2 Flow:
  * 1. POST /agents/launch — start the phantom
  * 2. Poll GET /agents/fetch — wait for completion
  * 3. GET /agents/fetch-output — get results
+ * 
+ * Header: X-Phantombuster-Key: <apiKey>
  */
 
 const axios = require('axios');
 const config = require('../config');
 
-const PB_API_BASE = 'https://api.phantombuster.com/api/v2';
-const PB_API_KEY = process.env.PHANTOMBUSTER_API_KEY || '';
+const PB_API = 'https://api.phantombuster.com/api/v2';
+const PB_KEY = process.env.PHANTOMBUSTER_API_KEY || config.PHANTOMBUSTER_API_KEY || '';
 
-function getHeaders() {
-    return {
-        'X-Phantombuster-Key': PB_API_KEY,
-        'Content-Type': 'application/json',
-    };
+function headers() {
+    return { 'X-Phantombuster-Key': PB_KEY, 'Content-Type': 'application/json' };
+}
+
+const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+// ═══════════════════════════════════════════════════════
+// Core API: Launch → Poll → Fetch Results
+// ═══════════════════════════════════════════════════════
+
+/**
+ * Launch a phantom agent with optional arguments override
+ */
+async function launchPhantom(agentId, args = null) {
+    if (!PB_KEY) throw new Error('PHANTOMBUSTER_API_KEY not set');
+    if (!agentId) throw new Error('No agent ID provided');
+
+    const payload = { id: agentId };
+    if (args) payload.argument = JSON.stringify(args);
+
+    const resp = await axios.post(`${PB_API}/agents/launch`, payload, {
+        headers: headers(), timeout: 30000,
+    });
+
+    console.log(`[PB] 🚀 Launched agent ${agentId}`);
+    return resp.data?.containerId || null;
 }
 
 /**
- * Launch a PhantomBuster agent and wait for results
+ * Wait for a phantom to finish running
  */
-async function launchAndWait(agentId, args = {}, timeoutMs = 120000) {
-    if (!PB_API_KEY) throw new Error('No PHANTOMBUSTER_API_KEY');
+async function waitForCompletion(agentId, timeoutMs = 180000) {
+    const start = Date.now();
 
-    console.log(`[PhantomBuster] 🚀 Launching agent ${agentId}...`);
-
-    // Launch the agent
-    const launchResp = await axios.post(`${PB_API_BASE}/agents/launch`, {
-        id: agentId,
-        ...(Object.keys(args).length > 0 ? { argument: JSON.stringify(args) } : {}),
-    }, { headers: getHeaders(), timeout: 30000 });
-
-    const containerId = launchResp.data?.containerId;
-    console.log(`[PhantomBuster] ✅ Launched! Container: ${containerId || 'running'}`);
-
-    // Poll for completion
-    const startTime = Date.now();
-    let status = 'running';
-
-    while (status === 'running' && (Date.now() - startTime) < timeoutMs) {
-        await new Promise(r => setTimeout(r, 5000)); // Poll every 5s
-
+    while ((Date.now() - start) < timeoutMs) {
+        await delay(5000);
         try {
-            const fetchResp = await axios.get(`${PB_API_BASE}/agents/fetch`, {
+            const resp = await axios.get(`${PB_API}/agents/fetch`, {
                 params: { id: agentId },
-                headers: getHeaders(),
+                headers: headers(),
                 timeout: 15000,
             });
+            const agent = resp.data;
 
-            const agent = fetchResp.data;
-            status = agent?.lastEndMessage || 'running';
-
+            // Check various completion indicators
             if (agent?.lastEndMessage && agent.lastEndMessage !== 'running') {
-                console.log(`[PhantomBuster] 📊 Agent finished: ${agent.lastEndMessage}`);
-                break;
+                console.log(`[PB] ✅ Finished: ${agent.lastEndMessage}`);
+                return true;
+            }
+            if (agent?.runningContainers === 0) {
+                console.log('[PB] ✅ Agent idle, fetching results...');
+                return true;
             }
 
-            // Check if agent is no longer running
-            if (agent?.runningContainers === 0 || agent?.exitCode !== undefined) {
-                break;
-            }
+            console.log('[PB] ⏳ Still running...');
         } catch (err) {
-            console.warn(`[PhantomBuster] ⚠️ Poll error: ${err.message}`);
+            // 404 or transient errors — keep polling
+            if (err.response?.status !== 404) {
+                console.warn(`[PB] ⚠️ Poll: ${err.message}`);
+            }
         }
     }
 
-    return agentId;
+    console.warn('[PB] ⏰ Timeout waiting for agent');
+    return false;
 }
 
 /**
- * Fetch results from a PhantomBuster agent's latest run
+ * Fetch output/results from a phantom's latest run
  */
-async function fetchResults(agentId) {
-    if (!PB_API_KEY) throw new Error('No PHANTOMBUSTER_API_KEY');
+async function fetchOutput(agentId) {
+    if (!PB_KEY || !agentId) return [];
 
     try {
-        const resp = await axios.get(`${PB_API_BASE}/agents/fetch-output`, {
+        const resp = await axios.get(`${PB_API}/agents/fetch-output`, {
             params: { id: agentId },
-            headers: getHeaders(),
+            headers: headers(),
             timeout: 30000,
         });
 
-        // PhantomBuster returns output as string (JSON lines or CSV)
-        const output = resp.data?.output || '';
-        const resultUrl = resp.data?.resultObject;
+        const data = resp.data;
 
-        // Try to parse result object URL (contains the JSON data)
-        if (resultUrl) {
+        // Try resultObject URL first (contains JSON data file)
+        if (data?.resultObject) {
             try {
-                const dataResp = await axios.get(resultUrl, { timeout: 30000 });
-                if (Array.isArray(dataResp.data)) return dataResp.data;
-                if (typeof dataResp.data === 'string') {
-                    // Try JSON lines format
-                    return dataResp.data.split('\n').filter(Boolean).map(line => {
+                const fileResp = await axios.get(data.resultObject, { timeout: 30000 });
+                if (Array.isArray(fileResp.data)) return fileResp.data;
+                if (typeof fileResp.data === 'string') {
+                    return fileResp.data.split('\n').filter(Boolean).map(line => {
                         try { return JSON.parse(line); } catch { return null; }
                     }).filter(Boolean);
                 }
-            } catch (err) {
-                console.warn(`[PhantomBuster] ⚠️ Result URL fetch failed: ${err.message}`);
+            } catch (e) {
+                console.warn(`[PB] ⚠️ Result file: ${e.message}`);
             }
         }
 
-        // Fallback: parse output string
-        if (output) {
+        // Try output field
+        if (data?.output) {
             try {
-                const parsed = JSON.parse(output);
-                if (Array.isArray(parsed)) return parsed;
+                const parsed = JSON.parse(data.output);
+                return Array.isArray(parsed) ? parsed : [parsed];
             } catch {
-                // Try JSON lines
-                return output.split('\n').filter(Boolean).map(line => {
+                return data.output.split('\n').filter(Boolean).map(line => {
                     try { return JSON.parse(line); } catch { return null; }
                 }).filter(Boolean);
             }
@@ -129,106 +131,153 @@ async function fetchResults(agentId) {
 
         return [];
     } catch (err) {
-        console.error(`[PhantomBuster] ❌ Fetch results failed: ${err.message}`);
+        console.error(`[PB] ❌ Fetch output: ${err.message}`);
         return [];
     }
 }
 
 /**
- * Scrape Facebook Group posts using PhantomBuster
- * agentId = the Phantom Agent ID configured in PB dashboard
+ * Full flow: launch → wait → fetch
  */
-async function scrapeGroupPosts(agentId, groupUrl, maxPosts = 20) {
-    try {
-        // Launch with group-specific args
-        await launchAndWait(agentId, {
-            groupUrl: groupUrl,
-            numberOfPosts: maxPosts,
-        });
-
-        // Fetch results
-        const rawData = await fetchResults(agentId);
-
-        // Normalize to our post format
-        const posts = rawData.map(item => ({
-            platform: 'facebook',
-            post_url: item.postUrl || item.url || item.permalink || '',
-            author_name: item.profileName || item.name || item.authorName || item.userName || 'Unknown',
-            author_url: item.profileUrl || item.profileLink || '',
-            content: item.message || item.postContent || item.text || item.postText || '',
-            post_created_at: item.date || item.timestamp || item.postedAt || null,
-            scraped_at: new Date().toISOString(),
-            source: `phantombuster:${agentId}`,
-            // Extra PB fields
-            likes: item.likeCount || item.likes || 0,
-            comments: item.commentCount || item.comments || 0,
-            shares: item.shareCount || item.shares || 0,
-        })).filter(p => p.content && p.content.length > 15);
-
-        console.log(`[PhantomBuster] ✅ ${posts.length} posts extracted`);
-        return posts;
-    } catch (err) {
-        console.error(`[PhantomBuster] ❌ scrapeGroupPosts failed: ${err.message}`);
-        return [];
-    }
+async function runPhantom(agentId, args = null) {
+    await launchPhantom(agentId, args);
+    await waitForCompletion(agentId);
+    return await fetchOutput(agentId);
 }
 
+// ═══════════════════════════════════════════════════════
+// Platform Scrapers
+// ═══════════════════════════════════════════════════════
+
 /**
- * Scrape multiple FB groups using PhantomBuster
+ * FACEBOOK — Group Posts Extractor
+ * Phantom scrapes configured groups, returns posts
  */
-async function scrapeMultipleGroups(agentId, groups, maxPostsTotal = 20) {
-    if (!PB_API_KEY) {
-        console.warn('[PhantomBuster] ⚠️ No API key, skipping');
+async function scrapeFacebookGroups(maxPosts = 20) {
+    const agentId = config.PB_FB_GROUP_AGENT_ID;
+    if (!agentId) {
+        console.log('[PB:FB] ⚠️ No PB_FB_GROUP_AGENT_ID configured');
         return [];
     }
 
-    const allPosts = [];
-    const postsPerGroup = Math.ceil(maxPostsTotal / groups.length);
+    console.log('[PB:FB] 📘 Scraping Facebook Groups...');
+    const raw = await runPhantom(agentId);
 
-    for (const group of groups) {
-        console.log(`[PhantomBuster] 📌 ${group.name}...`);
-        try {
-            const posts = await scrapeGroupPosts(agentId, group.url, postsPerGroup);
-            // Tag with group name
-            posts.forEach(p => p.source = `group:${group.name}`);
-            allPosts.push(...posts);
-            console.log(`[PhantomBuster] ✓ ${posts.length} posts from ${group.name}`);
-            await new Promise(r => setTimeout(r, 3000)); // Delay between groups
-        } catch (err) {
-            console.warn(`[PhantomBuster] ⚠️ ${group.name}: ${err.message}`);
-        }
-    }
+    const posts = raw.map(item => ({
+        platform: 'facebook',
+        post_url: item.postUrl || item.url || item.permalink || '',
+        author_name: item.profileName || item.name || item.authorName || item.userName || 'Unknown',
+        author_url: item.profileUrl || item.profileLink || '',
+        author_avatar: item.profilePictureUrl || item.imgUrl || '',
+        content: item.message || item.postContent || item.text || item.postText || '',
+        post_created_at: item.date || item.timestamp || item.postedAt || new Date().toISOString(),
+        scraped_at: new Date().toISOString(),
+        source: `pb:fb:${item.groupName || 'group'}`,
+        likes: item.likeCount || item.likes || 0,
+        comments: item.commentCount || item.comments || 0,
+    })).filter(p => p.content && p.content.length > 15).slice(0, maxPosts);
 
-    console.log(`[PhantomBuster] 📊 Total: ${allPosts.length} posts from ${groups.length} groups`);
-    return allPosts;
+    console.log(`[PB:FB] ✅ ${posts.length} posts from Facebook Groups`);
+    return posts;
 }
 
 /**
- * Check if PhantomBuster is configured and working
+ * INSTAGRAM — Hashtag Search Export
+ * Phantom scrapes hashtag posts
+ */
+async function scrapeInstagram(maxPosts = 20) {
+    const agentId = config.PB_IG_AGENT_ID;
+    if (!agentId) {
+        console.log('[PB:IG] ⚠️ No PB_IG_AGENT_ID configured');
+        return [];
+    }
+
+    console.log('[PB:IG] 📷 Scraping Instagram...');
+    const raw = await runPhantom(agentId);
+
+    const posts = raw.map(item => ({
+        platform: 'instagram',
+        post_url: item.postUrl || item.url || item.permalink ||
+            (item.shortcode ? `https://www.instagram.com/p/${item.shortcode}/` : ''),
+        author_name: item.profileName || item.username || item.ownerUsername || item.owner?.username || 'Unknown',
+        author_url: item.profileUrl ||
+            (item.username ? `https://www.instagram.com/${item.username}/` : ''),
+        author_avatar: item.profilePictureUrl || '',
+        content: item.description || item.caption || item.text || item.postContent || '',
+        post_created_at: item.date || item.timestamp || item.postedAt || new Date().toISOString(),
+        scraped_at: new Date().toISOString(),
+        source: `pb:ig:${item.hashtag || 'search'}`,
+        likes: item.likeCount || item.likes || 0,
+        comments: item.commentCount || item.comments || 0,
+    })).filter(p => p.content && p.content.length > 10).slice(0, maxPosts);
+
+    console.log(`[PB:IG] ✅ ${posts.length} posts from Instagram`);
+    return posts;
+}
+
+/**
+ * TIKTOK — Search Export
+ * Phantom scrapes TikTok search/hashtag posts
+ */
+async function scrapeTikTok(maxPosts = 20) {
+    const agentId = config.PB_TT_AGENT_ID;
+    if (!agentId) {
+        console.log('[PB:TT] ⚠️ No PB_TT_AGENT_ID configured');
+        return [];
+    }
+
+    console.log('[PB:TT] 🎵 Scraping TikTok...');
+    const raw = await runPhantom(agentId);
+
+    const posts = raw.map(item => ({
+        platform: 'tiktok',
+        post_url: item.postUrl || item.url || item.videoUrl || item.webVideoUrl || '',
+        author_name: item.profileName || item.username || item.authorName || item.nickName || 'Unknown',
+        author_url: item.profileUrl ||
+            (item.username ? `https://www.tiktok.com/@${item.username}` : ''),
+        author_avatar: item.profilePictureUrl || item.avatarUrl || '',
+        content: item.description || item.text || item.caption || item.desc || '',
+        post_created_at: item.date || item.timestamp || item.createTime || new Date().toISOString(),
+        scraped_at: new Date().toISOString(),
+        source: `pb:tt:${item.hashtag || 'search'}`,
+        likes: item.diggCount || item.likeCount || item.likes || 0,
+        comments: item.commentCount || item.comments || 0,
+        views: item.playCount || item.views || 0,
+    })).filter(p => p.content && p.content.length > 10).slice(0, maxPosts);
+
+    console.log(`[PB:TT] ✅ ${posts.length} posts from TikTok`);
+    return posts;
+}
+
+/**
+ * Test API connection
  */
 async function testConnection() {
-    if (!PB_API_KEY) return { ok: false, error: 'No API key' };
-
+    if (!PB_KEY) return { ok: false, error: 'No API key' };
     try {
-        const resp = await axios.get(`${PB_API_BASE}/user`, {
-            headers: getHeaders(),
+        // Try fetching user info or agents list
+        const resp = await axios.get(`${PB_API}/agents/fetch-all`, {
+            headers: headers(),
             timeout: 10000,
         });
-        return {
-            ok: true,
-            email: resp.data?.email,
-            plan: resp.data?.plan,
-            timeLeft: resp.data?.timeLeft,
-        };
+        const agents = Array.isArray(resp.data) ? resp.data.length : 0;
+        return { ok: true, agents };
     } catch (err) {
+        // Even if this endpoint fails, as long as we got a response, the key works
+        if (err.response?.status === 200 || err.response?.status === 404) {
+            return { ok: true, note: 'Key valid, endpoint may differ' };
+        }
         return { ok: false, error: err.message };
     }
 }
 
 module.exports = {
-    launchAndWait,
-    fetchResults,
-    scrapeGroupPosts,
-    scrapeMultipleGroups,
+    launchPhantom,
+    waitForCompletion,
+    fetchOutput,
+    runPhantom,
+    scrapeFacebookGroups,
+    scrapeInstagram,
+    scrapeTikTok,
     testConnection,
 };
