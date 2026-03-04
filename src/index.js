@@ -136,28 +136,58 @@ async function runPipeline(options = {}) {
             return stats;
         }
 
+        // Step 1.6: Filter out posts older than 30 days (saves AI credits)
+        const MAX_POST_AGE_DAYS = 30;
+        const nowMs = Date.now();
+        const freshPosts = newPosts.filter(post => {
+            if (!post.post_created_at) return true; // Keep posts with no date (will be penalized later)
+            const postTimeMs = new Date(post.post_created_at).getTime();
+            if (isNaN(postTimeMs)) return true; // Keep if date can't be parsed
+            const ageDays = (nowMs - postTimeMs) / (1000 * 60 * 60 * 24);
+            if (ageDays > MAX_POST_AGE_DAYS) {
+                return false; // Drop old posts
+            }
+            return true;
+        });
+        const oldDropped = newPosts.length - freshPosts.length;
+        if (oldDropped > 0) {
+            console.log(`[Pipeline] 🕐 Dropped ${oldDropped} posts older than ${MAX_POST_AGE_DAYS} days (saves AI credit)`);
+        }
+
+        if (freshPosts.length === 0) {
+            console.log('[Pipeline] ℹ️ All posts too old or already in database, skipping classification');
+            database.updateScanLog.run({ id: scanId, posts_found: allPosts.length, leads_detected: 0, status: 'completed', error: null });
+            return stats;
+        }
+
         // Step 2: Classify with AI
         console.log('\n[Pipeline] 🧠 Step 2: Classifying posts with AI...');
-        const classified = await classifyPosts(newPosts);
+        const classified = await classifyPosts(freshPosts);
 
         // Apply Time-Decay Score Penalty (softened — keeps more value for older posts)
-        const nowMs = Date.now();
         classified.forEach(post => {
-            if (post.score > 0 && post.post_created_at) {
-                const postTimeMs = new Date(post.post_created_at).getTime();
-                const ageDays = (nowMs - postTimeMs) / (1000 * 60 * 60 * 24);
+            if (post.score > 0) {
+                let ageDays = 60; // Default: assume 60 days old if no date
+                if (post.post_created_at) {
+                    const postTimeMs = new Date(post.post_created_at).getTime();
+                    if (!isNaN(postTimeMs)) {
+                        ageDays = (nowMs - postTimeMs) / (1000 * 60 * 60 * 24);
+                    }
+                }
 
                 let penaltyMultiplier = 1;
                 if (ageDays > 90) penaltyMultiplier = 0.3;      // -70% if older than 3 months
                 else if (ageDays > 30) penaltyMultiplier = 0.5;  // -50% if older than 1 month
-                else if (ageDays > 7) penaltyMultiplier = 0.7;   // -30% if older than 1 week
-                else if (ageDays > 3) penaltyMultiplier = 0.9;   // -10% if older than 3 days
+                else if (ageDays > 14) penaltyMultiplier = 0.7;  // -30% if older than 2 weeks
+                else if (ageDays > 7) penaltyMultiplier = 0.85;  // -15% if older than 1 week
+                else if (ageDays > 3) penaltyMultiplier = 0.95;  // -5% if older than 3 days
 
                 if (penaltyMultiplier < 1) {
                     const originalScore = post.score;
                     post.score = Math.round(originalScore * penaltyMultiplier);
-                    console.log(`[Decay] Post age ${Math.round(ageDays)}d: Score reduced ${originalScore} -> ${post.score}`);
-                    post.summary = `[CŨ: Đăng ${Math.round(ageDays)} ngày trước] ` + post.summary;
+                    const dateInfo = post.post_created_at ? `${Math.round(ageDays)}d` : 'no date (assume 60d)';
+                    console.log(`[Decay] Post age ${dateInfo}: Score reduced ${originalScore} -> ${post.score}`);
+                    post.summary = `[CŨ: ${Math.round(ageDays)} ngày] ` + post.summary;
                 }
             }
         });
