@@ -45,13 +45,13 @@ module.exports = {
     { name: 'Seller E-commerce VN', url: 'https://www.facebook.com/groups/494286704652111' },
 
     // === Việt Kiều / Du học sinh / Cộng đồng VN tại Mỹ ===
-    // (ship hàng về VN, mua hàng TQ ship Mỹ, cần kho/fulfillment)
-    { name: 'Du học sinh VN tại Mỹ', url: 'https://www.facebook.com/groups/VietnamStudent.USA' },
-    { name: 'Cộng đồng Người Việt tại Mỹ', url: 'https://www.facebook.com/groups/congdongnguoiviettaimy' },
-    { name: 'Người Việt ở Mỹ', url: 'https://www.facebook.com/groups/nguoivietomy' },
-    { name: 'Việt Kiều Mỹ', url: 'https://www.facebook.com/groups/vietkieumyy' },
-    { name: 'Mua Bán Người Việt tại Mỹ', url: 'https://www.facebook.com/groups/muabannguoiviettaimy' },
-    { name: 'Hội Kinh Doanh Online VN-US', url: 'https://www.facebook.com/groups/kinhdoanhonlinevnus' },
+    // Chỉ dùng numeric group ID — SociaVault không hỗ trợ vanity slug
+    { name: 'MMO Dropship VN', url: 'https://www.facebook.com/groups/mmodropshipelancervn' },
+    { name: 'Hội Seller Việt Nam', url: 'https://www.facebook.com/groups/925386677620484' },
+    { name: 'Kinh Doanh Online Toàn Cầu', url: 'https://www.facebook.com/groups/kinhdoanhonlinetoancau' },
+    { name: 'Xuất Nhập Khẩu Hàng Mỹ VN', url: 'https://www.facebook.com/groups/354715005518539' },
+    { name: 'Cộng Đồng Etsy Việt Nam', url: 'https://www.facebook.com/groups/etsyvietnam' },
+    { name: 'Ship Hàng Mỹ Về Việt Nam', url: 'https://www.facebook.com/groups/387671741418145' },
   ],
 
   // ════════════════════════════════════════════════════

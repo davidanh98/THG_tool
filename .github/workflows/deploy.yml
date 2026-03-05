@@ -22,11 +22,12 @@ jobs:
             git reset --hard origin/main
             echo "📦 Installing dependencies..."
             npm install --production
-            echo "🔄 Restarting PM2..."
-            pm2 restart thg-lead-gen 2>/dev/null || \
-            pm2 restart thg-lead 2>/dev/null || \
+            echo "🛑 Stopping all PM2 processes..."
+            pm2 delete all 2>/dev/null || true
+            echo "🔄 Starting fresh..."
             pm2 start src/index.js --name thg-lead-gen --time
             pm2 save
             echo "✅ Deploy complete!"
             pm2 list
+
 
