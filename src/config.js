@@ -61,17 +61,30 @@ module.exports = {
   FB_COMPETITOR_PAGES: [],  // Disabled — waste credits
 
   // ════════════════════════════════════════════════════
-  // TIKTOK — keyword queries (date_posted=this-week)
-  // ~1 credit/query × 4 queries/scan = ~4 credits/scan
+  // TIKTOK KEYWORD QUERIES — 20 queries total, rotate 4/scan
+  // Focus: Việt Kiều + seller VN/CN → US (mỏ vàng)
   // ════════════════════════════════════════════════════
   TT_SEARCH_QUERIES: [
-    // Vietnamese buyer queries (sellers tìm dịch vụ)
-    'cần ship hàng đi mỹ', 'tìm forwarder ship mỹ', 'ai có line us',
-    'xin giá ship hàng đi mỹ', 'cần kho ở mỹ', 'tìm kho fulfillment',
-    'cần xưởng in pod', 'ship hàng amazon fba', 'gửi hàng từ việt nam đi mỹ',
-    // English buyer queries (more specific than generic logistics)
-    'need fulfillment center us', 'looking for 3pl warehouse',
-    'tiktok shop seller need fulfillment', 'amazon fba prep service review',
+    // === Việt Kiều + cộng đồng VN tại Mỹ (mỏ vàng mới) ===
+    'mua hàng việt nam ship đi mỹ',      // VK muốn gửi hàng VN
+    'hàng trung quốc ship đi mỹ',         // seller mua CN ship US
+    'gửi hàng về việt nam từ mỹ',       // VK gửi dịp lễ
+    'người việt ở mỹ mua hàng',           // cộng đồng tìm hàng
+    'dịch vụ ship hàng việt kiều',         // query trực tiếp VK
+    // === Seller VN tìm dịch vụ (buyer intent cao) ===
+    'cần ship hàng đi mỹ', 'tìm forwarder ship mỹ',
+    'cần kho ở mỹ', 'tìm kho fulfillment',
+    'cần xưởng in pod', 'ship hàng amazon fba',
+    'xin giá ship hàng đi mỹ', 'ai có line us',
+    // === Hashtag search (Việt Kiều community) ===
+    '#nguoivietomy ship',                  // hashtag cộng đồng
+    '#vietchieu mua hàng',
+    '#cuocsongmy hàng việt',
+    // === Specific logistics needs ===
+    'source product china ship usa',       // EN: seller CN → US
+    'cần forwarder trung quốc đi mỹ',     // import từ TQ
+    'tìm kho fulfillment tiktok shop',    // TTS seller
+    'need 3pl warehouse vietnam',          // EN buyer tìm VN logistics
   ],
 
   // ════════════════════════════════════════════════════

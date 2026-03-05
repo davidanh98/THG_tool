@@ -152,7 +152,28 @@ Viết response phù hợp nhất:`;
         console.log(`[Responder] ✅ Gemini generated response: ${text.substring(0, 80)}...`);
         return text;
     } catch (err) {
-        console.error('[Responder] ✗ Gemini error:', err.message);
+        const is429 = err.message?.includes('429') || err.message?.includes('quota');
+        if (is429) {
+            // Gemini free tier exhausted — fallback to Groq
+            try {
+                const groqResp = await groq.chat.completions.create({
+                    model: 'llama-3.1-8b-instant',
+                    messages: [
+                        { role: 'system', content: `Bạn là sales rep THG Logistics. Viết comment ngắn (2-3 câu) phản hồi bài đăng khách trên ${lead.platform}. Xưng "em THG". Nhẹ nhàng, không pushy. CHỈ trả về nội dung comment.` },
+                        { role: 'user', content: `Bài đăng: "${lead.content.substring(0, 300)}"\nDịch vụ phù hợp: ${lead.category || 'General'}` },
+                    ],
+                    temperature: 0.3,
+                    max_tokens: 150,
+                });
+                const groqText = groqResp.choices[0].message.content.trim();
+                console.log(`[Responder] ✅ Groq fallback: ${groqText.substring(0, 60)}...`);
+                return groqText;
+            } catch (groqErr) {
+                console.warn(`[Responder] ⚠️ Groq fallback also failed: ${groqErr.message}`);
+            }
+        } else {
+            console.error('[Responder] ✗ Gemini error:', err.message);
+        }
         return RESPONSE_TEMPLATES[lead.category] || RESPONSE_TEMPLATES.General;
     }
 }

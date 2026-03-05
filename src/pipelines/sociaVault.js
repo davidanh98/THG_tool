@@ -253,7 +253,7 @@ async function scrapeFacebookGroups(maxPosts = 60) {
             console.log(`[SV:FB]   ${posts.length} posts (CHRONOLOGICAL)`);
             await delay(1500);
 
-            for (const post of posts.slice(0, 3)) {
+            for (const post of posts.slice(0, 5)) {
                 // Add post itself
                 if (post.content) {
                     all.push({
