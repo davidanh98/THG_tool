@@ -31,18 +31,27 @@ module.exports = {
   SV_DAILY_LIMIT: parseInt(process.env.SV_DAILY_LIMIT || '370'),
 
   // ════════════════════════════════════════════════════
-  // FACEBOOK GROUPS — logistics-focused (buyer intent)
-  // ~4 credits/group × 4/scan × 2 lần/ngày = ~32 credits/ngày
+  // FACEBOOK GROUPS — 12 groups (rotation 4/scan)
+  // Mix: logistics-focused + Việt Kiều/du học sinh communities
+  // Việt Kiều ở Mỹ thường cần ship hàng VN/CN→US (mỏ vàng!)
   // ════════════════════════════════════════════════════
   FB_TARGET_GROUPS: [
-    // Logistics / shipping / forwarder groups (high buyer intent)
+    // === Logistics / E-commerce (buyer intent cao) ===
     { name: 'Vận chuyển Quốc tế VN', url: 'https://www.facebook.com/groups/914341367037223' },
     { name: 'Cộng đồng Amazon VN', url: 'https://www.facebook.com/groups/congdongamazonvn' },
     { name: 'TikTok Shop US Underground', url: 'https://www.facebook.com/groups/1631859190422638' },
     { name: 'Tìm Supplier Fulfill POD/Drop', url: 'https://www.facebook.com/groups/timsupplierfulfillpoddropvnusuk' },
-    // Fulfillment / 3PL / warehouse
     { name: 'Dropship & Fulfill VN', url: 'https://www.facebook.com/groups/646444174604027' },
     { name: 'Seller E-commerce VN', url: 'https://www.facebook.com/groups/494286704652111' },
+
+    // === Việt Kiều / Du học sinh / Cộng đồng VN tại Mỹ ===
+    // (ship hàng về VN, mua hàng TQ ship Mỹ, cần kho/fulfillment)
+    { name: 'Du học sinh VN tại Mỹ', url: 'https://www.facebook.com/groups/VietnamStudent.USA' },
+    { name: 'Cộng đồng Người Việt tại Mỹ', url: 'https://www.facebook.com/groups/congdongnguoiviettaimy' },
+    { name: 'Người Việt ở Mỹ', url: 'https://www.facebook.com/groups/nguoivietomy' },
+    { name: 'Việt Kiều Mỹ', url: 'https://www.facebook.com/groups/vietkieumyy' },
+    { name: 'Mua Bán Người Việt tại Mỹ', url: 'https://www.facebook.com/groups/muabannguoiviettaimy' },
+    { name: 'Hội Kinh Doanh Online VN-US', url: 'https://www.facebook.com/groups/kinhdoanhonlinevnus' },
   ],
 
   // ════════════════════════════════════════════════════
