@@ -80,7 +80,7 @@ function toArr(raw) {
 // ════════════════════════════════════════════════════════
 // ROTATION BATCH SIZES
 // ════════════════════════════════════════════════════════
-const FB_GROUPS_PER_SCAN = 4;
+const FB_GROUPS_PER_SCAN = 6;  // FB-only mode: quét 6/12 groups mỗi scan, full cycle mỗi 2 scans
 const FB_COMPETITORS_PER_SCAN = 1;  // reduced: competitor pages mostly provider content
 const TT_HASHTAGS_PER_SCAN = 4;
 const IG_ACCOUNTS_PER_SCAN = 3;
