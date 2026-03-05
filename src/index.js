@@ -327,14 +327,20 @@ async function main() {
 
     // ═══ Scan Mutex — prevent overlapping scans ═══
     let scanRunning = false;
-    async function safeRunScan(fn) {
+    let scanTag = '';
+    async function safeRunScan(fn, tag = 'scan') {
         if (scanRunning) {
-            console.log('[Main] ⛔ Scan already running, skip this trigger');
+            console.log(`[Main] ⛔ Scan "${scanTag}" already running, skip trigger: ${tag}`);
             return;
         }
         scanRunning = true;
+        scanTag = tag;
+        console.log(`[Main] 🔒 Lock acquired: ${tag}`);
         try { await fn(); }
-        finally { scanRunning = false; }
+        finally {
+            scanRunning = false;
+            console.log(`[Main] 🔓 Lock released: ${tag}`);
+        }
     }
 
     // Schedule 1: Keyword scan (TikTok only — IG disabled, low ROI)
@@ -342,7 +348,7 @@ async function main() {
     console.log(`[Main] ⏰ Keyword scan (TikTok): ${keywordCron}`);
     const scanJob = cron.schedule(keywordCron, () => {
         console.log('[Cron] Triggered keyword scan (TikTok)...');
-        safeRunScan(() => runPipeline({ platforms: ['tiktok'] }));
+        safeRunScan(() => runPipeline({ platforms: ['tiktok'] }), 'tiktok-keyword');
     });
 
     // Schedule 2: FB Group scan — 2×/day (saves Apify credits)
@@ -350,7 +356,7 @@ async function main() {
     console.log(`[Main] ⏰ FB Group scan: ${groupCron}`);
     cron.schedule(groupCron, () => {
         console.log('[Cron] Triggered FB Group scan...');
-        safeRunScan(() => runPipeline({ platforms: ['facebook'] }));
+        safeRunScan(() => runPipeline({ platforms: ['facebook'] }), 'fb-group');
     });
 
     global.getNextScanTime = () => {
@@ -365,7 +371,7 @@ async function main() {
 
     // Run initial keyword scan on startup (TikTok only)
     console.log('[Main] 🚀 Running initial keyword scan...');
-    await safeRunScan(() => runPipeline({ platforms: ['tiktok'] }));
+    await safeRunScan(() => runPipeline({ platforms: ['tiktok'] }), 'initial');
 }
 
 main().catch(err => {

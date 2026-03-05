@@ -111,8 +111,16 @@ function signalScores(text = '') {
     const provider = isProviderText(s) ? 1 : 0;
     const buyer = isBuyerText(s) ? 1 : 0;
 
-    // Provider without buyer intent → noise
-    if (provider && !buyer) return { express: 0, wh: 0, any: 0, buyer: 0, provider: 1 };
+    // Provider post about logistics → STILL hydrate comments (buyers reply to these!)
+    const logisticsTerms = ['ship', 'vận chuyển', 'ddp', 'fba', 'fulfillment', 'kho', 'warehouse',
+        '3pl', 'line us', 'gửi hàng', 'freight', 'lcl', 'fcl', 'thông quan', 'prep'];
+    const isLogisticsPost = logisticsTerms.some(t => s.includes(t));
+
+    // Provider without buyer intent AND not about logistics → noise, skip
+    if (provider && !buyer && !isLogisticsPost) return { express: 0, wh: 0, any: 0, buyer: 0, provider: 1, providerLogistics: false };
+
+    // Provider post about logistics: we want comments but lower priority
+    const providerLogistics = (provider && !buyer && isLogisticsPost) ? 1 : 0;
 
     // Express triggers
     const expressTerms = [
@@ -144,10 +152,17 @@ function signalScores(text = '') {
     }
 
     const any = Math.max(express, wh);
-    // If no buyer signal detected, reduce score to avoid false hits
-    const anyFinal = buyer ? any : Math.max(0, any - 15);
+    // If no buyer signal, reduce — but provider logistics posts get minimum score for comment hydration
+    let anyFinal;
+    if (providerLogistics) {
+        anyFinal = Math.max(any, 20); // provider logistics = buyers in comments!
+    } else if (buyer) {
+        anyFinal = any;
+    } else {
+        anyFinal = Math.max(0, any - 15);
+    }
 
-    return { express, wh, any: anyFinal, buyer, provider };
+    return { express, wh, any: anyFinal, buyer, provider, providerLogistics };
 }
 
 // ════════════════════════════════════════════════════════
@@ -257,9 +272,15 @@ async function scrapeFacebookGroups(maxPosts = 60) {
                     }
                 }
 
-                // PAID comments — ONLY when: commentCount>0, fresh, strong signal
+                // PAID comments — different rules for buyer vs provider posts
                 const sig = signalScores(post.content || '');
-                if (post.url && post.commentCount > 0 && sig.any >= 25 && isFresh(post.created_at, 14)) {
+                const shouldHydrate = sig.providerLogistics
+                    // Provider logistics: only if very fresh (≤7d) + high engagement (≥5 comments)
+                    ? (post.url && post.commentCount >= 5 && isFresh(post.created_at, 7))
+                    // Buyer posts: normal threshold
+                    : (post.url && post.commentCount > 0 && sig.any >= 25 && isFresh(post.created_at, 14));
+
+                if (shouldHydrate) {
                     try {
                         await delay(1500);
                         const comments = await fbGetPostComments(post.url, `sv:fb:comments:${group.name}`);
@@ -269,15 +290,17 @@ async function scrapeFacebookGroups(maxPosts = 60) {
                             parent_excerpt: (post.content || '').slice(0, 300),
                             parent_created_at: post.created_at || null,
                         })));
-                        console.log(`[SV:FB]   ↳ ${comments.length} paid comments (commentCount=${post.commentCount}, signal=${sig.any})`);
+                        const type = sig.providerLogistics ? 'provider-logistics' : 'buyer';
+                        console.log(`[SV:FB]   ↳ ${comments.length} paid comments (${type}, commentCount=${post.commentCount}, signal=${sig.any})`);
                     } catch (e) {
                         console.warn(`[SV:FB]   ↳ comments err: ${e.message}`);
                     }
                 } else if (post.url) {
                     const reasons = [];
                     if (post.commentCount === 0) reasons.push('0 comments');
-                    if (sig.any < 25) reasons.push('weak signal');
-                    if (!isFresh(post.created_at, 14)) reasons.push('old');
+                    if (!sig.providerLogistics && sig.any < 25) reasons.push('weak signal');
+                    if (sig.providerLogistics && post.commentCount < 5) reasons.push(`low engagement(${post.commentCount})`);
+                    if (!isFresh(post.created_at, sig.providerLogistics ? 7 : 14)) reasons.push('old');
                     console.log(`[SV:FB]   ↳ skip paid comments (${reasons.join(', ')})`);
                 }
             }
@@ -364,24 +387,65 @@ async function ttGetVideoComments(videoUrl, source) {
     })).filter(p => p.content.length > 3);
 }
 
+// Helper: safe nested property access
+function pick(obj, paths) {
+    for (const p of paths) {
+        const v = p.split('.').reduce((acc, k) => (acc && acc[k] !== undefined ? acc[k] : undefined), obj);
+        if (v !== undefined && v !== null) return v;
+    }
+    return null;
+}
+
+function buildTiktokWebUrl(uniqueId, awemeId) {
+    if (!uniqueId || !awemeId) return '';
+    return `https://www.tiktok.com/@${uniqueId}/video/${awemeId}`;
+}
+
 async function ttSearchKeyword(query) {
     if (!canSpend()) return [];
     const data = await svGet('tiktok/search/keyword', {
         query,
         date_posted: 'this-week',
         sort_by: 'date-posted',
+        trim: true,
     });
     logCredit('tiktok/search/keyword', 'tiktok', query);
 
-    const videos = toArr(data.videos || data.items || data.aweme_list || data);
-    return videos.map(item => ({
-        url: item.share_url || item.url ||
-            (item.aweme_id ? `https://www.tiktok.com/@${item.author?.unique_id || 'user'}/video/${item.aweme_id}` : ''),
-        content: (item.desc || item.description || item.caption || '').trim(),
-        author_name: item.author?.nickname || item.author?.unique_id || 'Unknown',
-        author_url: item.author?.unique_id ? `https://www.tiktok.com/@${item.author.unique_id}` : '',
-        created_at: item.create_time ? new Date(item.create_time * 1000).toISOString() : null,
-    })).filter(p => p.url);
+    // SociaVault keyword search uses search_item_list[].aweme_info
+    const rawList =
+        data?.search_item_list ||
+        data?.data?.search_item_list ||
+        data?.videos || data?.items || data?.aweme_list ||
+        null;
+
+    const items = toArr(rawList).filter(Boolean);
+
+    const videos = [];
+    for (const it of items) {
+        // search_item_list wraps in aweme_info; direct items don't
+        const aweme = it?.aweme_info || it?.awemeInfo || it;
+
+        const awemeId = pick(aweme, ['aweme_id', 'awemeId', 'id']);
+        const desc = pick(aweme, ['desc', 'description', 'caption']) || '';
+        const createTime = pick(aweme, ['create_time', 'createTime']);
+        const authorUnique = pick(aweme, ['author.unique_id', 'author.uniqueId', 'author.username']);
+        const authorNick = pick(aweme, ['author.nickname', 'author.nickName']) || authorUnique || 'Unknown';
+
+        // Build URL: prefer share_url, fallback to constructed URL
+        const url = pick(aweme, ['share_url', 'url']) || buildTiktokWebUrl(authorUnique, awemeId);
+        if (!url) continue;
+
+        videos.push({
+            url,
+            content: String(desc).trim(),
+            author_name: authorNick,
+            author_url: authorUnique ? `https://www.tiktok.com/@${authorUnique}` : '',
+            created_at: createTime ? new Date(createTime * 1000).toISOString() : null,
+        });
+    }
+
+    console.log(`[SV:TT]   parsed ${videos.length}/${items.length} videos from response`);
+    return videos;
 }
 
 async function scrapeTikTok(maxPosts = 30) {
