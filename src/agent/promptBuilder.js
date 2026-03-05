@@ -34,7 +34,14 @@ ${config.THG_CONTEXT}`;
 1. NẾU bài viết mang tính chất QUẢNG CÁO, CHÀO MỜI dịch vụ từ các công ty vận chuyển, xưởng in, kho bãi khác -> "author_role": "logistics_agency", "intent": "offering_service", "is_potential": false.
 2. NẾU bài viết chỉ chia sẻ kiến thức, khoe đơn, không hỏi tìm đối tác -> "is_potential": false.
 3. CHỈ chọn "is_potential": true khi TÁC GIẢ là người ĐANG TÌM KIẾM giải pháp hoặc ĐANG HỎI/CẦN GIÚP ĐỖ.
-4. ĐẶC THÙ COMMENT NGẮN: Nếu nội dung là comment ngắn dưới post logistics/fulfillment như "xin giá", "check ib", "đi line us bao lâu", "có kho PA không", "rate?", "ib em", "giá bao nhiêu?" => "is_potential": true. Đây là tín hiệu mua hàng rõ ràng, ĐẶC BIỆT khi Parent context liên quan logistics/shipping.
+4. ĐẶC THÙ COMMENT NGẮN: Nếu nội dung là comment ngắn dưới post logistics/fulfillment như "xin giá", "check ib", "đi line us bao lâu", "có kho PA không", "rate?", "ib em", "giá bao nhiêu?" => "is_potential": true.
+
+🛑 CÁCH PHÂN BIỆT PROVIDER vs BUYER (CỰC KỲ QUAN TRỌNG):
+- PROVIDER: Người ĐĂNG BÀI/QUẢNG CÁO dịch vụ. Dấu hiệu: "xin phép admin", "anh/chị seller tìm...", "tham khảo ngay", "nhận từ 1 đơn", "giá tốt", "chỉ từ X đ", "cam kết", "liên hệ", "inbox", bảng giá, logo công ty, "bên em chuyên", "we offer", "ready to scale", nêu ĐỊA CHỈ KHO, giới thiệu DỊCH VỤ CỦA HỌ.
+- BUYER: Người ĐANG HỎI/TÌM dịch vụ. Dấu hiệu: "cần tìm", "ai biết", "có ai", "cho hỏi", "giúp mình", "mình đang muốn", đặt CÂU HỎI, yêu cầu GIỚI THIỆU/RECOMMEND.
+- "Xin phép admin + giới thiệu dịch vụ" = LUÔN LUÔN LÀ PROVIDER. Không bao giờ là buyer.
+- "SELLER NÊN BIẾT" + bảng giá = PROVIDER quảng cáo. Không phải buyer.
+- Giới thiệu fulfillment center/warehouse mới mở = PROVIDER. Không phải buyer.
 
 🎯 PHÂN LUỒNG 2 DỊCH VỤ THG:
 - "THG Express": DDP/line US/air/sea/LCL/FCL/kg/cbm/customs/thông quan/ISF/HS code/ship VN-CN→Mỹ → Express
@@ -57,19 +64,28 @@ score 0-39 = Không phải buyer HOẶC không liên quan
     // 5. Few-shot examples
     const examples = `
 📝 VÍ DỤ MẪU:
-- "Bên mình có kho CA nhận xử lý FBM, giá rẻ." → is_potential:false, score:0, role:logistics_agency
+
+🛑 PROVIDER (is_potential: false, score: 0):
+- "Xin phép admin và anh/chị seller ạ 🙏 Nếu mọi người đang tìm đơn vị vận chuyển..." → PROVIDER ("xin phép admin" + giới thiệu dịch vụ = quảng cáo)
+- "SELLER SHIP US NÊN BIẾT: TUYẾN EPACKET GIÁ TỐT – NHẬN TỪ 1 ĐƠN 🔥 Chỉ từ 60k" → PROVIDER (bảng giá + "nhận từ 1 đơn" = quảng cáo)
+- "Anh/chị seller cần đvvc uy tín gửi hàng VN-US tham khảo ngay" → PROVIDER ("tham khảo ngay" = quảng cáo)
+- "Tap in with Sweats Collective, they just launched there US fulfillment center" → PROVIDER (giới thiệu fulfillment center mới = quảng cáo)
+- "Bên mình có kho CA nhận xử lý FBM, giá rẻ." → PROVIDER (giới thiệu kho + dịch vụ)
+- "Ready to scale your eCommerce business? From warehousing to..." → PROVIDER (quảng cáo dịch vụ)
+- "EPACKET – GIẢI PHÁP GỬI HÀNG QUỐC TẾ SIÊU TỐC" → PROVIDER (giới thiệu sản phẩm)
+
+🎯 BUYER (is_potential: true, score >= 60):
 - "Mới tập tành làm POD, cho hỏi app nào in áo rẻ ship US?" → is_potential:true, score:75, THG Fulfillment
 - "Mình đang muốn bắt đầu POD trên TikTok Shop US mà chưa chọn xưởng nào" → is_potential:true, score:88, THG Fulfillment
 - "Có 2 tạ hàng cần ship sang Mỹ trong tuần, ai nhận inbox" → is_potential:true, score:95, THG Express
 - "bên m nhận đi hàng lẻ từ kho tân bình ko ad?" → is_potential:true, score:80, THG Express
-- "Cần kho Mỹ fulfill cho TikTok Shop, đồng thời cũng cần line VN→US cho hàng mới" → is_potential:true, score:90, Both
-- [COMMENT] "xin giá" (parent: bài về fulfillment) → is_potential:true, score:70, THG Fulfillment
-- [COMMENT] "rate?" (parent: bài về ship hàng Mỹ) → is_potential:true, score:65, THG Express
-- "bác nào có xưởng US k ạ" → is_potential:true, score:70, THG Warehouse (đang tìm xưởng ở Mỹ)
-- "có xưởng US k b" → is_potential:true, score:65, THG Warehouse (câu hỏi ngắn tìm xưởng)
+- "bác nào có xưởng US k ạ" → is_potential:true, score:70, THG Warehouse
 - "ai biết chỗ nào ship hàng đi Mỹ không" → is_potential:true, score:75, THG Express
 - "cần kho ở PA hoặc TX để fulfill" → is_potential:true, score:85, THG Warehouse
-- [COMMENT] "Avail pa?" (parent: bài về logistics dịch vụ) → is_potential:true, score:60, None (cần thêm context)`;
+- "mình ở Cali cần gửi đồ về VN cho gia đình, ai biết dịch vụ nào tốt" → is_potential:true, score:80, THG Express (Việt Kiều)
+- "muốn mua hàng từ Trung Quốc ship về Mỹ, ai có nguồn?" → is_potential:true, score:85, THG Express (Việt Kiều)
+- [COMMENT] "xin giá" (parent: bài về fulfillment) → is_potential:true, score:70, THG Fulfillment
+- [COMMENT] "rate?" (parent: bài về ship hàng Mỹ) → is_potential:true, score:65, THG Express`;
 
     // Combine all parts
     return [base, kbContext, feedbackSection, rules, examples,
