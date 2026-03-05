@@ -1,32 +1,32 @@
 {
-    "last_updated": null,
-    "providers": {
-        "iproyal": {
-            "name": "IPRoyal",
-            "api_key": "",
-            "dashboard": "https://dashboard.iproyal.com"
-        },
-        "smartproxy": {
-            "name": "Smartproxy",
-            "api_key": "",
-            "dashboard": "https://dashboard.smartproxy.com"
-        }
+  "last_updated": "2026-03-05T08:21:52.628Z",
+  "providers": {
+    "iproyal": {
+      "name": "IPRoyal",
+      "api_key": "",
+      "dashboard": "https://dashboard.iproyal.com"
     },
-    "active_proxies": [
-        {
-            "id": "px_001",
-            "provider": "manual",
-            "url": "http://user:pass@proxy-host:port",
-            "type": "residential",
-            "region": "US",
-            "latency": null,
-            "fail_count": 0,
-            "success_count": 0,
-            "last_used": null,
-            "last_checked": null,
-            "status": "unchecked",
-            "cooldown_until": null
-        }
-    ],
-    "blacklisted_proxies": []
+    "smartproxy": {
+      "name": "Smartproxy",
+      "api_key": "",
+      "dashboard": "https://dashboard.smartproxy.com"
+    }
+  },
+  "active_proxies": [
+    {
+      "id": "px_001",
+      "provider": "manual",
+      "url": "http://user:pass@proxy-host:port",
+      "type": "residential",
+      "region": "US",
+      "latency": null,
+      "fail_count": 1,
+      "success_count": 0,
+      "last_used": null,
+      "last_checked": "2026-03-05T08:21:52.628Z",
+      "status": "cooling_down",
+      "cooldown_until": "2026-03-05T08:51:52.628Z"
+    }
+  ],
+  "blacklisted_proxies": []
 }

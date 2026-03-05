@@ -372,9 +372,9 @@ async function main() {
                 console.log(`[Cron] 💰 Budget: ${budget.remaining}/${budget.limit} credits remaining`);
             }
         } catch { }
-        console.log('[Cron] Triggered unified scan (TikTok + Facebook)...');
+        console.log(`[Cron] Triggered scan (${config.ENABLED_PLATFORMS.join(', ')})...`);
         safeRunScan(() => runPipeline({
-            platforms: ['tiktok', 'facebook'],
+            platforms: config.ENABLED_PLATFORMS,
             maxPosts: config.MAX_POSTS_PER_SCAN || 30,
         }), 'unified-hourly');
     });
@@ -390,10 +390,10 @@ async function main() {
     console.log('[Main] Use --scan-once to run immediately');
     console.log('[Main] Use --platform=facebook to scan single platform');
 
-    // Run initial scan on startup (TikTok + Facebook)
+    // Run initial scan on startup
     console.log('[Main] 🚀 Running initial scan...');
     await safeRunScan(() => runPipeline({
-        platforms: ['tiktok', 'facebook'],
+        platforms: config.ENABLED_PLATFORMS,
         maxPosts: config.MAX_POSTS_PER_SCAN || 30,
     }), 'initial');
 }
