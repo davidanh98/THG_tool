@@ -32,15 +32,15 @@ const AI_MODELS = [
     'qwen-qwq-32b',
 ];
 
-const PROVIDER_REGEX = /(chúng tôi nhận gửi|quy trình gửi hàng|lợi ích khi gửi hàng với chúng tôi|nhận gửi hàng đi|chuyên tuyến việt|cước phí cạnh tranh|cam kết giao tận tay|hỗ trợ tư vấn, chăm sóc khách hàng 24\/7|we offer fulfillment|shipping services from us|dịch vụ vận chuyển uy tín|không phát sinh chi phí|bao thuế bao luật|nhận pick up|đóng gói miễn phí|hút chân không|lh em ngay|lh em|liên hệ em|ib em ngay|ib em|inbox em|cmt em|chấm em|check ib|check inbox|dạ em nhận|em chuyên nhận|gửi hàng đi mỹ inbox|nhận vận chuyển|zalo: 0)/i;
+const PROVIDER_REGEX = /(chúng tôi nhận gửi|quy trình gửi hàng|lợi ích khi gửi hàng với chúng tôi|nhận gửi hàng đi|chuyên tuyến việt|cước phí cạnh tranh|cam kết giao tận tay|hỗ trợ tư vấn, chăm sóc khách hàng 24\/7|we offer fulfillment|shipping services from us|dịch vụ vận chuyển uy tín|không phát sinh chi phí|bao thuế bao luật|nhận pick up|đóng gói miễn phí|hút chân không|lh em ngay|lh em|liên hệ em|ib em ngay|ib em|inbox em|cmt em|chấm em|check ib|check inbox|dạ em nhận|em chuyên nhận|gửi hàng đi mỹ inbox|nhận vận chuyển|zalo: 0|tham khảo ngay|viettel post|epacket|saigonbay|nhận ship hàng|dịch vụ ship|cước ship|giá ship từ|bảng giá ship|đặt ship ngay|cam kết|chuyên gửi|nhận gửi|dịch vụ gửi|giao hàng nhanh|giao tận nơi|ship cod|bên em chuyên|bên em nhận|bên mình chuyên|bên mình nhận|anh.chị.*(tham khảo|liên hệ|ib|inbox)|giải pháp gửi hàng|ready to scale|from warehousing|we ship|we offer|contact us|whatsapp)/i;
 const IRRELEVANT_REGEX = /(recipe|cooking|football|soccer|gaming|movie|trailer|music video|crypto airdrop|token launch|weight loss|diet pill|korean bbq|beef|chicken|salad|mushroom|makeup|skincare|nail art|hair style|workout|gym|fitness|bible verse|prayer|astrology|horoscope)/i;
 const MARKETING_REGEX = /(link in bio|tap to shop|shop now|save for later|#ad\b|#sponsored|swipe up|limited time offer|use code|promo code|giveaway alert|we're hiring)/i;
 
 // Blacklist: posts from these accounts are NEVER leads (they're competitors/providers)
-const BLACKLIST_AUTHORS = ['merchize', 'bestexpressvn', 'boxmeglobal', 'printify', 'shopify', 'printful', 'amzprep', 'shiphype', 'salesupply'];
+const BLACKLIST_AUTHORS = ['merchize', 'bestexpressvn', 'boxmeglobal', 'printify', 'shopify', 'printful', 'amzprep', 'shiphype', 'salesupply', 'viettelpost', 'viettel post', 'saigonbay', 'ak47express', 'burgerprints', 'onospod', 'cj dropshipping', 'omega fulfillment', 'yourfulfillment'];
 
 // Must-have: posts without ANY business keyword are skipped (saves AI credits)
-const MUST_HAVE_KEYWORDS = /(ship|vận chuyển|fulfillment|fulfill|pod|dropship|gửi hàng|tuyến|kho|warehouse|giá|báo giá|tìm đơn vị|logistics|3pl|fba|ecommerce|e-commerce|seller|bán hàng|order|đơn hàng|tracking|inventory|supplier|basecost|print on demand|freight|cargo|express|đóng gói|cần tìm|xưởng|prep|xin|nhờ|hỏi|tìm|cần|review|recommend|line us|ddp|forwarder|thông quan|customs|lcl|fcl|cbm|pallet|container|amazon|tiktok shop|etsy|shopify)/i;
+const MUST_HAVE_KEYWORDS = /(ship|vận chuyển|fulfillment|fulfill|pod|dropship|gửi hàng|tuyến|kho|warehouse|giá|báo giá|tìm đơn vị|logistics|3pl|fba|ecommerce|e-commerce|seller|bán hàng|order|đơn hàng|tracking|inventory|supplier|basecost|print on demand|freight|cargo|express|đóng gói|cần tìm|xưởng|prep|xin|nhờ|hỏi|tìm|cần|review|recommend|line us|ddp|forwarder|thông quan|customs|lcl|fcl|cbm|pallet|container|amazon|tiktok shop|etsy|shopify|mua hàng|hàng từ|gửi về|ship về|nhờ ai|ai biết|chỗ nào|ở đâu|mua ở|đặt hàng|order hàng|mua sỉ|nhập hàng|nguồn hàng|đồ từ|hàng việt|hàng trung)/i;
 
 // US-route boost: THG's primary market (VN/CN → US)
 const US_ROUTE_REGEX = /(mỹ|\bus\b|\busa\b|america|amazon|tiktok shop us|fba|đi mỹ|ship mỹ|kho mỹ|warehouse us|pennsylvania|texas|fulfill us|line us|美国|发美国)/i;
@@ -397,7 +397,9 @@ async function classifyPosts(posts) {
                     merged.isUSRoute = true;
                 }
                 // Even if AI says irrelevant, strong intent override
-                if (intent && intent.priority === 'HIGH' && merged.role !== 'provider') {
+                // BUT: block override if content matches PROVIDER_REGEX (prevents Viettel Post ads from scoring 100)
+                const isProviderContent = PROVIDER_REGEX.test(batch[j].content || '');
+                if (intent && intent.priority === 'HIGH' && merged.role !== 'provider' && !isProviderContent) {
                     if (!merged.isLead) {
                         merged.isLead = true;
                         merged.role = 'buyer';
