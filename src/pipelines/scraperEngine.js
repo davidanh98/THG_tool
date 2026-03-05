@@ -87,8 +87,8 @@ const SCRAPERS = {
 };
 
 async function runFullScan(options = {}) {
-    const platforms = options.platforms || ['facebook', 'tiktok'];
-    const maxPerPlatform = options.maxPosts || 20;
+    const platforms = options.platforms || config.ENABLED_PLATFORMS || ['facebook'];
+    const maxPerPlatform = options.maxPosts || config.MAX_POSTS_PER_SCAN || 30;
 
     console.log(`\n${'═'.repeat(55)}`);
     console.log(`  🔵 SociaVault API — All platforms`);
