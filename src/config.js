@@ -45,13 +45,14 @@ module.exports = {
     { name: 'Seller E-commerce VN', url: 'https://www.facebook.com/groups/494286704652111' },
 
     // === Việt Kiều / Du học sinh / Cộng đồng VN tại Mỹ ===
-    // Chỉ dùng numeric group ID — SociaVault không hỗ trợ vanity slug
-    { name: 'MMO Dropship VN', url: 'https://www.facebook.com/groups/mmodropshipelancervn' },
-    { name: 'Hội Seller Việt Nam', url: 'https://www.facebook.com/groups/925386677620484' },
-    { name: 'Kinh Doanh Online Toàn Cầu', url: 'https://www.facebook.com/groups/kinhdoanhonlinetoancau' },
-    { name: 'Xuất Nhập Khẩu Hàng Mỹ VN', url: 'https://www.facebook.com/groups/354715005518539' },
-    { name: 'Cộng Đồng Etsy Việt Nam', url: 'https://www.facebook.com/groups/etsyvietnam' },
-    { name: 'Ship Hàng Mỹ Về Việt Nam', url: 'https://www.facebook.com/groups/387671741418145' },
+    // MỎ VÀNG: mua hàng TQ/VN ship đi Mỹ — ĐÚNG target THG
+    // Chỉ dùng numeric ID — SociaVault không hỗ trợ vanity slug
+    { name: 'Du học sinh VN tại Mỹ', url: 'https://www.facebook.com/groups/888744671201380' },
+    { name: 'Cộng Đồng Người Việt tại Mỹ', url: 'https://www.facebook.com/groups/238061523539498' },
+    { name: 'Đặt Hàng TQ Giao US/EU', url: 'https://www.facebook.com/groups/1157826901501932' },
+    { name: 'Đặt Hàng TQ Ship ĐNA & US', url: 'https://www.facebook.com/groups/778601457112289' },
+    { name: 'Order Hàng TQ - Vận Chuyển XNK', url: 'https://www.facebook.com/groups/1698840756986636' },
+    { name: 'Người Việt NC USA', url: 'https://www.facebook.com/groups/696936451159951' },
   ],
 
   // ════════════════════════════════════════════════════
