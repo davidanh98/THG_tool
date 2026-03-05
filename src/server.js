@@ -312,6 +312,62 @@ app.post('/api/scan/groups', async (req, res) => {
     res.json({ success: true, message: 'Group scan disabled — using keyword search instead (saves Apify credit)' });
 });
 
+// ═══════════════════════════════════════════════════════
+// Infrastructure Agent API
+// ═══════════════════════════════════════════════════════
+app.get('/api/infra/stats', (req, res) => {
+    try {
+        const { infraAgent } = require('./agents/infraAgent');
+        res.json({ success: true, data: infraAgent.getProxyStats() });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/infra/health-check', async (req, res) => {
+    try {
+        const { infraAgent } = require('./agents/infraAgent');
+        const result = await infraAgent.runHealthCheck();
+        res.json({ success: true, data: result });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/infra/proxies', async (req, res) => {
+    try {
+        const { urls, provider, region } = req.body;
+        if (!urls || !Array.isArray(urls) || urls.length === 0) {
+            return res.status(400).json({ success: false, error: 'urls array required' });
+        }
+        const { infraAgent } = require('./agents/infraAgent');
+        await infraAgent.addProxies(urls, provider, region);
+        res.json({ success: true, message: `Added ${urls.length} proxies` });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/infra/proxies', (req, res) => {
+    try {
+        const { pool } = require('./proxy/proxyPool');
+        if (!pool.data) return res.json({ success: true, data: { active: [], blacklisted: [] } });
+        res.json({
+            success: true,
+            data: {
+                active: pool.data.active_proxies.map(p => ({
+                    id: p.id, provider: p.provider, region: p.region,
+                    status: p.status, latency: p.latency, fail_count: p.fail_count,
+                    last_used: p.last_used, last_checked: p.last_checked,
+                })),
+                blacklisted: pool.data.blacklisted_proxies.length,
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 app.get('/api/scan/next', (req, res) => {
     try {
         // We use cron-parser to determine the next run time from the schedule string

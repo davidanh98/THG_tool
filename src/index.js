@@ -325,6 +325,19 @@ async function main() {
     // Start dashboard server
     startServer();
 
+    // ═══ Initialize Infrastructure Agent ═══
+    try {
+        const { infraAgent } = require('./agents/infraAgent');
+        await infraAgent.init();
+        // Graceful shutdown
+        process.on('SIGINT', async () => {
+            await infraAgent.shutdown();
+            process.exit(0);
+        });
+    } catch (err) {
+        console.warn(`[Main] ⚠️ InfraAgent init skipped: ${err.message}`);
+    }
+
     // ═══ Scan Mutex — prevent overlapping scans ═══
     let scanRunning = false;
     let scanTag = '';
