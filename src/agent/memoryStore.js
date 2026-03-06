@@ -104,7 +104,7 @@ function saveFeedback(memoryId, feedback) {
             WHERE id = ?
         `);
         stmt.run(
-            feedback.type, // 'correct', 'wrong', 'upgrade', 'downgrade'
+            feedback.type,
             feedback.correct_role || null,
             feedback.correct_score || null,
             feedback.note || null,
@@ -113,6 +113,49 @@ function saveFeedback(memoryId, feedback) {
         return true;
     } catch (err) {
         console.warn('[MemoryStore] ⚠️ Feedback save failed:', err.message);
+        return false;
+    }
+}
+
+/**
+ * Save feedback by content text (use content_hash to find record in classification_memory)
+ * This is needed because leads.db and thg_leads.db have different auto-increment IDs.
+ */
+function saveFeedbackByContent(content, feedback) {
+    try {
+        const hash = contentHash(content);
+        const stmt = getDb().prepare(`
+            UPDATE classification_memory 
+            SET human_feedback = ?, correct_role = ?, correct_score = ?, 
+                feedback_note = ?, feedback_at = CURRENT_TIMESTAMP
+            WHERE content_hash = ?
+        `);
+        const result = stmt.run(
+            feedback.type,
+            feedback.correct_role || null,
+            feedback.correct_score || null,
+            feedback.note || null,
+            hash
+        );
+        if (result.changes === 0) {
+            // Record not in memory yet — insert it now with feedback
+            const insertStmt = getDb().prepare(`
+                INSERT INTO classification_memory (content, content_hash, platform, human_feedback, correct_role, correct_score, feedback_note, feedback_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            `);
+            insertStmt.run(
+                (content || '').substring(0, 1000),
+                hash,
+                feedback.platform || 'unknown',
+                feedback.type,
+                feedback.correct_role || null,
+                feedback.correct_score || null,
+                feedback.note || null
+            );
+        }
+        return true;
+    } catch (err) {
+        console.warn('[MemoryStore] ⚠️ saveFeedbackByContent failed:', err.message);
         return false;
     }
 }
@@ -180,6 +223,7 @@ try { getDb(); } catch (e) { console.warn('[MemoryStore] ⚠️ Init failed:', e
 module.exports = {
     saveClassification,
     saveFeedback,
+    saveFeedbackByContent,
     getFeedbackExamples,
     getMemoryStats,
     getRecentBuyers,

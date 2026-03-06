@@ -691,15 +691,28 @@ app.post('/api/leads/:id/feedback', (req, res) => {
             return res.status(400).json({ error: 'type must be: correct, wrong, upgrade, downgrade, text_feedback' });
         }
 
-        const success = memoryStore.saveFeedback(leadId, {
+        // Fetch the lead to get its content for hash-based lookup in classification_memory
+        // (leads.db and thg_leads.db have different auto-increment IDs, so we can't use ID directly)
+        const lead = database.getLeadById(leadId);
+        const feedbackPayload = {
             type,
             correct_role: correct_role || null,
             correct_score: correct_score || null,
             note: note || null,
-        });
+            platform: lead?.platform || 'unknown',
+        };
+
+        let success = false;
+        if (lead && lead.content) {
+            success = memoryStore.saveFeedbackByContent(lead.content, feedbackPayload);
+            if (success) logger.info('Agent', `Feedback trained for lead #${leadId} (${type}) — matched via content_hash`);
+        } else {
+            // Fallback: try by ID (may not match but logs error clearly)
+            success = memoryStore.saveFeedback(leadId, feedbackPayload);
+            logger.warn('Agent', `Lead #${leadId} not found — feedback saved by ID (may not match memory)`);
+        }
 
         if (success) {
-            logger.info('Agent', `Feedback saved for lead #${leadId}: ${type}`);
             res.json({ ok: true, message: `Feedback '${type}' saved for lead #${leadId}` });
         } else {
             res.status(500).json({ error: 'Failed to save feedback' });
