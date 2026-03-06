@@ -8,6 +8,9 @@ node_modules/
 data/*.db
 data/*.db-journal
 data/*.db-wal
+src/data_store/*.db
+src/data_store/*.db-wal
+src/data_store/*.db-journal
 
 # Exported data files
 data/leads_*.json
