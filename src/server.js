@@ -218,6 +218,30 @@ app.patch('/api/leads/:id', (req, res) => {
             suggested_response: suggested_response !== undefined ? suggested_response : null,
         });
         const updated = database.getLeadById.get(parseInt(req.params.id));
+
+        // Auto-feed classification_memory so Agent learns from user actions
+        if (updated && updated.content) {
+            if (status === 'ignored') {
+                // User said this is NOT a lead → teach agent it's wrong
+                memoryStore.saveFeedbackByContent(updated.content, {
+                    type: 'wrong',
+                    correct_role: 'irrelevant',
+                    note: 'User ignored — misclassified as lead',
+                    platform: updated.platform,
+                });
+                logger.info('Agent', `[Train] Lead #${updated.id} ignored → feedback: wrong`);
+            } else if (status === 'converted') {
+                // User confirmed this is a real buyer → reinforce correct classification
+                memoryStore.saveFeedbackByContent(updated.content, {
+                    type: 'correct',
+                    correct_role: 'buyer',
+                    note: 'User converted — confirmed genuine buyer',
+                    platform: updated.platform,
+                });
+                logger.info('Agent', `[Train] Lead #${updated.id} converted → feedback: correct`);
+            }
+        }
+
         res.json({ success: true, data: updated });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
