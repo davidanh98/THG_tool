@@ -79,7 +79,10 @@ const IG_ACCOUNTS_PER_SCAN = 3;
 function isProviderText(s) {
     const providerHints = [
         'bên em', 'bên mình', 'chúng tôi', 'nhận vận chuyển', 'nhận ship', 'nhận gửi',
-        'dịch vụ', 'cam kết', 'giá rẻ', 'hotline', 'liên hệ', 'lh', 'zalo', 'call', 'inbox em',
+        'dịch vụ', 'cam kết', 'giá rẻ', 'hotline', 'liên hệ', 'lh', 'zalo', 'call', 'inbox em', 'inb e',
+        'inb tư vấn', 'inbox tư vấn', 'inbox ...', 'ib tư', 'check ib',
+        'chuyên cung cấp', 'chuyên nhận', 'nhận order', 'gom order',
+        'liên hệ số', 'sđt', 'liên hệ hotline', 'chào hàng', 'bảng giá', 'giảm giá',
         'nhận sll', 'bao thuế', 'tuyến bay riêng'
     ];
     if (providerHints.some(x => s.includes(x))) return true;
@@ -652,6 +655,7 @@ module.exports = {
     scrapeFacebookGroups,
     scrapeInstagram,
     scrapeTikTok,
+    isProviderText,
     testConnection,
     svGet,
     getCreditsUsed: () => database.getCreditStats().today,

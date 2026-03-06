@@ -36,12 +36,16 @@ ${config.THG_CONTEXT}`;
 3. CHỈ chọn "is_potential": true khi TÁC GIẢ là người ĐANG TÌM KIẾM giải pháp hoặc ĐANG HỎI/CẦN GIÚP ĐỖ.
 4. ĐẶC THÙ COMMENT NGẮN: Nếu nội dung là comment ngắn dưới post logistics/fulfillment như "xin giá", "check ib", "đi line us bao lâu", "có kho PA không", "rate?", "ib em", "giá bao nhiêu?" => "is_potential": true.
 
-🛑 CÁCH PHÂN BIỆT PROVIDER vs BUYER (CỰC KỲ QUAN TRỌNG):
-- PROVIDER: Người ĐĂNG BÀI/QUẢNG CÁO dịch vụ. Dấu hiệu: "xin phép admin", "anh/chị seller tìm...", "tham khảo ngay", "nhận từ 1 đơn", "giá tốt", "chỉ từ X đ", "cam kết", "liên hệ", "inbox", bảng giá, logo công ty, "bên em chuyên", "we offer", "ready to scale", nêu ĐỊA CHỈ KHO, giới thiệu DỊCH VỤ CỦA HỌ.
-- BUYER: Người ĐANG HỎI/TÌM dịch vụ. Dấu hiệu: "cần tìm", "ai biết", "có ai", "cho hỏi", "giúp mình", "mình đang muốn", đặt CÂU HỎI, yêu cầu GIỚI THIỆU/RECOMMEND.
-- "Xin phép admin + giới thiệu dịch vụ" = LUÔN LUÔN LÀ PROVIDER. Không bao giờ là buyer.
-- "SELLER NÊN BIẾT" + bảng giá = PROVIDER quảng cáo. Không phải buyer.
-- Giới thiệu fulfillment center/warehouse mới mở = PROVIDER. Không phải buyer.
+🛑 CÁCH PHÂN BIỆT PROVIDER vs BUYER (CỰC KỲ QUAN TRỌNG - BẮT BUỘC ĐỌC KỸ):
+- PROVIDER (NGƯỜI BÁN DỊCH VỤ - RÁC MÀ BẠN PHẢI LOẠI BỎ): 
+  Dấu hiệu nhận biết: Bài viết chứa các từ như "inb tư vấn", "inbox em", "inbox ...", "liên hệ số điện thoại", "liên hệ sđt", "hotline", "zalo", "nhận vận chuyển", "bên em chuyên/chúng tôi chuyên", "giá rẻ/bảng giá", "ưu đãi", "xin phép admin", "anh/chị seller tìm...". 
+  -> BẤT KỲ bài nào mang góc nhìn CUNG CẤP dịch vụ, CHÀO HÀNG hoặc ĐỂ LẠI THÔNG TIN LIÊN HỆ để SALE, bạn PHẢI ĐÁNH TRƯỢT NGAY LẬP TỨC ("is_potential": false, "score": 0, "role": "provider"). Kể cả khi bài đó có keyword "order" hay "thủy/bộ".
+
+- BUYER (NGƯỜI CẦN DỊCH VỤ - LEAD CHUẨN): 
+  Người ĐỨNG TRÊN GÓC NHÌN ĐANG PHÁT SINH NHU CẦU, CẦN TÌM ĐỐI TÁC. 
+  Dấu hiệu: "cần tìm bên/người", "ai biết", "giới thiệu giúp", "cho hỏi", "giúp mình", "mình đang muốn", "cần đi hàng", "tìm đối tác". Đặt câu hỏi tìm kiếm dịch vụ chứ không phải chào hàng.
+- NẾU TÁC GIẢ VIẾT: "Bên em nhận order..." -> 100% LÀ PROVIDER.
+- NẾU TÁC GIẢ VIẾT: "Mình cần tìm bên order..." -> 100% LÀ BUYER.
 
 🎯 PHÂN LUỒNG 2 DỊCH VỤ THG:
 - "THG Express": DDP/line US/air/sea/LCL/FCL/kg/cbm/customs/thông quan/ISF/HS code/ship VN-CN→Mỹ → Express

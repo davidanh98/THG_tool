@@ -113,12 +113,16 @@ async function runPipeline(options = {}) {
             return stats;
         }
 
-        // Step 1.5: Dedup — Remove posts already in database BEFORE wasting AI credits
-        console.log('\n[Pipeline] 🔍 Step 1.5: Deduplicating against existing database...');
+        // Step 1.5: Dedup & Pre-filter — Remove posts already in database or clear spam/providers BEFORE wasting AI credits
+        console.log('\n[Pipeline] 🔍 Step 1.5: Filtering spam/providers and deduplicating...');
         const existingUrls = database.getExistingPostUrls();
         const existingHashes = database.getExistingContentHashes();
+        const sv = require('./pipelines/sociaVault');
 
         const newPosts = allPosts.filter(post => {
+            // Pre-filter: Explicitly drop any post/comment offering services or leaving contact info
+            if (sv.isProviderText(post.content || '')) return false;
+
             // Check by URL first (most reliable)
             if (post.post_url && existingUrls.has(post.post_url)) return false;
             // Fallback: check by content fingerprint (first 100 chars)
