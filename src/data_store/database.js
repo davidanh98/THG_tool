@@ -189,13 +189,13 @@ const updateLeadStatus = db.prepare(`
 `);
 
 const getStats = () => {
-  const total = db.prepare('SELECT COUNT(*) as count FROM leads').get();
-  const byStatus = db.prepare('SELECT status, COUNT(*) as count FROM leads GROUP BY status').all();
-  const byPlatform = db.prepare('SELECT platform, COUNT(*) as count FROM leads GROUP BY platform').all();
-  const byCategory = db.prepare('SELECT category, COUNT(*) as count FROM leads GROUP BY category').all();
-  const avgScore = db.prepare('SELECT AVG(score) as avg_score FROM leads WHERE score > 0').get();
-  const today = db.prepare("SELECT COUNT(*) as count FROM leads WHERE date(created_at) = date('now')").get();
-  const highValue = db.prepare('SELECT COUNT(*) as count FROM leads WHERE score >= 80').get();
+  const total = db.prepare("SELECT COUNT(*) as count FROM leads WHERE status != 'ignored'").get();
+  const byStatus = db.prepare("SELECT status, COUNT(*) as count FROM leads WHERE status != 'ignored' GROUP BY status").all();
+  const byPlatform = db.prepare("SELECT platform, COUNT(*) as count FROM leads WHERE status != 'ignored' GROUP BY platform").all();
+  const byCategory = db.prepare("SELECT category, COUNT(*) as count FROM leads WHERE status != 'ignored' GROUP BY category").all();
+  const avgScore = db.prepare("SELECT AVG(score) as avg_score FROM leads WHERE score > 0 AND status != 'ignored'").get();
+  const today = db.prepare("SELECT COUNT(*) as count FROM leads WHERE date(created_at) = date('now') AND status != 'ignored'").get();
+  const highValue = db.prepare("SELECT COUNT(*) as count FROM leads WHERE score >= 80 AND status != 'ignored'").get();
 
   return {
     total: total.count,
