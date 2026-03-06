@@ -55,6 +55,11 @@
           <span class="nav-text">Credits</span>
           <span class="nav-badge" id="tabCreditsCount">0</span>
         </button>
+        <button class="nav-item" id="tabGroups" onclick="switchTab('groups')">
+          <span class="nav-icon" style="color:#0ea5e9;">👥</span>
+          <span class="nav-text" style="color:#0ea5e9;">Group Discovery</span>
+          <span class="nav-badge" id="tabGroupsCount" style="background:rgba(14,165,233,0.1);color:#0ea5e9;">0</span>
+        </button>
         <button class="nav-item" id="tabIgnored" onclick="switchTab('ignored')">
           <span class="nav-icon" style="color:#ef4444;">⛔</span>
           <span class="nav-text" style="color:#ef4444;">Agent Training</span>
@@ -305,6 +310,41 @@
             </div>
           </div>
         </div>
+        <!-- ========== GROUPS TAB ========== -->
+        <div id="groupsTab" style="display:none;">
+          <div class="filter-bar">
+            <label>👥 Facebook Group Discovery</label>
+            <select class="filter-select" id="filterGroupCategory" onchange="loadGroups()">
+              <option value="">All Categories</option>
+              <option value="logistics">Logistics/Shipping</option>
+              <option value="tq-goods">TQ Goods/Order</option>
+              <option value="viet-kieu">Việt Kiều/Cộng Đồng</option>
+              <option value="ecommerce">E-commerce/Fulfillment</option>
+              <option value="marketplace">Marketplace/Chợ</option>
+            </select>
+            <select class="filter-select" id="filterGroupStatus" onchange="loadGroups()">
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="">All Status</option>
+            </select>
+            <button class="btn btn-primary" onclick="showAddGroupModal()" style="font-size:0.85rem;padding:8px 14px;">➕
+              Thêm Nhóm</button>
+            <div class="filter-spacer"></div>
+            <button class="btn" onclick="refreshGroupsData()" style="font-size:0.85rem;padding:8px 14px;">🔄
+              Refresh</button>
+          </div>
+
+          <div id="groupsStatsBar" style="display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap;">
+            <!-- Stats populated by groups.js -->
+          </div>
+
+          <div id="groupsGrid">
+            <div class="empty-state">
+              <div class="spinner" style="margin: 0 auto;"></div>
+              <h3>Loading Groups...</h3>
+            </div>
+          </div>
+        </div>
 
       </main>
     </div>
@@ -313,6 +353,50 @@
   <!-- ============================== -->
   <!--  MODALS                        -->
   <!-- ============================== -->
+  <div class="modal-overlay" id="addGroupModal" style="display:none;" onclick="hideAddGroupModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width:500px;">
+      <h3>➕ Thêm Facebook Group</h3>
+      <p style="opacity:0.7;margin-bottom:16px;font-size:0.9rem;">Thêm nhóm tiềm năng vào hệ thống để AI tự động quét
+        Leads.</p>
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block;margin-bottom:6px;font-size:0.85rem;color:#94a3b8;">Tên Nhóm *</label>
+        <input type="text" id="newGroupName" placeholder="VD: Cộng Đồng Amazon Seller VN"
+          style="width:100%;padding:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:white;border-radius:8px;">
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block;margin-bottom:6px;font-size:0.85rem;color:#94a3b8;">Group URL *</label>
+        <input type="text" id="newGroupUrl" placeholder="https://www.facebook.com/groups/..."
+          style="width:100%;padding:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:white;border-radius:8px;">
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block;margin-bottom:6px;font-size:0.85rem;color:#94a3b8;">Danh Mục</label>
+        <select id="newGroupCategory"
+          style="width:100%;padding:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:white;border-radius:8px;">
+          <option value="logistics">Logistics/Shipping (Vận chuyển US)</option>
+          <option value="ecommerce">E-commerce/Fulfillment (Amazon/Shopify)</option>
+          <option value="tq-goods">TQ Goods/Order (Nhập hàng Trung)</option>
+          <option value="viet-kieu">Việt Kiều/Cộng Đồng</option>
+          <option value="marketplace">Marketplace/Chợ Mua Bán</option>
+          <option value="unknown">Khác</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block;margin-bottom:6px;font-size:0.85rem;color:#94a3b8;">Ghi chú (Tùy chọn)</label>
+        <input type="text" id="newGroupNotes" placeholder="VD: Group chất lượng cao, nhiều tương tác"
+          style="width:100%;padding:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:white;border-radius:8px;">
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:20px;justify-content:flex-end;">
+        <button class="action-btn" onclick="hideAddGroupModal()">Hủy</button>
+        <button class="btn btn-primary" id="saveGroupBtn" onclick="submitNewGroup()">💾 Lưu Nhóm</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="testModal" style="display:none;" onclick="hideTestModal(event)">
     <div class="modal-content" onclick="event.stopPropagation()">
       <h3>🧪 Test Message</h3>
@@ -340,6 +424,7 @@
   <script src="js/analytics.js"></script>
   <script src="js/credits.js"></script>
   <script src="js/api.js"></script>
+  <script src="js/groups.js"></script>
   <script src="js/app.js"></script>
 
 </body>

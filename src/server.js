@@ -419,6 +419,67 @@ app.get('/api/scan/next', (req, res) => {
 });
 
 // ╔═══════════════════════════════════════════════════════════╗
+// ║  FB GROUP DISCOVERY API                                   ║
+// ╚═══════════════════════════════════════════════════════════╝
+
+app.get('/api/groups', (req, res) => {
+    try {
+        const groupDb = require('./agent/groupDiscovery');
+        const filters = {
+            category: req.query.category || null,
+            status: req.query.status || null,
+            limit: req.query.limit ? parseInt(req.query.limit, 10) : 200
+        };
+        const groups = groupDb.getAllGroups(filters);
+        res.json({ success: true, data: groups });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/groups/stats', (req, res) => {
+    try {
+        const groupDb = require('./agent/groupDiscovery');
+        const stats = groupDb.getStats();
+        res.json({ success: true, data: stats });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/groups', (req, res) => {
+    try {
+        const { name, url, category, notes } = req.body;
+        if (!name || !url) return res.status(400).json({ success: false, error: 'Name and URL are required' });
+
+        const groupDb = require('./agent/groupDiscovery');
+        groupDb.upsertGroup({
+            name,
+            url,
+            category: category || 'unknown',
+            relevance_score: 50, // Default for new
+            notes: notes || '',
+        });
+        res.json({ success: true, message: 'Group added successfully' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.patch('/api/groups/status', (req, res) => {
+    try {
+        const { url, status } = req.body;
+        if (!url || !status) return res.status(400).json({ success: false, error: 'URL and Status are required' });
+
+        const groupDb = require('./agent/groupDiscovery');
+        groupDb.setStatus(url, status);
+        res.json({ success: true, message: 'Group status updated' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ╔═══════════════════════════════════════════════════════════╗
 // ║  DATA FILES API — Daily JSON browser                      ║
 // ╚═══════════════════════════════════════════════════════════╝
 

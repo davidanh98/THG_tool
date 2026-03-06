@@ -13,31 +13,67 @@ const AppState = {
 };
 
 // --- Tab Switching ---
-function switchTab(tab) {
-    AppState.currentTab = tab;
-    document.getElementById('leadsTab').style.display = tab === 'leads' ? '' : 'none';
-    document.getElementById('ignoredTab').style.display = tab === 'ignored' ? '' : 'none';
-    document.getElementById('inboxTab').style.display = tab === 'inbox' ? '' : 'none';
-    document.getElementById('dataTab').style.display = tab === 'data' ? '' : 'none';
-    document.getElementById('analyticsTab').style.display = tab === 'analytics' ? '' : 'none';
-    document.getElementById('creditsTab').style.display = tab === 'credits' ? '' : 'none';
+function switchTab(tabId) {
+    // 1. Update Navigation visual state
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.getElementById(
+        tabId === 'leads' ? 'tabLeads' :
+            tabId === 'inbox' ? 'tabInbox' :
+                tabId === 'data' ? 'tabData' :
+                    tabId === 'analytics' ? 'tabAnalytics' :
+                        tabId === 'credits' ? 'tabCredits' :
+                            tabId === 'groups' ? 'tabGroups' :
+                                'tabIgnored'
+    ).classList.add('active');
 
-    document.getElementById('tabLeads').classList.toggle('active', tab === 'leads');
-    document.getElementById('tabIgnored').classList.toggle('active', tab === 'ignored');
-    document.getElementById('tabInbox').classList.toggle('active', tab === 'inbox');
-    document.getElementById('tabData').classList.toggle('active', tab === 'data');
-    document.getElementById('tabAnalytics').classList.toggle('active', tab === 'analytics');
-    document.getElementById('tabCredits').classList.toggle('active', tab === 'credits');
+    // 2. Hide all main content areas
+    document.getElementById('leadsTab').style.display = 'none';
+    document.getElementById('inboxTab').style.display = 'none';
+    document.getElementById('dataTab').style.display = 'none';
+    document.getElementById('analyticsTab').style.display = 'none';
+    document.getElementById('creditsTab').style.display = 'none';
+    document.getElementById('ignoredTab').style.display = 'none';
 
-    // Update page title
-    const titles = { leads: 'Leads Database', ignored: 'Agent Training (Ignored Leads)', inbox: 'AI Copilot Inbox', data: 'Data Archives', analytics: 'Analytics Dashboard', credits: 'Credit Usage' };
-    document.getElementById('pageTitleText').textContent = titles[tab] || 'Dashboard';
+    const groupsTab = document.getElementById('groupsTab');
+    if (groupsTab) groupsTab.style.display = 'none';
 
-    if (tab === 'inbox') loadConversations();
-    if (tab === 'data') loadDataFiles();
-    if (tab === 'analytics') loadAnalytics();
-    if (tab === 'credits') loadCredits();
-    if (tab === 'ignored') loadIgnoredLeads();
+    // Disable Top Stats bar for non-lead tabs
+    document.getElementById('statsBar').style.pointerEvents = (tabId === 'leads' || tabId === 'inbox') ? 'auto' : 'none';
+    document.getElementById('statsBar').style.opacity = (tabId === 'leads' || tabId === 'inbox') ? '1' : '0.5';
+
+    // 3. Show requested tab & update title
+    if (tabId === 'leads') {
+        document.getElementById('leadsTab').style.display = 'block';
+        document.getElementById('pageTitleText').textContent = 'Overview Dashboard';
+        loadLeads();
+    } else if (tabId === 'inbox') {
+        document.getElementById('inboxTab').style.display = 'block';
+        document.getElementById('pageTitleText').textContent = 'AI Copilot Inbox';
+        loadConversations();
+    } else if (tabId === 'data') {
+        document.getElementById('dataTab').style.display = 'block';
+        document.getElementById('pageTitleText').textContent = 'Data & Archives';
+        loadDataFiles();
+    } else if (tabId === 'analytics') {
+        document.getElementById('analyticsTab').style.display = 'block';
+        document.getElementById('pageTitleText').textContent = 'Analytics Center';
+        loadAnalytics();
+    } else if (tabId === 'credits') {
+        document.getElementById('creditsTab').style.display = 'block';
+        document.getElementById('pageTitleText').textContent = 'SociaVault Credits';
+        loadCredits();
+    } else if (tabId === 'ignored') {
+        document.getElementById('ignoredTab').style.display = 'block';
+        document.getElementById('pageTitleText').textContent = 'Agent Training Data';
+        loadIgnoredLeads();
+    } else if (tabId === 'groups') {
+        if (groupsTab) groupsTab.style.display = 'block';
+        document.getElementById('pageTitleText').textContent = 'Group Discovery Database';
+        // Delay load slightly so the page doesn't stutter on switch
+        setTimeout(() => {
+            if (typeof loadGroups === 'function') loadGroups();
+        }, 50);
+    }
 }
 
 // --- Dark/Light Mode ---
