@@ -693,7 +693,7 @@ app.post('/api/leads/:id/feedback', (req, res) => {
 
         // Fetch the lead to get its content for hash-based lookup in classification_memory
         // (leads.db and thg_leads.db have different auto-increment IDs, so we can't use ID directly)
-        const lead = database.getLeadById(leadId);
+        const lead = database.getLeadById.get(leadId);
         const feedbackPayload = {
             type,
             correct_role: correct_role || null,
