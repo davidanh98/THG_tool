@@ -762,4 +762,30 @@ app.get('/api/agent/stats', (req, res) => {
     }
 });
 
+// GET /api/agent/feedback-history — Training history for dashboard
+app.get('/api/agent/feedback-history', (req, res) => {
+    try {
+        const history = memoryStore.getFeedbackHistory(30);
+        const typeLabel = {
+            correct: '✅ Đúng',
+            wrong: '❌ Sai',
+            upgrade: '⬆️ Nâng score',
+            downgrade: '⬇️ Giảm score',
+            text_feedback: '💬 Ghi chú',
+        };
+        const formatted = history.map(r => ({
+            id: r.id,
+            preview: r.preview,
+            platform: r.platform,
+            type: typeLabel[r.human_feedback] || r.human_feedback,
+            correct_role: r.correct_role,
+            note: r.feedback_note,
+            trained_at: r.feedback_at,
+        }));
+        res.json({ ok: true, data: formatted, count: formatted.length });
+    } catch (err) {
+        res.json({ ok: false, error: err.message, data: [] });
+    }
+});
+
 module.exports = { app, startServer };

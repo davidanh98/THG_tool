@@ -217,6 +217,25 @@ function getRecentBuyers(limit = 5) {
     }
 }
 
+/**
+ * Get recent feedback history for dashboard display
+ */
+function getFeedbackHistory(limit = 20) {
+    try {
+        return getDb().prepare(`
+            SELECT id, SUBSTR(content, 1, 120) as preview, platform,
+                   human_feedback, correct_role, feedback_note, feedback_at,
+                   score, role
+            FROM classification_memory
+            WHERE human_feedback IS NOT NULL
+            ORDER BY feedback_at DESC
+            LIMIT ?
+        `).all(limit);
+    } catch (err) {
+        return [];
+    }
+}
+
 // Initialize on load
 try { getDb(); } catch (e) { console.warn('[MemoryStore] ⚠️ Init failed:', e.message); }
 
@@ -225,6 +244,7 @@ module.exports = {
     saveFeedback,
     saveFeedbackByContent,
     getFeedbackExamples,
+    getFeedbackHistory,
     getMemoryStats,
     getRecentBuyers,
     contentHash,

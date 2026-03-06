@@ -197,9 +197,9 @@ function renderLeadCard(lead) {
             <span class="feedback-status" id="feedback-status-${lead.id}"></span>
           </div>
           <div class="feedback-quick-tags">
-            <button class="feedback-tag" onclick="insertTag(${lead.id}, '✅ Đúng rồi')">✅ Đúng</button>
-            <button class="feedback-tag" onclick="insertTag(${lead.id}, '❌ Sai — đây là buyer')">❌ Sai→Buyer</button>
-            <button class="feedback-tag" onclick="insertTag(${lead.id}, '❌ Sai — đây là provider/đối thủ')">❌ Sai→Provider</button>
+            <button class="feedback-tag" onclick="quickFeedback(${lead.id}, 'correct', null, '✅ Đúng — buyer xác nhận')">✅ Đúng</button>
+            <button class="feedback-tag" onclick="quickFeedback(${lead.id}, 'wrong', 'buyer', '❌ Sai — đây là buyer')">❌ Sai→Buyer</button>
+            <button class="feedback-tag" onclick="quickFeedback(${lead.id}, 'wrong', 'provider', '❌ Sai — đây là provider/đối thủ')">❌ Sai→Provider</button>
             <button class="feedback-tag" onclick="insertTag(${lead.id}, '⬆️ Score nên cao hơn, khoảng ')">⬆️ Nâng</button>
             <button class="feedback-tag" onclick="insertTag(${lead.id}, '⬇️ Score nên thấp hơn, khoảng ')">⬇️ Giảm</button>
           </div>
@@ -238,8 +238,30 @@ function insertTag(leadId, text) {
   if (!textarea) return;
   textarea.value = text;
   textarea.focus();
-  // Place cursor at end
   textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+}
+
+// Quick feedback button — gửi ngay không cần nhập textarea
+async function quickFeedback(leadId, type, correctRole, note) {
+  const statusEl = document.getElementById(`feedback-status-${leadId}`);
+  if (statusEl) { statusEl.textContent = '⏳ Đang lưu...'; statusEl.style.color = '#f59e0b'; }
+  try {
+    const resp = await fetch(`/api/leads/${leadId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, correct_role: correctRole, note }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      if (statusEl) { statusEl.textContent = '✅ Agent đã học!'; statusEl.style.color = '#10b981'; }
+      setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+      loadAgentStats();
+    } else {
+      if (statusEl) { statusEl.textContent = '❌ ' + (data.error || 'Lỗi'); statusEl.style.color = '#ef4444'; }
+    }
+  } catch (err) {
+    if (statusEl) { statusEl.textContent = '❌ Network error'; statusEl.style.color = '#ef4444'; }
+  }
 }
 
 async function sendFeedback(leadId) {
@@ -292,11 +314,27 @@ async function loadAgentStats() {
   if (!el) return;
 
   try {
-    const resp = await fetch('/api/agent/stats');
-    const data = await resp.json();
-    const a = data.agent || {};
+    const [statsResp, histResp] = await Promise.all([
+      fetch('/api/agent/stats'),
+      fetch('/api/agent/feedback-history'),
+    ]);
+    const statsData = await statsResp.json();
+    const histData = await histResp.json();
+
+    const a = statsData.agent || {};
     const kb = a.knowledgeBase || {};
     const mem = a.memory || {};
+    const history = histData.data || [];
+
+    const histHTML = history.length === 0
+      ? `<div style="color:#64748b;font-size:12px;padding:8px 0;">Chưa có training nào. Bấm ✅/❌ trên leads để dạy Agent.</div>`
+      : history.map(r => `
+        <div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:11px;">
+          <span style="font-weight:600;color:#a78bfa;">${r.type}</span>
+          ${r.correct_role ? `<span style="color:#64748b;margin-left:4px;">→${r.correct_role}</span>` : ''}
+          <div style="color:#94a3b8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${(r.note || r.preview || '').substring(0, 80)}</div>
+          <div style="color:#475569;font-size:10px;">${r.trained_at ? new Date(r.trained_at).toLocaleString('vi-VN') : ''}</div>
+        </div>`).join('');
 
     el.innerHTML = `
       <div class="agent-stats-grid">
@@ -317,6 +355,11 @@ async function loadAgentStats() {
           <span class="agent-stat-label">🎯 Buyers</span>
         </div>
       </div>
+      ${history.length > 0 ? `
+      <div style="margin-top:12px;">
+        <div style="font-size:11px;font-weight:600;color:#8b5cf6;margin-bottom:6px;">🕓 Lịch sử training (${history.length})</div>
+        <div style="max-height:200px;overflow-y:auto;">${histHTML}</div>
+      </div>` : `<div style="margin-top:8px;font-size:11px;color:#64748b;">Chưa có training. Bấm ✅/❌ trên leads để dạy Agent.</div>`}
     `;
   } catch (err) {
     el.innerHTML = '<span style="color:#94a3b8;">Agent stats unavailable</span>';
