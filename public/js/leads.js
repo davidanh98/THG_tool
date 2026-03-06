@@ -198,7 +198,6 @@ function renderLeadCard(lead) {
           </div>
           <div class="feedback-quick-tags">
             <button class="feedback-tag" onclick="quickFeedback(${lead.id}, 'correct', null, '✅ Đúng — buyer xác nhận')">✅ Đúng</button>
-            <button class="feedback-tag" onclick="quickFeedback(${lead.id}, 'wrong', 'buyer', '❌ Sai — đây là buyer')">❌ Sai→Buyer</button>
             <button class="feedback-tag" onclick="quickFeedback(${lead.id}, 'wrong', 'provider', '❌ Sai — đây là provider/đối thủ')">❌ Sai→Provider</button>
             <button class="feedback-tag" onclick="insertTag(${lead.id}, '⬆️ Score nên cao hơn, khoảng ')">⬆️ Nâng</button>
             <button class="feedback-tag" onclick="insertTag(${lead.id}, '⬇️ Score nên thấp hơn, khoảng ')">⬇️ Giảm</button>
