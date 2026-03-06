@@ -45,6 +45,14 @@ db.exec(`
     error TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS sv_credit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    endpoint TEXT,
+    platform TEXT,
+    source TEXT,
+    timestamp TEXT DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sender_id TEXT,
@@ -302,6 +310,57 @@ const getExistingContentHashes = () => {
   return new Set(rows.map(r => r.hash));
 };
 
+// --- SociaVault Credits ---
+const logCreditUsage = (endpoint, platform, source) => {
+  return db.prepare(`
+    INSERT INTO sv_credit_logs (endpoint, platform, source, timestamp)
+    VALUES (?, ?, ?, datetime('now'))
+  `).run(endpoint, platform, source);
+};
+
+const getCreditStats = () => {
+  const today = db.prepare(`
+    SELECT COUNT(*) as count FROM sv_credit_logs
+    WHERE date(timestamp) = date('now')
+  `).get().count;
+
+  const total = db.prepare(`SELECT COUNT(*) as count FROM sv_credit_logs`).get().count;
+
+  const thisMonth = db.prepare(`
+    SELECT COUNT(*) as count FROM sv_credit_logs
+    WHERE strftime('%Y-%m', timestamp) = strftime('%Y-%m', 'now')
+  `).get().count;
+
+  const firstCall = db.prepare(`SELECT timestamp FROM sv_credit_logs ORDER BY id ASC LIMIT 1`).get()?.timestamp || null;
+  const lastCall = db.prepare(`SELECT timestamp FROM sv_credit_logs ORDER BY id DESC LIMIT 1`).get()?.timestamp || null;
+
+  const platformsRows = db.prepare(`
+    SELECT platform, COUNT(*) as count FROM sv_credit_logs
+    GROUP BY platform ORDER BY count DESC
+  `).all();
+
+  const by_platform = {};
+  for (const r of platformsRows) {
+    by_platform[r.platform] = r.count;
+  }
+
+  return {
+    today,
+    total_logged: total,
+    this_month: thisMonth,
+    first_call: firstCall,
+    last_call: lastCall,
+    by_platform
+  };
+};
+
+const getCreditLog = () => {
+  return db.prepare(`
+    SELECT * FROM sv_credit_logs 
+    ORDER BY id DESC LIMIT 500
+  `).all();
+};
+
 module.exports = {
   db,
   insertLead,
@@ -319,6 +378,10 @@ module.exports = {
   getConversationById,
   updateConversation,
   getConversationStats,
+  // Credits
+  logCreditUsage,
+  getCreditStats,
+  getCreditLog,
   // Deduplication
   getExistingPostUrls,
   getExistingContentHashes,

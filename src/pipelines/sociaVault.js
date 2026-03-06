@@ -18,47 +18,34 @@ const SV_KEY = process.env.SOCIAVAULT_API_KEY || config.SOCIAVAULT_API_KEY || ''
 const headers = () => ({ 'X-API-Key': SV_KEY });
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
+const database = require('../data_store/database');
+
 // Credit tracking (monitoring + logging for dashboard)
-let creditsUsedToday = 0;
-const creditLog = [];  // {timestamp, endpoint, platform, source}
-const MAX_LOG_SIZE = 500;
 const DAILY_LIMIT = config.SV_DAILY_LIMIT || 370;
 
 function canSpend() {
-    if (creditsUsedToday >= DAILY_LIMIT) {
-        console.warn(`[SV] 🛑 BUDGET EXHAUSTED: ${creditsUsedToday}/${DAILY_LIMIT} credits. Stopping until midnight.`);
+    const stats = database.getCreditStats();
+    if (stats.today >= DAILY_LIMIT) {
+        console.warn(`[SV] 🛑 BUDGET EXHAUSTED: ${stats.today}/${DAILY_LIMIT} credits. Stopping until midnight.`);
         return false;
     }
     return true;
 }
 function getBudgetInfo() {
+    const stats = database.getCreditStats();
     return {
-        used: creditsUsedToday,
+        used: stats.today,
         limit: DAILY_LIMIT,
-        remaining: Math.max(0, DAILY_LIMIT - creditsUsedToday),
-        pct: Math.round((creditsUsedToday / DAILY_LIMIT) * 100),
+        remaining: Math.max(0, DAILY_LIMIT - stats.today),
+        pct: Math.round((stats.today / DAILY_LIMIT) * 100),
     };
 }
 function logCredit(endpoint, platform, source) {
-    creditsUsedToday++;
-    creditLog.push({
-        id: creditsUsedToday,
-        timestamp: new Date().toISOString(),
-        endpoint,
-        platform: platform || 'unknown',
-        source: source || '',
-    });
-    if (creditLog.length > MAX_LOG_SIZE) creditLog.shift();
+    database.logCreditUsage(endpoint, platform || 'unknown', source || '');
     const budget = getBudgetInfo();
     console.log(`[SV] 💳 Credits: ${budget.used}/${budget.limit} (${budget.pct}%) — ${endpoint}`);
 }
 function spend() { logCredit('unknown', 'unknown', ''); }
-setInterval(() => {
-    if (creditsUsedToday > 0) {
-        console.log(`[SV] 🔄 Daily reset — used ${creditsUsedToday}/${DAILY_LIMIT} credits today`);
-    }
-    creditsUsedToday = 0;
-}, 24 * 60 * 60 * 1000);
 
 async function svGet(endpoint, params = {}) {
     if (!SV_KEY) throw new Error('SOCIAVAULT_API_KEY not set');
@@ -667,23 +654,8 @@ module.exports = {
     scrapeTikTok,
     testConnection,
     svGet,
-    getCreditsUsed: () => creditsUsedToday,
+    getCreditsUsed: () => database.getCreditStats().today,
     getBudgetInfo,
-    getCreditLog: () => [...creditLog],
-    getCreditStats: () => {
-        const byPlatform = {};
-        const byEndpoint = {};
-        for (const entry of creditLog) {
-            byPlatform[entry.platform] = (byPlatform[entry.platform] || 0) + 1;
-            byEndpoint[entry.endpoint] = (byEndpoint[entry.endpoint] || 0) + 1;
-        }
-        return {
-            today: creditsUsedToday,
-            total_logged: creditLog.length,
-            by_platform: byPlatform,
-            by_endpoint: byEndpoint,
-            first_call: creditLog[0]?.timestamp || null,
-            last_call: creditLog[creditLog.length - 1]?.timestamp || null,
-        };
-    },
+    getCreditLog: database.getCreditLog,
+    getCreditStats: database.getCreditStats,
 };
