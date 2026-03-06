@@ -40,17 +40,17 @@ module.exports = {
     { name: 'Đặt Hàng TQ Giao US/EU', url: 'https://www.facebook.com/groups/1157826901501932' },
     { name: 'Đặt Hàng TQ Ship ĐNA & US', url: 'https://www.facebook.com/groups/778601457112289' },
     { name: 'Order Hàng TQ - Vận Chuyển XNK', url: 'https://www.facebook.com/groups/1698840756986636' },
-    { name: 'Tìm Supplier Fulfill POD/Drop', url: 'https://www.facebook.com/groups/timsupplierfulfillpoddropvnusuk' },
+    { name: 'Tìm Supplier Fulfill POD/Drop', url: 'https://www.facebook.com/groups/1312868109620530' },
     { name: 'Dropship & Fulfill VN', url: 'https://www.facebook.com/groups/646444174604027' },
 
     // === TIER 2: Việt Kiều / Du học sinh tại Mỹ — MỎ VÀNG ===
     { name: 'Du học sinh VN tại Mỹ', url: 'https://www.facebook.com/groups/888744671201380' },
     { name: 'Cộng Đồng Người Việt tại Mỹ', url: 'https://www.facebook.com/groups/238061523539498' },
     { name: 'Người Việt NC USA', url: 'https://www.facebook.com/groups/696936451159951' },
-    { name: 'Người Việt tại California', url: 'https://www.facebook.com/groups/VietnameseinCalifornia' },
+    { name: 'Người Việt tại California', url: 'https://www.facebook.com/groups/746114972440757' },
     { name: 'Việt Kiều Khắp Nơi', url: 'https://www.facebook.com/groups/329985287029' },
-    { name: 'Người Việt tại Texas', url: 'https://www.facebook.com/groups/vietnameseintexas' },
-    { name: 'Vietnamese in America', url: 'https://www.facebook.com/groups/vietnameseinamerica' },
+    { name: 'Người Việt tại Texas', url: 'https://www.facebook.com/groups/1462647001235516' },
+    { name: 'Vietnamese in America', url: 'https://www.facebook.com/groups/912111470098935' },
 
     // === TIER 3: E-commerce VN seller → US market ===
     { name: 'Cộng đồng Amazon VN', url: 'https://www.facebook.com/groups/congdongamazonvn' },
@@ -59,11 +59,9 @@ module.exports = {
     { name: 'Vận chuyển Quốc tế VN', url: 'https://www.facebook.com/groups/914341367037223' },
 
     // === TIER 4: POD / Fulfillment searchers ===
-    { name: 'POD Vietnam Sellers', url: 'https://www.facebook.com/groups/podvietnam' },
-    { name: 'Amazon FBA Vietnam', url: 'https://www.facebook.com/groups/amazonfbavietnam' },
-    { name: 'Shopify & Dropship VN', url: 'https://www.facebook.com/groups/shopifydropshipvietnam' },
-    { name: 'Mua Bán Hàng Việt Nam Mỹ', url: 'https://www.facebook.com/groups/muabanhangvietnam.my' },
-    { name: 'Hội Buôn Bán Online VN-US', url: 'https://www.facebook.com/groups/buonbanonlinevnus' },
+    { name: 'POD Vietnam Sellers', url: 'https://www.facebook.com/groups/112253537621629' },
+    { name: 'Amazon FBA Vietnam', url: 'https://www.facebook.com/groups/430998570008556' },
+    { name: 'Shopify & Dropship VN', url: 'https://www.facebook.com/groups/514921692619278' },
   ],
 
   // ════════════════════════════════════════════════════
