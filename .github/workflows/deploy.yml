@@ -31,8 +31,8 @@ jobs:
             echo "MAX_POSTS_PER_SCAN=60" >> .env
             echo "✅ .env config:"
             grep -E "^ENABLED_PLATFORMS=|^MAX_POSTS_PER_SCAN=" .env
-            echo "🔄 Starting fresh (FB-only mode)..."
-            pm2 start src/index.js --name thg-lead-gen --time
+            echo "🔄 Starting fresh (using ecosystem.config.js)..."
+            pm2 start ecosystem.config.js
             pm2 save
             echo "✅ Deploy complete!"
             pm2 list

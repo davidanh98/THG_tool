@@ -18,6 +18,8 @@ module.exports = {
         // Environment
         env: {
             NODE_ENV: 'production',
+            ENABLED_PLATFORMS: 'facebook',   // FB-only — TikTok paused
+            MAX_POSTS_PER_SCAN: '60',
         },
 
         // Auto-restart
