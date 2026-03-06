@@ -299,9 +299,10 @@ app.get('/api/scans', (req, res) => {
 app.post('/api/scan', async (req, res) => {
     try {
         const { runPipeline } = require('./index');
-        // TikTok + Facebook only (IG disabled — low ROI)
-        runPipeline({ platforms: ['tiktok', 'facebook'] }).catch(console.error);
-        res.json({ success: true, message: 'Scan started (TikTok + Facebook)' });
+        const config = require('./config');
+        // Dùng config.ENABLED_PLATFORMS thay vì hardcode — FB-only mode
+        runPipeline({ platforms: config.ENABLED_PLATFORMS }).catch(console.error);
+        res.json({ success: true, message: `Scan started (${config.ENABLED_PLATFORMS.join(', ')})` });
     } catch (err) {
         logger.error('Server', 'Manual scan trigger failed', { error: err.message });
         res.status(500).json({ success: false, error: err.message });
