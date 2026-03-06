@@ -237,12 +237,22 @@ async function fbGetGroupPosts(groupUrl, groupName) {
 }
 
 async function scrapeFacebookGroups(maxPosts = 60) {
-    const allGroups = config.FB_TARGET_GROUPS || [];
+    // ─── Load groups from DB (GroupDiscovery Agent) ───
+    // Falls back to config if DB empty
+    let allGroups;
+    try {
+        const groupDiscovery = require('../agent/groupDiscovery');
+        allGroups = groupDiscovery.getScanRotationList(60);
+        if (!allGroups.length) throw new Error('DB empty');
+    } catch (e) {
+        allGroups = config.FB_TARGET_GROUPS || [];
+        console.log('[SV:FB] ⚠️ GroupDB unavailable, using config fallback');
+    }
     if (!allGroups.length) return [];
 
-    // Rotation: lấy batch tiếp theo, không lặp lại
+    // Rotation: lấy batch tiếp theo từ DB list
     const groups = rotation.getNextBatch('fb_groups', allGroups, FB_GROUPS_PER_SCAN);
-    console.log(`[SV:FB] 📘 ${groups.length}/${allGroups.length} groups this scan (rotation)...`);
+    console.log(`[SV:FB] 📘 ${groups.length}/${allGroups.length} groups this scan (DB-driven rotation)...`);
 
     const all = [];
 
@@ -251,6 +261,8 @@ async function scrapeFacebookGroups(maxPosts = 60) {
             console.log(`[SV:FB] 📌 ${group.name}`);
             const posts = await fbGetGroupPosts(group.url, group.name);
             console.log(`[SV:FB]   ${posts.length} posts (CHRONOLOGICAL)`);
+            // Mark scanned in DB so rotation prioritizes unscanned groups
+            try { require('../agent/groupDiscovery').markScanned(group.url); } catch (_) { }
             await delay(1500);
 
             for (const post of posts.slice(0, 5)) {
