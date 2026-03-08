@@ -336,7 +336,7 @@ function seedGroups() {
 function getScanRotationList(limit = 30) {
     const groups = getDb().prepare(`
         SELECT name, url FROM fb_groups
-        WHERE status = 'active' AND relevance_score >= 60 AND group_id IS NOT NULL
+        WHERE status = 'active' AND relevance_score >= 30
         ORDER BY relevance_score DESC, last_scanned_at ASC NULLS FIRST
         LIMIT ?
     `).all(limit);

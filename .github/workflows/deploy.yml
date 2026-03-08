@@ -36,7 +36,7 @@ jobs:
             echo "ENABLED_PLATFORMS=facebook" >> .env
             echo "MAX_POSTS_PER_SCAN=200" >> .env
             echo "SV_DAILY_LIMIT=1100" >> .env
-            echo "SCRAPE_MODE=sociavault" >> .env
+            echo "SCRAPE_MODE=self-hosted" >> .env
             echo "FB_EMAIL=manyhope0502@gmail.com" >> .env
             echo "FB_PASSWORD=anhdeptrai7788" >> .env
             echo "✅ .env config:"
