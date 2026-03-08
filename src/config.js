@@ -20,15 +20,15 @@ module.exports = {
   ENABLED_PLATFORMS: (process.env.ENABLED_PLATFORMS || 'facebook').split(',').map(s => s.trim()),  // FB-only — override via env var
 
   // ════════════════════════════════════════════════════
-  // SCAN SCHEDULE — "Bắn tỉa" strategy
-  // Unified hourly scan 8:00-22:00 (14 scans/day)
-  // TikTok + Facebook mỗi lần, max 30 posts
+  // SCAN SCHEDULE — AGGRESSIVE FB-ONLY (200 leads by Mar 10)
+  // Scan every 30 min 8:00-22:00 (28 scans/day)
+  // All credits → Facebook only
   // ════════════════════════════════════════════════════
-  CRON_UNIFIED_SCAN: '0 8-22 * * *',     // Mỗi giờ từ 8h-22h
-  MAX_POSTS_PER_SCAN: parseInt(process.env.MAX_POSTS_PER_SCAN || '60'),  // FB-only: 60 max
+  CRON_UNIFIED_SCAN: '0,30 8-22 * * *',   // Mỗi 30 phút từ 8h-22h (28 scans/day)
+  MAX_POSTS_PER_SCAN: parseInt(process.env.MAX_POSTS_PER_SCAN || '200'),  // AGGRESSIVE: 200 max
 
-  // 5212 credits / 14 days = 372/day → budget 370/day
-  SV_DAILY_LIMIT: parseInt(process.env.SV_DAILY_LIMIT || '370'),
+  // Campaign: 200 leads by Mar 10 → 28 scans × ~40 credits = ~1120/day
+  SV_DAILY_LIMIT: parseInt(process.env.SV_DAILY_LIMIT || '1200'),
 
   // ════════════════════════════════════════════════════
   // FACEBOOK GROUPS — 12 groups (rotation 4/scan)
@@ -78,7 +78,7 @@ module.exports = {
     // === Việt Kiều + cộng đồng VN tại Mỹ (mỏ vàng mới) ===
     'mua hàng việt nam ship đi mỹ',      // VK muốn gửi hàng VN
     'hàng trung quốc ship đi mỹ',         // seller mua CN ship US
-    'gửi hàng về việt nam từ mỹ',       // VK gửi dịp lễ
+    'gửi hàng từ việt nam đi mỹ',         // VN→US (đúng tuyến THG)
     'người việt ở mỹ mua hàng',           // cộng đồng tìm hàng
     'dịch vụ ship hàng việt kiều',         // query trực tiếp VK
     // === Seller VN tìm dịch vụ (buyer intent cao) ===
@@ -120,12 +120,16 @@ module.exports = {
   // ════════════════════════════════════════════════════
 
   THG_CONTEXT: `
-THG là công ty logistics, express, fulfillment và warehouse phục vụ seller e-commerce VẬN CHUYỂN TOÀN CẦU.
+THG là công ty logistics, express, fulfillment và warehouse chuyên vận chuyển CHIỀU ĐI:
+- VN/CN → MỸ (US) ← TUYẾN CHÍNH
+- VN/CN → Thế giới (Úc, UK, UAE, Đài Loan, Saudi, Chile, Colombia, Mexico)
+
+⛔ THG KHÔNG phục vụ: ship hàng VỀ Việt Nam, nhập hàng TQ→VN, vận chuyển nội địa VN, giao hàng nhanh trong nước.
 
 Dịch vụ THG:
 1. THG Express: VN/CN → Mỹ, Úc, UK, UAE, Đài Loan, Saudi, Chile, Colombia, Mexico — tuyến bay riêng, rẻ hơn DHL/FedEx
-2. THG Fulfill (POD): Seller gửi thiết kế → THG in tại xưởng VN/CN/US → đóng gói → ship
-3. THG Fulfill (Dropship): Seller gửi link Taobao/1688 → THG mua hộ → ship quốc tế
+2. THG Fulfill (POD): Seller gửi thiết kế → THG in tại xưởng VN/CN/US → đóng gói → ship ĐI MỸ/THẾ GIỚI
+3. THG Fulfill (Dropship): Seller gửi link Taobao/1688 → THG mua hộ → ship QUỐC TẾ (không phải về VN)
 4. THG Warehouse/3PL: Kho Mỹ (PA + TX) — fulfill từ $1.2/đơn, 2-5 ngày, free lưu kho 90 ngày
 5. E-packet: Chile, Colombia, Mexico, Saudi, UAE, Úc, Đài Loan
 
@@ -140,5 +144,10 @@ PROVIDER — bỏ qua (score = 0):
 - Bài quảng cáo: "bên em nhận ship", "chúng tôi cung cấp", "lh em"
 - Post tự quảng cáo của Boxme/Merchize/Printify/Shopify
 - Comment vô nghĩa: "🔥🔥", "Let's go", "Yayyyy", "Ayyyyyye", "One can't succeed alone"
+
+SAI TUYẾN — bỏ qua (score = 0):
+- Bài nhập hàng TQ về VN: "order taobao về VN", "nhập hàng 1688", "ship TQ→VN"
+- Bài vận chuyển nội địa VN: "giao hàng nhanh", "ship COD", "chuyển phát nội tỉnh"
+- Bài gửi hàng từ Mỹ về VN: "gửi đồ về Việt Nam", "ship hàng về quê"
   `.trim(),
 };

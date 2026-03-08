@@ -47,6 +47,13 @@ ${config.THG_CONTEXT}`;
 - NẾU TÁC GIẢ VIẾT: "Bên em nhận order..." -> 100% LÀ PROVIDER.
 - NẾU TÁC GIẢ VIẾT: "Mình cần tìm bên order..." -> 100% LÀ BUYER.
 
+🚫 TUYẾN SAI — LOẠI BỎ NGAY (CỰC KỲ QUAN TRỌNG):
+THG CHỈ phục vụ chiều ĐI: VN/CN → MỸ/Thế giới. KHÔNG phục vụ chiều VỀ hoặc nội địa.
+- BÀI VỀ NHẬP HÀNG TQ→VN (order taobao/1688 về VN, vận chuyển TQ về Việt Nam, nhập hàng TQ): → is_potential = false, score = 0, reasoning = "Sai tuyến: TQ→VN"
+- BÀI VỀ VẬN CHUYỂN NỘI ĐỊA VN (giao hàng nhanh, ship COD, chuyển phát nội tỉnh, giao toàn quốc): → is_potential = false, score = 0, reasoning = "Sai tuyến: nội địa VN"
+- BÀI VỀ GỬI HÀNG MỸ→VN (gửi đồ/quà về Việt Nam từ Mỹ): → is_potential = false, score = 0, reasoning = "Sai tuyến: US→VN"
+- KỂ CẢ khi tác giả là BUYER có nhu cầu thật, nếu tuyến KHÔNG PHẢI VN/CN→MỸ/Thế giới → vẫn PHẢI đánh trượt.
+
 🎯 PHÂN LUỒNG 2 DỊCH VỤ THG:
 - "THG Express": DDP/line US/air/sea/LCL/FCL/kg/cbm/customs/thông quan/ISF/HS code/ship VN-CN→Mỹ → Express
 - "THG Warehouse": 3PL/warehouse/kho PA-TX/fulfill/fulfillment/FBA prep/ship to Amazon/returns/cross-dock → Warehouse
@@ -86,10 +93,16 @@ score 0-39 = Không phải buyer HOẶC không liên quan
 - "bác nào có xưởng US k ạ" → is_potential:true, score:70, THG Warehouse
 - "ai biết chỗ nào ship hàng đi Mỹ không" → is_potential:true, score:75, THG Express
 - "cần kho ở PA hoặc TX để fulfill" → is_potential:true, score:85, THG Warehouse
-- "mình ở Cali cần gửi đồ về VN cho gia đình, ai biết dịch vụ nào tốt" → is_potential:true, score:80, THG Express (Việt Kiều)
-- "muốn mua hàng từ Trung Quốc ship về Mỹ, ai có nguồn?" → is_potential:true, score:85, THG Express (Việt Kiều)
+- "muốn mua hàng từ Trung Quốc ship về Mỹ, ai có nguồn?" → is_potential:true, score:85, THG Express
 - [COMMENT] "xin giá" (parent: bài về fulfillment) → is_potential:true, score:70, THG Fulfillment
-- [COMMENT] "rate?" (parent: bài về ship hàng Mỹ) → is_potential:true, score:65, THG Express`;
+- [COMMENT] "rate?" (parent: bài về ship hàng Mỹ) → is_potential:true, score:65, THG Express
+
+🚫 SAI TUYẾN (is_potential: false, score: 0):
+- "mình ở Cali cần gửi đồ về VN cho gia đình, ai biết dịch vụ nào tốt" → is_potential:false, score:0 (US→VN = sai tuyến)
+- "cần ship hàng từ Quảng Châu về Việt Nam, ai nhận?" → is_potential:false, score:0 (TQ→VN = sai tuyến)
+- "ai biết chỗ nào order taobao về VN uy tín?" → is_potential:false, score:0 (TQ→VN = sai tuyến)
+- "cần giao hàng nhanh nội thành HCM" → is_potential:false, score:0 (nội địa VN = sai tuyến)
+- "nhập hàng 1688 về kho Hà Nội, giá bao nhiêu?" → is_potential:false, score:0 (TQ→VN = sai tuyến)`;
 
     // Combine all parts
     return [base, kbContext, feedbackSection, rules, examples,

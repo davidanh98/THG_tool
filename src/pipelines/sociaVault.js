@@ -65,9 +65,9 @@ function toArr(raw) {
 }
 
 // ════════════════════════════════════════════════════════
-// ROTATION BATCH SIZES
+// ROTATION BATCH SIZES — FB-ONLY MODE (all credits → Facebook)
 // ════════════════════════════════════════════════════════
-const FB_GROUPS_PER_SCAN = 30;  // 30/107 groups per scan — full cycle mỗi ~3.5 scans
+const FB_GROUPS_PER_SCAN = 35;  // AGGRESSIVE: 35 groups/scan for 200-lead campaign
 const FB_COMPETITORS_PER_SCAN = 1;  // reduced: competitor pages mostly provider content
 const TT_HASHTAGS_PER_SCAN = 4;
 const IG_ACCOUNTS_PER_SCAN = 3;
@@ -106,13 +106,24 @@ function isBuyerText(s) {
 function signalScores(text = '') {
     const s = text.toLowerCase();
 
-    // Hard negatives
+    // Hard negatives (noise + wrong-route)
     const neg = [
         'tuyển dụng', 'job', 'giveaway', 'minigame', 'order walmart', 'jammed kitchen',
         'hiring', 'intern', 'printer', 'labels', 'canvas', 'thêu', 'embroidery',
         'coaching', 'coach', 'site down', 'support no response'
     ];
     if (neg.some(x => s.includes(x))) return { express: 0, wh: 0, any: 0, buyer: 0, provider: 0 };
+
+    // Wrong-route filter: TQ→VN, domestic VN, US→VN = no signal (save credits)
+    const wrongRoute = [
+        'giao hàng tiết kiệm', 'giao hàng nhanh j&t', 'viettel post nội',
+        'ship cod toàn quốc', 'chuyển phát nội tỉnh', 'giao tận nơi trong nước',
+        'nhập hàng trung quốc về', 'order taobao về vn', 'hàng tq về việt nam',
+        'ship tq về vn', 'vận chuyển tq về vn', 'hàng trung quốc về việt nam',
+        'gửi đồ về việt nam từ mỹ', 'gửi hàng về quê từ mỹ', 'gửi quà về vn',
+        'ship hàng về việt nam', 'chuyển hàng về vn từ mỹ'
+    ];
+    if (wrongRoute.some(x => s.includes(x))) return { express: 0, wh: 0, any: 0, buyer: 0, provider: 0 };
 
     const provider = isProviderText(s) ? 1 : 0;
     const buyer = isBuyerText(s) ? 1 : 0;
@@ -232,7 +243,7 @@ async function scrapeFacebookGroups(maxPosts = 60) {
     let allGroups;
     try {
         const groupDiscovery = require('../agent/groupDiscovery');
-        allGroups = groupDiscovery.getScanRotationList(60);
+        allGroups = groupDiscovery.getScanRotationList(80); // FB-only: wider pool (was 60)
         if (!allGroups.length) throw new Error('DB empty');
     } catch (e) {
         allGroups = config.FB_TARGET_GROUPS || [];
@@ -255,7 +266,7 @@ async function scrapeFacebookGroups(maxPosts = 60) {
             try { require('../agent/groupDiscovery').markScanned(group.url); } catch (_) { }
             await delay(1500);
 
-            for (const post of posts.slice(0, 5)) {
+            for (const post of posts.slice(0, 10)) { // AGGRESSIVE: 10 posts/group for 200-lead campaign
                 // Add post itself
                 if (post.content) {
                     all.push({
@@ -272,7 +283,7 @@ async function scrapeFacebookGroups(maxPosts = 60) {
                 }
 
                 // Use FREE topComments (no extra credit cost)
-                for (const tc of (post.topComments || []).slice(0, 3)) {
+                for (const tc of (post.topComments || []).slice(0, 5)) { // FB-only: more free comments (was 3)
                     if (tc.text && tc.text.length > 3) {
                         all.push({
                             platform: 'facebook',
@@ -295,14 +306,14 @@ async function scrapeFacebookGroups(maxPosts = 60) {
                 const shouldHydrate = sig.providerLogistics
                     // Provider logistics: only if very fresh (≤7d) + high engagement (≥5 comments)
                     ? (post.url && post.commentCount >= 5 && isFresh(post.created_at, 7))
-                    // Buyer posts: normal threshold
-                    : (post.url && post.commentCount > 0 && sig.any >= 25 && isFresh(post.created_at, 14));
+                    // Buyer posts: lower threshold for FB-only (more aggressive hydration)
+                    : (post.url && post.commentCount > 0 && sig.any >= 15 && isFresh(post.created_at, 14));
 
                 if (shouldHydrate) {
                     try {
                         await delay(1500);
                         const comments = await fbGetPostComments(post.url, `sv:fb:comments:${group.name}`);
-                        all.push(...comments.slice(0, 5).map(c => ({
+                        all.push(...comments.slice(0, 8).map(c => ({ // FB-only: more paid comments (was 5)
                             ...c,
                             item_type: 'comment',
                             parent_excerpt: (post.content || '').slice(0, 300),

@@ -24,17 +24,19 @@ jobs:
             npm install --production
             echo "🛑 Stopping all PM2 processes..."
             pm2 delete all 2>/dev/null || true
-            echo "📝 Forcing FB-only in .env (using sed)..."
+            echo "📝 Setting aggressive FB-only config in .env..."
             sed -i '/^ENABLED_PLATFORMS=/d' .env 2>/dev/null || true
             sed -i '/^MAX_POSTS_PER_SCAN=/d' .env 2>/dev/null || true
+            sed -i '/^SV_DAILY_LIMIT=/d' .env 2>/dev/null || true
             echo "ENABLED_PLATFORMS=facebook" >> .env
-            echo "MAX_POSTS_PER_SCAN=60" >> .env
+            echo "MAX_POSTS_PER_SCAN=200" >> .env
+            echo "SV_DAILY_LIMIT=1200" >> .env
             echo "✅ .env config:"
-            grep -E "^ENABLED_PLATFORMS=|^MAX_POSTS_PER_SCAN=" .env
+            grep -E "^ENABLED_PLATFORMS=|^MAX_POSTS_PER_SCAN=|^SV_DAILY_LIMIT=" .env
+            echo "🗑️ Removing old groups.db to force re-seed..."
+            rm -f data/groups.db data/groups.db-shm data/groups.db-wal
             echo "🔄 Starting fresh (using ecosystem.config.js)..."
             pm2 start ecosystem.config.js
             pm2 save
             echo "✅ Deploy complete!"
             pm2 list
-
-
