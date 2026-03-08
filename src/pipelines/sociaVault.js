@@ -71,12 +71,12 @@ function toArr(raw) {
 }
 
 // ════════════════════════════════════════════════════════
-// ROTATION BATCH SIZES — Dynamic based on SCRAPE_MODE
-// self-hosted = ALL groups (FREE, no limit)
-// sociavault  = 35 groups (credit-conscious)
+// ROTATION BATCH SIZES — ALWAYS scan ALL groups
+// Auto-failover ensures: SociaVault → credits exhaust mid-scan → Playwright continues
+// No group is ever skipped. Cost is handled automatically.
 // ════════════════════════════════════════════════════════
-const FB_GROUPS_PER_SCAN = SCRAPE_MODE === 'self-hosted' ? 999 : 35;  // 999 = all groups in DB
-const FB_COMPETITORS_PER_SCAN = 1;  // reduced: competitor pages mostly provider content
+const FB_GROUPS_PER_SCAN = 999;  // ALL groups — failover handles cost
+const FB_COMPETITORS_PER_SCAN = 1;
 const TT_HASHTAGS_PER_SCAN = 4;
 const IG_ACCOUNTS_PER_SCAN = 3;
 
@@ -529,12 +529,20 @@ async function scrapeFacebookGroups(maxPosts = 60) {
     console.log(`[SV:FB] 📘 ${groups.length}/${allGroups.length} groups this scan (DB-driven rotation)...`);
 
     const all = [];
+    let svGroupCount = 0, pwGroupCount = 0;
 
     for (const group of groups) {
         try {
-            console.log(`[SV:FB] 📌 ${group.name}`);
+            // Track which engine will be used (before calling)
+            const willUseSV = SCRAPE_MODE !== 'self-hosted' && canSpend();
+            const engineTag = willUseSV ? '🔵 SV' : '🟢 PW';
+            console.log(`[SV:FB] 📌 [${engineTag}] ${group.name}`);
+
             const posts = await fbGetGroupPosts(group.url, group.name);
             console.log(`[SV:FB]   ${posts.length} posts (CHRONOLOGICAL)`);
+
+            if (willUseSV) svGroupCount++; else pwGroupCount++;
+
             // Mark scanned in DB so rotation prioritizes unscanned groups
             try { require('../agent/groupDiscovery').markScanned(group.url); } catch (_) { }
             await delay(1500);
@@ -651,6 +659,7 @@ async function scrapeFacebookGroups(maxPosts = 60) {
     const urgent = result.filter(p => p.sentiment === 'URGENT').length;
     const critical = result.filter(p => p.urgency === 'critical').length;
     console.log(`[SV:FB] 📊 Total: ${result.length} | 🔥 Frustrated: ${frustrated} | ⚡ Urgent: ${urgent} | 🚨 Critical: ${critical}`);
+    console.log(`[SV:FB] 🔄 Engine: 🔵 SociaVault=${svGroupCount} groups | 🟢 Playwright=${pwGroupCount} groups`);
     return result;
 }
 
