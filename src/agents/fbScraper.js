@@ -698,8 +698,13 @@ async function autoJoinGroups(groups = null) {
                     stats.joined++;
                     console.log(`  ✅ Join request sent!`);
                 } else {
-                    console.warn(`  ❌ Join button not found`);
-                    stats.failed++;
+                    // Log what's actually on the page for diagnosis
+                    const currentUrl = page.url();
+                    const snippet = pageText.substring(0, 150).replace(/\n/g, ' ');
+                    console.log(`  ℹ️ Public/viewable (no join button)`);
+                    console.log(`    URL: ${currentUrl.substring(0, 70)}`);
+                    console.log(`    Page: ${snippet.substring(0, 100)}...`);
+                    stats.viewable = (stats.viewable || 0) + 1;
                 }
 
             } catch (err) {
@@ -723,6 +728,7 @@ async function autoJoinGroups(groups = null) {
     console.log(`\n[FBScraper] 📊 Auto-Join Results:`);
     console.log(`  ✅ Joined: ${stats.joined}`);
     console.log(`  ✓ Already member: ${stats.already}`);
+    console.log(`  ℹ️ Public/viewable: ${stats.viewable || 0}`);
     console.log(`  ⏳ Pending: ${stats.pending}`);
     console.log(`  ❌ Failed: ${stats.failed}`);
 
