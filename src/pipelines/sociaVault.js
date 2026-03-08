@@ -510,7 +510,7 @@ async function fbGetGroupPosts(groupUrl, groupName) {
     }
 }
 
-async function scrapeFacebookGroups(maxPosts = 60) {
+async function scrapeFacebookGroups(maxPosts = 500) {
     // ─── Load groups from DB (GroupDiscovery Agent) ───
     // Falls back to config if DB empty
     let allGroups;
@@ -549,7 +549,7 @@ async function scrapeFacebookGroups(maxPosts = 60) {
 
             let postKept = 0, postSkipped = 0, commentKept = 0, commentSkipped = 0;
 
-            for (const post of posts.slice(0, 10)) { // AGGRESSIVE: 10 posts/group for 200-lead campaign
+            for (const post of posts) { // ALL posts — free mode = max yield
                 // ═══ POST SCOUT — PersonaClassifier pre-filter ═══
                 const sig = signalScores(post.content || '');
                 const postIsCustomer = isRealCustomer(post.content || '');
