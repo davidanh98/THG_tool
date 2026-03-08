@@ -354,7 +354,23 @@ async function getGroupPosts(groupUrl, groupName) {
         try {
             await page.waitForSelector('div[role="feed"], div[role="article"]', { timeout: 10000 });
         } catch {
-            console.warn(`[FBScraper] ⚠️ Feed not found for ${groupName}`);
+            // Diagnose why feed wasn't found
+            const currentUrl = page.url();
+            const pageText = await page.evaluate(() => document.body?.innerText?.substring(0, 200) || '');
+            const isJoinPage = pageText.toLowerCase().includes('join group') || pageText.includes('Tham gia nhóm');
+            const isBlocked = pageText.toLowerCase().includes('content isn\'t available') || pageText.includes('nội dung không');
+
+            if (isJoinPage) {
+                console.warn(`[FBScraper] ⚠️ ${groupName}: NOT A MEMBER — need to join first`);
+            } else if (isBlocked) {
+                console.warn(`[FBScraper] ⚠️ ${groupName}: GROUP BLOCKED/PRIVATE`);
+            } else {
+                console.warn(`[FBScraper] ⚠️ Feed not found for ${groupName} (url: ${currentUrl.substring(0, 60)})`);
+            }
+
+            // Skip this group — no point scrolling an empty page
+            await page.close();
+            return [];
         }
 
         // Scroll aggressively to load more posts (8 scrolls = ~15 posts per group)
