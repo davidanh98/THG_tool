@@ -616,7 +616,7 @@ async function autoJoinGroups(groups = null) {
                     waitUntil: 'domcontentloaded',
                     timeout: 25000,
                 });
-                await delay(4000);
+                await delay(2000);  // 2s page load (was 4s)
 
                 // Check page status
                 const pageText = await page.evaluate(() => document.body.innerText.substring(0, 2000));
@@ -630,7 +630,7 @@ async function autoJoinGroups(groups = null) {
                     pageText.includes('About') || pageText.includes('Members')) {
                     console.log(`  ✅ Already a member`);
                     stats.already++;
-                    await delay(2000);
+                    await delay(1000);
                     continue;
                 }
 
@@ -639,7 +639,7 @@ async function autoJoinGroups(groups = null) {
                     pageText.includes('Cancel request') || pageText.includes('Hủy yêu cầu')) {
                     console.log(`  ⏳ Already pending approval`);
                     stats.pending++;
-                    await delay(2000);
+                    await delay(1000);
                     continue;
                 }
 
@@ -688,7 +688,7 @@ async function autoJoinGroups(groups = null) {
                                 if (submitBtn) {
                                     await submitBtn.click({ force: true });
                                     console.log(`  📝 Answered questions and submitted`);
-                                    await delay(2000);
+                                    await delay(1000);
                                     break;
                                 }
                             }
@@ -712,8 +712,8 @@ async function autoJoinGroups(groups = null) {
                 stats.failed++;
             }
 
-            // Rate limit: 5-8s between groups to avoid FB flagging
-            await delay(5000);
+            // Rate limit: 2s between groups (was 5s)
+            await delay(2000);
         }
 
         await page.close();
