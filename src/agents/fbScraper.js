@@ -390,10 +390,10 @@ async function _getGroupPostsInner(groupUrl, groupName) {
             return [];
         }
 
-        // Scroll aggressively to load more posts (8 scrolls = ~15 posts per group)
-        for (let i = 0; i < 8; i++) {
+        // Scroll aggressively to load more posts (25 scrolls = ~20+ posts per group)
+        for (let i = 0; i < 25; i++) {
             await page.evaluate(() => window.scrollBy(0, 2500));
-            await delay(2000);
+            await delay(1500);
         }
 
         // DEBUG: Log DOM state before extraction

@@ -199,6 +199,25 @@ function seedGroups() {
         // === E-COM FULFILLMENT LOGISTICS (buyer-focused, not generic shipping) ===
         ['Vận chuyển Quốc tế VN', 'https://www.facebook.com/groups/914341367037223', '914341367037223', 0, 'fulfillment', 82],
         ['CỘNG ĐỒNG VẬN CHUYỂN HÀNG HOÁ VIỆT - MỸ', 'https://www.facebook.com/groups/198874301317672', '198874301317672', 13000, 'fulfillment', 80],
+
+        // ═══════════════════════════════════════════════════════
+        // EU / INTERNATIONAL E-COMMERCE SELLER GROUPS
+        // (Amazon/Shopify/Etsy sellers targeting UK, DE, FR markets)
+        // ═══════════════════════════════════════════════════════
+
+        // === AMAZON FBA EUROPE ===
+        ['Amazon FBA UK & Europe', 'https://www.facebook.com/groups/amazonfbauk', null, 0, 'ecommerce-eu', 88],
+        ['Amazon FBA UK Sellers', 'https://www.facebook.com/groups/amazonfbauksellers', null, 0, 'ecommerce-eu', 88],
+        ['Amazon FBA Wholesale Deals UK', 'https://www.facebook.com/groups/amazonfbawholesaleuk', null, 0, 'ecommerce-eu', 85],
+        ['Amazon FBA Europe', 'https://www.facebook.com/groups/amazonfbaeurope', null, 0, 'ecommerce-eu', 85],
+        ['The Amazing European Seller (DE/UK/FR)', 'https://www.facebook.com/groups/theamazingeuropeanseller', null, 0, 'ecommerce-eu', 90],
+        ['Amazon DE Sellers Community', 'https://www.facebook.com/groups/971577527971421', '971577527971421', 0, 'ecommerce-eu', 88],
+
+        // === EU DROPSHIP / POD / CROSS-BORDER ===
+        ['Dropshipping Europe', 'https://www.facebook.com/groups/dropshippingeurope', null, 0, 'ecommerce-eu', 82],
+        ['Ecommerce Europe Sellers', 'https://www.facebook.com/groups/ecommerceeuropesellers', null, 0, 'ecommerce-eu', 80],
+        ['FBA Europe - German Sellers', 'https://www.facebook.com/groups/fbaeuropegerman', null, 0, 'ecommerce-eu', 82],
+        ['Amazon FBA France Sellers', 'https://www.facebook.com/groups/amazonfbafrance', null, 0, 'ecommerce-eu', 82],
     ];
 
     const insertMany = _db.transaction((rows) => {
