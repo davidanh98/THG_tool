@@ -568,30 +568,36 @@ async function scrapeFacebookGroups(maxPosts = 500) {
     const all = [];
     let svGroupCount = 0, pwGroupCount = 0;
 
-    for (const group of groups) {
-        try {
-            // Track which engine will be used (before calling)
-            const willUseSV = SCRAPE_MODE !== 'self-hosted' && canSpend();
-            const engineTag = willUseSV ? '🔵 SV' : '🟢 PW';
-            console.log(`[SV:FB] 📌 [${engineTag}] ${group.name}`);
+    // ═══ PARALLEL 2-TAB SCRAPING — process groups in pairs ═══
+    const PARALLEL = 2;
+    for (let i = 0; i < groups.length; i += PARALLEL) {
+        const batch = groups.slice(i, i + PARALLEL);
 
-            const posts = await fbGetGroupPosts(group.url, group.name);
-            console.log(`[SV:FB]   ${posts.length} posts (CHRONOLOGICAL)`);
+        // Scrape all groups in batch simultaneously (2 tabs)
+        const scrapeResults = await Promise.allSettled(
+            batch.map(async (group) => {
+                const willUseSV = SCRAPE_MODE !== 'self-hosted' && canSpend();
+                const engineTag = willUseSV ? '🔵 SV' : '🟢 PW';
+                console.log(`[SV:FB] 📌 [${engineTag}] ${group.name}`);
+                const posts = await fbGetGroupPosts(group.url, group.name);
+                console.log(`[SV:FB]   ${posts.length} posts (CHRONOLOGICAL)`);
+                if (willUseSV) svGroupCount++; else pwGroupCount++;
+                try { require('../agent/groupDiscovery').markScanned(group.url); } catch (_) { }
+                return { group, posts };
+            })
+        );
 
-            if (willUseSV) svGroupCount++; else pwGroupCount++;
-
-            // Mark scanned in DB so rotation prioritizes unscanned groups
-            try { require('../agent/groupDiscovery').markScanned(group.url); } catch (_) { }
-            await delay(1500);
+        // Process results sequentially (signal gating is CPU-bound, fine to serialize)
+        for (const result of scrapeResults) {
+            if (result.status !== 'fulfilled') continue;
+            const { group, posts } = result.value;
 
             let postKept = 0, postSkipped = 0, commentKept = 0, commentSkipped = 0;
 
-            for (const post of posts) { // ALL posts — free mode = max yield
-                // ═══ POST SCOUT — PersonaClassifier pre-filter ═══
+            for (const post of posts) {
                 const sig = signalScores(post.content || '');
                 const postIsCustomer = isRealCustomer(post.content || '');
 
-                // Add post itself (ONLY if real customer OR provider-logistics for comment mining)
                 if (post.content) {
                     if (postIsCustomer || sig.providerLogistics) {
                         all.push({
@@ -612,10 +618,9 @@ async function scrapeFacebookGroups(maxPosts = 500) {
                     }
                 }
 
-                // ═══ COMMENT SCOUT — Filter topComments ═══
+                // Comment Scout
                 for (const tc of (post.topComments || []).slice(0, 5)) {
                     if (tc.text && tc.text.length > 3) {
-                        // Comment Scout: reject sale-type comments
                         if (isRealCustomerComment(tc.text)) {
                             all.push({
                                 platform: 'facebook',
@@ -638,18 +643,15 @@ async function scrapeFacebookGroups(maxPosts = 500) {
                     }
                 }
 
-                // PAID comments — different rules for buyer vs provider posts
+                // Paid comments hydration
                 const shouldHydrate = sig.providerLogistics
-                    // Provider logistics: only if very fresh (≤7d) + high engagement (≥5 comments)
                     ? (post.url && post.commentCount >= 5 && isFresh(post.created_at, 7))
-                    // Buyer posts: lower threshold for FB-only (more aggressive hydration)
                     : (post.url && post.commentCount > 0 && sig.any >= 15 && isFresh(post.created_at, 14));
 
                 if (shouldHydrate) {
                     try {
                         await delay(1500);
                         const comments = await fbGetPostComments(post.url, `sv:fb:comments:${group.name}`);
-                        // Comment Scout: filter paid comments too
                         const filtered = comments.slice(0, 8).filter(c => isRealCustomerComment(c.content || ''));
                         all.push(...filtered.map(c => ({
                             ...c,
@@ -675,12 +677,9 @@ async function scrapeFacebookGroups(maxPosts = 500) {
                 }
             }
 
-            // Post Scout + Comment Scout stats for this group
             console.log(`[SV:FB]   📊 Persona: ${postKept} posts kept, ${postSkipped} provider-ads filtered | ${commentKept} comments kept, ${commentSkipped} sale-comments filtered`);
-        } catch (err) {
-            console.warn(`[SV:FB] ⚠️ ${group.name}: ${err.message}`);
         }
-        await delay(2000);
+        await delay(500);
     }
 
     // Competitor page comments

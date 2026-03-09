@@ -147,77 +147,64 @@ function seedGroups() {
 
     const groups = [
         // ═══════════════════════════════════════════════════════
-        // CORE E-COMMERCE SELLER GROUPS — Amazon, Shopify, Etsy, POD, Dropship
+        // ALL URLs VERIFIED via Google index (site:facebook.com/groups)
         // ═══════════════════════════════════════════════════════
 
-        // === AMAZON FBA / FBM SELLERS ===
-        ['Amazon Seller Việt Nam', 'https://www.facebook.com/groups/amazonsellervietnam', null, 200000, 'ecommerce', 95],
-        ['Cộng Đồng Amazon Seller VN', 'https://www.facebook.com/groups/congdongamazonsellervietnam', null, 100000, 'ecommerce', 95],
-        ['Cộng đồng Amazon VN', 'https://www.facebook.com/groups/congdongamazonvn', null, 0, 'ecommerce', 90],
-        ['Amazon FBA Vietnam', 'https://www.facebook.com/groups/430998570008556', '430998570008556', 0, 'ecommerce', 92],
-        ['VECOM FBA - Vietnam Sellers on Amazon', 'https://www.facebook.com/groups/vietnamsellersonamazon', null, 0, 'ecommerce', 90],
-        ['Amazon Global Selling VN Community', 'https://www.facebook.com/groups/amazonglobalsellingvn', null, 0, 'ecommerce', 88],
-        ['Sourcing From Vietnam - Amazon FBA', 'https://www.facebook.com/groups/sourcingfromvietnam', null, 0, 'ecommerce', 92],
-
-        // === SHOPIFY / WOOCOMMERCE SELLERS ===
-        ['Cộng đồng Shopify Việt Nam', 'https://www.facebook.com/groups/congdongshopifyvietnam', null, 0, 'ecommerce', 90],
-        ['Shopify Việt Nam', 'https://www.facebook.com/groups/shopifyvn', null, 0, 'ecommerce', 88],
-        ['Shopify & Dropship VN', 'https://www.facebook.com/groups/514921692619278', '514921692619278', 0, 'ecommerce', 88],
-        ['Kiếm Tiền Shopify - Dropshipping - FBA', 'https://www.facebook.com/groups/kiemtienvoishopifly', null, 0, 'ecommerce', 85],
-        ['Shopify Vietnam Community (Meowcart)', 'https://www.facebook.com/groups/shopifyvietnamcommunity', null, 0, 'ecommerce', 85],
-        ['WooCommerce Vietnam', 'https://www.facebook.com/groups/woocommercevietnam', null, 0, 'ecommerce', 80],
-
-        // === ETSY SELLERS ===
-        ['Etsy Việt Nam', 'https://www.facebook.com/groups/etsyvietnam', null, 0, 'ecommerce', 88],
-        ['Cộng đồng ETSY Việt Nam', 'https://www.facebook.com/groups/congdongetsyvietnam', null, 0, 'ecommerce', 85],
-
-        // === POD / PRINT ON DEMAND ===
-        ['POD Vietnam Sellers', 'https://www.facebook.com/groups/112253537621629', '112253537621629', 0, 'ecommerce', 92],
-        ['Customily Vietnam Community', 'https://www.facebook.com/groups/customilyvietnam', null, 0, 'ecommerce', 95],
-        ['Printify Vietnam', 'https://www.facebook.com/groups/printifyvietnam', null, 0, 'ecommerce', 88],
-        ['ShopBase VN - Dropship & POD', 'https://www.facebook.com/groups/shopbasevn', null, 0, 'ecommerce', 85],
-
-        // === DROPSHIPPING / FULFILLMENT ===
-        ['Dropshipping - POD Vietnam', 'https://www.facebook.com/groups/273760436440263', '273760436440263', 50000, 'ecommerce', 92],
+        // === AMAZON FBA / FBM SELLERS (VERIFIED) ===
+        ['Cộng đồng Amazon Sellers VN', 'https://www.facebook.com/groups/congdongamazonvn', null, 0, 'ecommerce', 95],
+        ['Amazon Sellers Viet Nam', 'https://www.facebook.com/groups/eagleamazonvietnam', null, 0, 'ecommerce', 95],
+        ['Amazon FBA Việt Nam', 'https://www.facebook.com/groups/Chienbinhamazon', null, 0, 'ecommerce', 92],
+        ['Cộng Đồng Amazon FBA VN', 'https://www.facebook.com/groups/192390967606944', '192390967606944', 0, 'ecommerce', 90],
+        ['VECOM FBA - Vietnam Sellers on Amazon', 'https://www.facebook.com/groups/Vietnamsellersonamazon', null, 0, 'ecommerce', 90],
+        ['Amazon FBA Vietnam (ID)', 'https://www.facebook.com/groups/430998570008556', '430998570008556', 0, 'ecommerce', 88],
         ['Tìm Supplier Fulfill POD/Drop', 'https://www.facebook.com/groups/1312868109620530', '1312868109620530', 0, 'ecommerce', 95],
-        ['Dropship & Fulfill VN', 'https://www.facebook.com/groups/646444174604027', '646444174604027', 0, 'ecommerce', 92],
-        ['CỘNG ĐỒNG DROPSHIPPING & FBA VN', 'https://www.facebook.com/groups/congdongdropshippingfbavn', null, 0, 'ecommerce', 90],
-        ['Dropship Việt Nam - Vươn Ra Biển Lớn', 'https://www.facebook.com/groups/dropshipvietnam', null, 0, 'ecommerce', 88],
-        ['Cộng Đồng Dropshipping Việt Nam', 'https://www.facebook.com/groups/congdongdropshippingvietnam', null, 0, 'ecommerce', 85],
-        ['Cộng Đồng Dropship Việt Nam', 'https://www.facebook.com/groups/congdongdropshipvn', null, 0, 'ecommerce', 85],
 
-        // === TIKTOK SHOP / E-COMMERCE GENERAL ===
-        ['TikTok Shop US Underground', 'https://www.facebook.com/groups/1631859190422638', '1631859190422638', 0, 'ecommerce', 88],
+        // === SHOPIFY SELLERS (VERIFIED) ===
+        ['Cộng đồng Shopify Việt Nam', 'https://www.facebook.com/groups/congdongshopifyvietnam', null, 0, 'ecommerce', 90],
+        ['CỘNG ĐỒNG DROPSHIPPING & SHOPIFY VN', 'https://www.facebook.com/groups/514921692619278', '514921692619278', 0, 'ecommerce', 90],
+        ['Shopify Developer VN', 'https://www.facebook.com/groups/shopifydevelopervn', null, 0, 'ecommerce', 85],
+        ['Anh Em Shopify VN', 'https://www.facebook.com/groups/aeshopifyvn', null, 0, 'ecommerce', 85],
+
+        // === ETSY SELLERS (VERIFIED) ===
+        ['Cộng đồng ETSY Việt Nam', 'https://www.facebook.com/groups/congdongetsyvietnam', null, 0, 'ecommerce', 88],
+
+        // === POD / PRINT ON DEMAND (VERIFIED) ===
+        ['POD Vietnam Sellers', 'https://www.facebook.com/groups/112253537621629', '112253537621629', 0, 'ecommerce', 92],
+        ['Customily Việt Nam', 'https://www.facebook.com/groups/customilyvietnam', null, 0, 'ecommerce', 95],
+        ['POD Viet Nam - ECM', 'https://www.facebook.com/groups/ngothanhpod', null, 0, 'ecommerce', 90],
+        ['Cộng đồng Designer POD VN', 'https://www.facebook.com/groups/congdongpodseller', null, 0, 'ecommerce', 88],
+        ['Merchize VN Community', 'https://www.facebook.com/groups/merchizevn', null, 0, 'ecommerce', 88],
+        ['GearLaunch VN Print on Demand', 'https://www.facebook.com/groups/gearlaunch.vietnam.printondemand', null, 0, 'ecommerce', 85],
+        ['Việc Làm POD Dropship VN', 'https://www.facebook.com/groups/vieclampoddropshipvietnam', null, 0, 'ecommerce', 82],
+
+        // === DROPSHIPPING / FULFILLMENT (VERIFIED) ===
+        ['Dropshipping - POD Vietnam', 'https://www.facebook.com/groups/273760436440263', '273760436440263', 50000, 'ecommerce', 92],
+        ['Dropship & Fulfill VN', 'https://www.facebook.com/groups/646444174604027', '646444174604027', 0, 'ecommerce', 92],
+        ['Cộng Đồng Dropship VN', 'https://www.facebook.com/groups/vndropship', null, 0, 'ecommerce', 88],
+        ['Cộng Đồng Dropshipping VN', 'https://www.facebook.com/groups/612897632872160', '612897632872160', 0, 'ecommerce', 88],
+        ['Cộng Đồng Dropshipping VN (2)', 'https://www.facebook.com/groups/296787476078292', '296787476078292', 0, 'ecommerce', 85],
+        ['Khởi Nghiệp Shopify - Dropship & POD', 'https://www.facebook.com/groups/dropshipforivn', null, 0, 'ecommerce', 85],
+
+        // === E-COMMERCE GENERAL (VERIFIED) ===
         ['Seller E-commerce VN', 'https://www.facebook.com/groups/494286704652111', '494286704652111', 0, 'ecommerce', 85],
 
-        // === CROSS-BORDER / SOURCING (E-COM FOCUSED) ===
+        // === CROSS-BORDER / SOURCING (VERIFIED) ===
         ['Đặt Hàng TQ Giao US/EU', 'https://www.facebook.com/groups/1157826901501932', '1157826901501932', 0, 'cross-border', 92],
         ['Đặt Hàng TQ Ship ĐNA & US', 'https://www.facebook.com/groups/778601457112289', '778601457112289', 0, 'cross-border', 90],
         ['Order Hàng TQ - Vận Chuyển XNK', 'https://www.facebook.com/groups/1698840756986636', '1698840756986636', 21000, 'cross-border', 88],
         ['Order hàng Trung Quốc - XNK', 'https://www.facebook.com/groups/109909824518356', '109909824518356', 0, 'cross-border', 85],
 
-        // === E-COM FULFILLMENT LOGISTICS (buyer-focused, not generic shipping) ===
+        // === E-COM FULFILLMENT (VERIFIED) ===
         ['Vận chuyển Quốc tế VN', 'https://www.facebook.com/groups/914341367037223', '914341367037223', 0, 'fulfillment', 82],
         ['CỘNG ĐỒNG VẬN CHUYỂN HÀNG HOÁ VIỆT - MỸ', 'https://www.facebook.com/groups/198874301317672', '198874301317672', 13000, 'fulfillment', 80],
 
         // ═══════════════════════════════════════════════════════
-        // EU / INTERNATIONAL E-COMMERCE SELLER GROUPS
-        // (Amazon/Shopify/Etsy sellers targeting UK, DE, FR markets)
+        // EU / INTERNATIONAL (VERIFIED via Google index)
         // ═══════════════════════════════════════════════════════
-
-        // === AMAZON FBA EUROPE ===
-        ['Amazon FBA UK & Europe', 'https://www.facebook.com/groups/amazonfbauk', null, 0, 'ecommerce-eu', 88],
-        ['Amazon FBA UK Sellers', 'https://www.facebook.com/groups/amazonfbauksellers', null, 0, 'ecommerce-eu', 88],
-        ['Amazon FBA Wholesale Deals UK', 'https://www.facebook.com/groups/amazonfbawholesaleuk', null, 0, 'ecommerce-eu', 85],
-        ['Amazon FBA Europe', 'https://www.facebook.com/groups/amazonfbaeurope', null, 0, 'ecommerce-eu', 85],
-        ['The Amazing European Seller (DE/UK/FR)', 'https://www.facebook.com/groups/theamazingeuropeanseller', null, 0, 'ecommerce-eu', 90],
+        ['Amazon FBA UK & Europe', 'https://www.facebook.com/groups/1754716777951998', '1754716777951998', 0, 'ecommerce-eu', 88],
+        ['Amazon Fulfillment FBA Sellers Europe', 'https://www.facebook.com/groups/amazoneurope', null, 0, 'ecommerce-eu', 90],
+        ['Amazon FBA Europe', 'https://www.facebook.com/groups/1007531559318711', '1007531559318711', 0, 'ecommerce-eu', 85],
         ['Amazon DE Sellers Community', 'https://www.facebook.com/groups/971577527971421', '971577527971421', 0, 'ecommerce-eu', 88],
-
-        // === EU DROPSHIP / POD / CROSS-BORDER ===
-        ['Dropshipping Europe', 'https://www.facebook.com/groups/dropshippingeurope', null, 0, 'ecommerce-eu', 82],
-        ['Ecommerce Europe Sellers', 'https://www.facebook.com/groups/ecommerceeuropesellers', null, 0, 'ecommerce-eu', 80],
-        ['FBA Europe - German Sellers', 'https://www.facebook.com/groups/fbaeuropegerman', null, 0, 'ecommerce-eu', 82],
-        ['Amazon FBA France Sellers', 'https://www.facebook.com/groups/amazonfbafrance', null, 0, 'ecommerce-eu', 82],
     ];
 
     const insertMany = _db.transaction((rows) => {

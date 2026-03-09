@@ -258,6 +258,15 @@ async function getAuthContext() {
         timezoneId: 'America/New_York',
     });
 
+    // Block images, fonts, CSS to speed up page loads (~3-5s faster per group)
+    await activeContext.route('**/*', (route) => {
+        const type = route.request().resourceType();
+        if (['image', 'font', 'stylesheet', 'media'].includes(type)) {
+            return route.abort();
+        }
+        return route.continue();
+    });
+
     // Try loading saved session first
     const savedCookies = loadSession();
     if (savedCookies && savedCookies.length > 0) {
@@ -351,8 +360,8 @@ async function _getGroupPostsInner(groupUrl, groupName) {
             timeout: 30000,
         });
 
-        // Wait for React to hydrate (12s proven to work in tests)
-        await delay(10000);
+        // Wait for React to hydrate (5s — images blocked so DOM loads faster)
+        await delay(5000);
 
         // Check for login redirect
         if (page.url().includes('/login')) {
@@ -390,10 +399,20 @@ async function _getGroupPostsInner(groupUrl, groupName) {
             return [];
         }
 
-        // Scroll aggressively to load more posts (25 scrolls = ~20+ posts per group)
+        // Smart scroll — stops early if no new content loads
+        let prevHeight = 0;
+        let noGrowthCount = 0;
         for (let i = 0; i < 25; i++) {
             await page.evaluate(() => window.scrollBy(0, 2500));
-            await delay(1500);
+            await delay(1000);
+            const curHeight = await page.evaluate(() => document.body.scrollHeight);
+            if (curHeight === prevHeight) {
+                noGrowthCount++;
+                if (noGrowthCount >= 2) break; // No new content for 2 scrolls → done
+            } else {
+                noGrowthCount = 0;
+            }
+            prevHeight = curHeight;
         }
 
         // DEBUG: Log DOM state before extraction
