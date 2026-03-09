@@ -464,10 +464,36 @@ async function _getGroupPostsInner(groupUrl, groupName) {
                     if (seenTexts.has(hash)) continue;
                     seenTexts.add(hash);
 
-                    // Author — first <strong> in the unit (FB uses <strong> for author names)
+                    // Author — <strong> inside <a> tag (FB renders: <a href=profile><strong>Name</strong></a>)
+                    // Must NOT grab post title text like "Gấp" which is also <strong>
                     let authorName = 'Unknown';
-                    const strong = unit.querySelector('strong');
-                    if (strong) authorName = strong.innerText?.trim() || 'Unknown';
+                    let authorUrl = '';
+                    let authorAvatar = '';
+                    const authorLinkEl = unit.querySelector('a strong');
+                    if (authorLinkEl) {
+                        authorName = authorLinkEl.innerText?.trim() || 'Unknown';
+                        // Get profile URL from parent <a>
+                        const aTag = authorLinkEl.closest('a');
+                        if (aTag && aTag.href && !aTag.href.includes('/groups/')) {
+                            authorUrl = aTag.href.split('?')[0]; // Clean URL
+                        }
+                    } else {
+                        const strong = unit.querySelector('strong');
+                        if (strong && (strong.innerText?.trim()?.length || 0) < 40) {
+                            authorName = strong.innerText?.trim() || 'Unknown';
+                        }
+                    }
+
+                    // Avatar — FB uses <image> (SVG) or <img> for profile pics
+                    // Look for small images near the top (avatar is typically first image)
+                    const svgImg = unit.querySelector('image[href], image[xlink\\:href]');
+                    if (svgImg) {
+                        authorAvatar = svgImg.getAttribute('href') || svgImg.getAttribute('xlink:href') || '';
+                    }
+                    if (!authorAvatar) {
+                        const imgEl = unit.querySelector('img[src*="scontent"], img[src*="fbcdn"]');
+                        if (imgEl) authorAvatar = imgEl.src || '';
+                    }
 
                     // Post URL — link containing /posts/ or story_fbid or permalink
                     let postUrl = '';
@@ -496,12 +522,25 @@ async function _getGroupPostsInner(groupUrl, groupName) {
                             createdAt = new Date(now - parseInt(t.match(/\d+/)[0]) * 86400000).toISOString();
                             break;
                         }
+                        // Week support: "2w", "2 tuần", "1 week"
+                        if (/^\d+w$/i.test(t) || /^\d+\s*tuần/i.test(t) || /^\d+\s*week/i.test(t)) {
+                            createdAt = new Date(now - parseInt(t.match(/\d+/)[0]) * 7 * 86400000).toISOString();
+                            break;
+                        }
+                        if (/^yesterday/i.test(t) || /^hôm qua/i.test(t)) {
+                            createdAt = new Date(now - 86400000).toISOString();
+                            break;
+                        }
                         if (/^just now/i.test(t) || /^vừa xong/i.test(t)) {
                             createdAt = new Date().toISOString();
                             break;
                         }
                     }
                     if (!createdAt) createdAt = new Date().toISOString();
+
+                    // Filter stale posts (>7 days old = no longer actionable)
+                    const postAge = (Date.now() - new Date(createdAt).getTime()) / 86400000;
+                    if (postAge > 7) continue;
 
                     // Comment count
                     let commentCount = 0;
@@ -532,6 +571,8 @@ async function _getGroupPostsInner(groupUrl, groupName) {
                         url: postUrl || gUrl,
                         content: content.substring(0, 2000),
                         author_name: authorName,
+                        author_url: authorUrl,
+                        author_avatar: authorAvatar,
                         created_at: createdAt,
                         commentCount,
                         topComments,
