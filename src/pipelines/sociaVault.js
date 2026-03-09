@@ -602,7 +602,7 @@ async function scrapeFacebookGroups(maxPosts = 500) {
     const svResults = new Map(); // groupUrl → posts[]
     const SV_BATCH = 5;
 
-    if (SCRAPE_MODE !== 'self-hosted' && canSpend()) {
+    if (canSpend()) {
         console.log(`[SV:FB] ⚡ Phase 1: SociaVault API blast (${groups.length} groups)...`);
         for (let i = 0; i < groups.length; i += SV_BATCH) {
             const batch = groups.slice(i, i + SV_BATCH);
