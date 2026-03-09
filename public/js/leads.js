@@ -23,6 +23,14 @@ function renderLeadsList(leadsArray, gridId = 'leadsGrid') {
 
   const filteredLeads = leadsArray.filter(lead => {
     if (gridId === 'ignoredGrid') return true;
+
+    // Check Sidebar Category Filter
+    if (AppState.currentCategory) {
+      if (AppState.currentCategory !== 'All') {
+        if (lead.category !== AppState.currentCategory) return false;
+      }
+    }
+
     if (!filterDate && !filterTime) return true;
 
     const dt = getPostDate(lead);
@@ -733,4 +741,42 @@ function updateSpeedCounters() {
     if (!created) return;
     el.textContent = '⏱️ ' + timeAgo(created);
   });
+}
+
+// ═══════════════════════════════════════════════════════
+// ANT DESIGN SIDEBAR NAVIGATION
+// ═══════════════════════════════════════════════════════
+
+function toggleNavGroup(groupId) {
+  const group = document.getElementById(`navGroup${groupId.charAt(0).toUpperCase() + groupId.slice(1)}`);
+  if (!group) return;
+  group.classList.toggle('collapsed');
+}
+
+function filterByMenu(category, btnEl) {
+  // 1. Remove active state from all nav items
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-sub-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item-header').forEach(el => el.classList.remove('active'));
+
+  // 2. Add active state to clicked sub-item and its header
+  if (btnEl) {
+    btnEl.classList.add('active');
+    const groupHeader = btnEl.closest('.nav-item-group')?.querySelector('.nav-item-header');
+    if (groupHeader) groupHeader.classList.add('active');
+  }
+
+  // 3. Switch to leads tab if not already on it
+  const leadsTab = document.getElementById('leadsTab');
+  const ignoredTab = document.getElementById('ignoredTab');
+  if (leadsTab) leadsTab.style.display = 'block';
+  if (ignoredTab) ignoredTab.style.display = 'none';
+
+  // 4. Force filter reload
+  // We hijack the loadLeads logic. If 'All', clear the hidden value. 
+  // Otherwise, set a global variable to keep track of the chosen category since the dropdown is gone.
+  AppState.currentCategory = category === 'All' ? '' : category;
+
+  // Render immediately from Memory
+  renderLeadsList(AppState.leads, 'leadsGrid');
 }

@@ -31,11 +31,42 @@
       </div>
 
       <nav class="sidebar-nav">
-        <button class="nav-item active" id="tabLeads" onclick="switchTab('leads')">
-          <span class="nav-icon">📊</span>
-          <span class="nav-text">Leads Database</span>
-          <span class="nav-badge" id="tabLeadsCount">0</span>
-        </button>
+        <!-- NEW: ANT DESIGN NESTED MENU FOR LEADS -->
+        <div class="nav-item-group" id="navGroupLeads">
+          <div class="nav-item-header active" onclick="toggleNavGroup('leads')">
+            <span class="nav-icon">📊</span>
+            <span class="nav-text">Leads Database</span>
+            <span class="nav-arrow">▼</span>
+          </div>
+          <div class="nav-submenu" id="submenuLeads" style="max-height: 500px;">
+            <!-- THG Fulfill -->
+            <div class="nav-subgroup">
+              <div class="nav-sub-header">📦 THG Fulfill</div>
+              <button class="nav-sub-item active" onclick="filterByMenu('POD', this)">
+                <span class="nav-text">🖨️ POD</span>
+              </button>
+              <button class="nav-sub-item" onclick="filterByMenu('Dropship', this)">
+                <span class="nav-text">📦 Dropship</span>
+              </button>
+            </div>
+            <!-- THG Express -->
+            <button class="nav-sub-item" onclick="filterByMenu('Express', this)">
+              <span class="nav-text">✈️ THG Express</span>
+            </button>
+            <!-- THG Warehouse -->
+            <button class="nav-sub-item" onclick="filterByMenu('Warehouse', this)">
+              <span class="nav-text">🏢 THG Warehouse</span>
+            </button>
+            <!-- General / Others -->
+            <button class="nav-sub-item" onclick="filterByMenu('General', this)">
+              <span class="nav-text">🔄 General (Other)</span>
+            </button>
+            <button class="nav-sub-item" onclick="filterByMenu('All', this)">
+              <span class="nav-text">🌐 All Leads</span>
+            </button>
+          </div>
+        </div>
+
         <button class="nav-item" id="tabInbox" onclick="switchTab('inbox')">
           <span class="nav-icon">📬</span>
           <span class="nav-text">AI Inbox</span>
@@ -159,15 +190,6 @@
                 <option value="facebook">📘 Facebook</option>
                 <option value="instagram">📷 Instagram</option>
                 <option value="tiktok">🎵 TikTok</option>
-              </select>
-              <select class="filter-select" id="filterCategory" onchange="loadLeads()">
-                <option value="">All Categories</option>
-                <option value="POD">🖨️ POD</option>
-                <option value="Dropship">📦 Dropship</option>
-                <option value="Fulfillment">🏭 Fulfillment</option>
-                <option value="Express">✈️ Express</option>
-                <option value="Warehouse">🏢 Warehouse</option>
-                <option value="General">🔄 General</option>
               </select>
               <select class="filter-select" id="filterStatus" onchange="loadLeads()">
                 <option value="">All Status</option>

@@ -159,6 +159,112 @@ body {
   color: var(--text-muted);
 }
 
+/* === ANT DESIGN NESTED MENU STYLES === */
+.nav-item-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-item-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.nav-item-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.nav-item-header.active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.nav-arrow {
+  font-size: 10px;
+  transition: transform 0.3s ease;
+  opacity: 0.6;
+}
+
+.nav-item-group.collapsed .nav-arrow {
+  transform: rotate(-90deg);
+}
+
+.nav-submenu {
+  overflow: hidden;
+  transition: max-height 0.3s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  margin-top: 4px;
+}
+
+.nav-item-group.collapsed .nav-submenu {
+  max-height: 0 !important;
+}
+
+.nav-sub-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px 10px 42px;
+  /* Indent */
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: left;
+  border-right: 3px solid transparent;
+  /* Ant design active border */
+}
+
+.nav-sub-item:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.nav-sub-item.active {
+  background: rgba(233, 69, 96, 0.08);
+  /* Light accent background */
+  color: var(--accent);
+  font-weight: 600;
+  border-right-color: var(--accent);
+  /* Right accent border */
+}
+
+/* Sub-group header (e.g. THG Fulfill) */
+.nav-subgroup {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+}
+
+.nav-sub-header {
+  padding: 8px 14px 8px 36px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.3);
+  font-weight: 700;
+}
+
+.nav-subgroup .nav-sub-item {
+  padding-left: 48px;
+  /* Extra indent for nested children */
+}
+
 .nav-item.active .nav-badge {
   background: var(--accent);
   color: white;
