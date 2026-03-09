@@ -418,17 +418,7 @@ function setTone(leadId, tone, btnEl) {
   if (activeTemplate) activeTemplate.click();
 }
 
-function showToast(message, type = 'info') {
-  const existing = document.querySelector('.toast');
-  if (existing) existing.remove();
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.classList.add('toast-show'), 50);
-  setTimeout(() => { toast.classList.remove('toast-show'); setTimeout(() => toast.remove(), 300); }, 3000);
-}
-
+// showToast is defined in utils.js — do not duplicate here
 
 
 // ═══════════════════════════════════════════════════════
