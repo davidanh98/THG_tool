@@ -168,124 +168,12 @@ function seedGroups() {
         ['Gửi hàng đi Mỹ, Úc, Canada giá rẻ', 'https://www.facebook.com/groups/965976281069076', '965976281069076', 0, 'logistics', 76],
         ['Gửi Hàng Đi Mỹ giá rẻ (2)', 'https://www.facebook.com/groups/1600769086782925', '1600769086782925', 0, 'logistics', 74],
 
-        // === TQ GOODS / NHẬP HÀNG (Cat 2) — Relevance 75-90 ===
-        ['TỰ ORDER HÀNG TRUNG QUỐC - VẬN CHUYỂN', 'https://www.facebook.com/groups/818557785724151', '818557785724151', 158000, 'tq-goods', 55], // Hạ: chủ yếu TQ→VN, ít buyer TQ→US
-        ['Hội Oder Taobao, 1688, Quảng Châu', 'https://www.facebook.com/groups/383383542305976', '383383542305976', 194000, 'tq-goods', 50], // Hạ: 99% nhập hàng TQ→VN
-        ['Order Hàng TQ - Vận Chuyển XNK', 'https://www.facebook.com/groups/1698840756986636', '1698840756986636', 21000, 'tq-goods', 88],
-        ['Vận Chuyển Hàng Hoá Quốc Tế (TQ)', 'https://www.facebook.com/groups/200385268215972', '200385268215972', 0, 'tq-goods', 55], // Hạ: mixed nhưng chủ yếu TQ→VN
-        ['Order hàng Trung Quốc - XNK', 'https://www.facebook.com/groups/109909824518356', '109909824518356', 0, 'tq-goods', 80],
-        ['Nhập Hàng Trung Quốc Giá Xưởng', 'https://www.facebook.com/groups/nhaphangtrungiaxuong', null, 0, 'tq-goods', 40], // Hạ: 100% TQ→VN
-        ['NHẬP HÀNG TRUNG QUỐC', 'https://www.facebook.com/groups/435317583994171', '435317583994171', 0, 'tq-goods', 40], // Hạ: 100% TQ→VN
-        ['Kinh Nghiệm Nhập Hàng Trung Quốc', 'https://www.facebook.com/groups/hangquangchau24h.vn', null, 0, 'tq-goods', 40], // Hạ: 100% TQ→VN
-        ['Cộng Đồng Nhập Khẩu Chính Ngạch TQ', 'https://www.facebook.com/groups/xnkchinhngachtrungquoc', null, 0, 'tq-goods', 45], // Hạ: chủ yếu TQ→VN
-        ['NHẬP HÀNG TRUNG QUỐC - TRUNG VIỆT', 'https://www.facebook.com/groups/nhaphangtrungquoc1688.vn', null, 0, 'tq-goods', 35], // Hạ: tên group rõ ràng Trung-Việt
-        ['Vận Chuyển Hàng TQ Về Việt Nam', 'https://www.facebook.com/groups/278168523699221', '278168523699221', 0, 'tq-goods', 30], // Hạ: "Về Việt Nam" = sai tuyến
-        ['WLT NHẬP HÀNG TRUNG QUỐC CHÍNH NGẠCH', 'https://www.facebook.com/groups/orderhangquocte.com0363688761', null, 0, 'tq-goods', 40], // Hạ: TQ→VN
-        ['Vận Chuyển Hàng TQ Về VN (2)', 'https://www.facebook.com/groups/730577794450448', '730577794450448', 0, 'tq-goods', 30], // Hạ: "Về VN" = sai tuyến
-
-        // === VIỆT KIỀU / CỘNG ĐỒNG (Cat 3) — Relevance 60-85 ===
-        ['CỘNG ĐỒNG NGƯỜI VIỆT TẠI MỸ', 'https://www.facebook.com/groups/VietnamUSA', null, 112000, 'viet-kieu', 85],
-        ['HỘI NGƯỜI VIỆT TẠI MỸ', 'https://www.facebook.com/groups/NguoiVietTaiMy', null, 36000, 'viet-kieu', 82],
-        ['Người Việt Tại Mỹ', 'https://www.facebook.com/groups/573930679829173', '573930679829173', 59000, 'viet-kieu', 82],
-        ['CỘNG ĐỒNG NGƯỜI VIỆT TẠI MỸ (USA)', 'https://www.facebook.com/groups/1415834722204275', '1415834722204275', 15000, 'viet-kieu', 80],
-        ['Người Việt tại Texas USA', 'https://www.facebook.com/groups/453760238397047', '453760238397047', 21000, 'viet-kieu', 78],
-        ['Cộng Đồng Người Việt Tại Texas', 'https://www.facebook.com/groups/855654204997742', '855654204997742', 14000, 'viet-kieu', 76],
-        ['Người Việt Qua Texas', 'https://www.facebook.com/groups/880114806135806', '880114806135806', 8000, 'viet-kieu', 72],
-        ['Người Việt San Antonio, Houston. Texas', 'https://www.facebook.com/groups/2370456419930799', '2370456419930799', 0, 'viet-kieu', 70],
-        ['Người Việt California', 'https://www.facebook.com/groups/nvca16', null, 185000, 'viet-kieu', 85],
-        ['Người Việt Ở Cali', 'https://www.facebook.com/groups/nnguoivietocali', null, 175000, 'viet-kieu', 85],
-        ['Người Việt California (2)', 'https://www.facebook.com/groups/553046501564243', '553046501564243', 72000, 'viet-kieu', 82],
-        ['Cộng đồng người Việt ở California', 'https://www.facebook.com/groups/congdongnguoivietocalifornia7', null, 139000, 'viet-kieu', 83],
-        ['CHỢ NGƯỜI VIỆT TẠI CALIFORNIA', 'https://www.facebook.com/groups/chonguoiviettaicalifornia', null, 2600, 'viet-kieu', 70],
-        ['CỘNG ĐỒNG NGƯỜI VIỆT TẠI GEORGIA', 'https://www.facebook.com/groups/2167065630139164', '2167065630139164', 0, 'viet-kieu', 65],
-        ['Cộng đồng người Việt ở Georgia', 'https://www.facebook.com/groups/1130116142283766', '1130116142283766', 0, 'viet-kieu', 65],
-        ['Người Việt Florida', 'https://www.facebook.com/groups/nguoivietfloridaus', null, 0, 'viet-kieu', 68],
-        ['CỘNG ĐỒNG NGƯỜI VIỆT TẠI FLORIDA', 'https://www.facebook.com/groups/congdongnguoivietnamtaiflorida', null, 0, 'viet-kieu', 68],
-        ['CỘNG ĐỒNG NGƯỜI VIỆT TẠI FLORIDA (2)', 'https://www.facebook.com/groups/2986035325038064', '2986035325038064', 0, 'viet-kieu', 66],
-        ['Người Việt tại New York', 'https://www.facebook.com/groups/nguoiviettainewyorkusa', null, 0, 'viet-kieu', 68],
-        ['CỘNG ĐỒNG NGƯỜI VIỆT TẠI NEW YORK', 'https://www.facebook.com/groups/705567617732009', '705567617732009', 0, 'viet-kieu', 68],
-        ['CLB Người Việt tại New York - USA', 'https://www.facebook.com/groups/clbnguoiviettainewyork', null, 0, 'viet-kieu', 66],
-        ['Người Việt tại California (GA)', 'https://www.facebook.com/groups/746114972440757', '746114972440757', 0, 'viet-kieu', 75],
-        ['Người Việt tại Texas (ID)', 'https://www.facebook.com/groups/1462647001235516', '1462647001235516', 0, 'viet-kieu', 72],
-        ['Vietnamese in America', 'https://www.facebook.com/groups/912111470098935', '912111470098935', 0, 'viet-kieu', 72],
-        ['Việt Kiều Khắp Nơi', 'https://www.facebook.com/groups/329985287029', '329985287029', 0, 'viet-kieu', 75],
-        ['Hội du học sinh VN tại Mỹ', 'https://www.facebook.com/groups/VietnamStudent.USA', null, 0, 'viet-kieu', 65],
-        ['HỘI DU HỌC SINH VN TẠI MỸ', 'https://www.facebook.com/groups/326397573871586', '326397573871586', 0, 'viet-kieu', 65],
-        ['HỘI DU HỌC SINH VN TẠI MỸ (2)', 'https://www.facebook.com/groups/3851671961729107', '3851671961729107', 0, 'viet-kieu', 64],
-        ['Người Việt ở San Jose', 'https://www.facebook.com/groups/ngivitsanjose', null, 0, 'viet-kieu', 70],
-        ['Cộng đồng người Việt tại Greensboro NC', 'https://www.facebook.com/groups/577034233473789', '577034233473789', 0, 'viet-kieu', 60],
-
-        // === E-COMMERCE / FULFILLMENT (Cat 4) — Relevance 75-95 ===
-        ['Amazon Seller Việt Nam', 'https://www.facebook.com/groups/amazonsellervietnam', null, 200000, 'ecommerce', 90],
-        ['Cộng Đồng Amazon Seller VN', 'https://www.facebook.com/groups/congdongamazonsellervietnam', null, 100000, 'ecommerce', 90],
-        ['Dropshipping - POD Vietnam', 'https://www.facebook.com/groups/273760436440263', '273760436440263', 50000, 'ecommerce', 88],
-        ['Cộng đồng Shopify Việt Nam', 'https://www.facebook.com/groups/congdongshopifyvietnam', null, 0, 'ecommerce', 82],
-        ['Shopify Việt Nam', 'https://www.facebook.com/groups/shopifyvn', null, 0, 'ecommerce', 80],
-        ['Etsy Việt Nam', 'https://www.facebook.com/groups/etsyvietnam', null, 0, 'ecommerce', 78],
-        ['Cộng đồng ETSY Việt Nam', 'https://www.facebook.com/groups/congdongetsyvietnam', null, 0, 'ecommerce', 76],
-        ['eBay & Etsy Việt Nam', 'https://www.facebook.com/groups/ebayetsyvietnam', null, 0, 'ecommerce', 74],
-        // Existing groups confirmed working
-        ['Tìm Supplier Fulfill POD/Drop', 'https://www.facebook.com/groups/1312868109620530', '1312868109620530', 0, 'ecommerce', 92],
-        ['Dropship & Fulfill VN', 'https://www.facebook.com/groups/646444174604027', '646444174604027', 0, 'ecommerce', 88],
-        ['TikTok Shop US Underground', 'https://www.facebook.com/groups/1631859190422638', '1631859190422638', 0, 'ecommerce', 88],
-        ['Seller E-commerce VN', 'https://www.facebook.com/groups/494286704652111', '494286704652111', 0, 'ecommerce', 80],
-        ['Cộng đồng Amazon VN', 'https://www.facebook.com/groups/congdongamazonvn', null, 0, 'ecommerce', 82],
-        ['POD Vietnam Sellers', 'https://www.facebook.com/groups/112253537621629', '112253537621629', 0, 'ecommerce', 80],
-        ['Amazon FBA Vietnam', 'https://www.facebook.com/groups/430998570008556', '430998570008556', 0, 'ecommerce', 82],
-        ['Shopify & Dropship VN', 'https://www.facebook.com/groups/514921692619278', '514921692619278', 0, 'ecommerce', 78],
-
-        // === MARKETPLACE / CHỢ VIỆT (Cat 5) — Relevance 60-78 ===
-        ['Chợ mua bán Việt-Mỹ', 'https://www.facebook.com/groups/394365487374435', '394365487374435', 3300, 'marketplace', 75],
-        ['Hội Mua Bán - Vận Chuyển Mỹ Việt', 'https://www.facebook.com/groups/muabanvanchuyenmyviet', null, 0, 'marketplace', 72],
-        ['Kinh Doanh Online Việt', 'https://www.facebook.com/groups/kinhdoanhonlineviet', null, 0, 'marketplace', 65],
-        ['HỘI KINH DOANH ONLINE', 'https://www.facebook.com/groups/hoikinhdoanhonline', null, 0, 'marketplace', 62],
-        ['Cộng Đồng Bán Hàng Online VN', 'https://www.facebook.com/groups/congtien.vn', null, 0, 'marketplace', 62],
-        ['CHỢ KINH DOANH ONLINE', 'https://www.facebook.com/groups/chokinhdoanhonlinevietnam', null, 0, 'marketplace', 60],
-        ['Chợ Việt Tại Mỹ - USA', 'https://www.facebook.com/groups/choviettaimyusa', null, 0, 'marketplace', 72],
-        ['Chợ Việt Tại Mỹ - USA (2)', 'https://www.facebook.com/groups/nguoiviettaimyusaa', null, 0, 'marketplace', 70],
-        ['Người Việt Mua Bán Tại Houston', 'https://www.facebook.com/groups/nguoivietmuabantaihoustontexasusa', null, 0, 'marketplace', 68],
-        ['Người Việt Mua Bán Houston (2)', 'https://www.facebook.com/groups/1759332501538277', '1759332501538277', 0, 'marketplace', 66],
-        ['Người Việt Bolsa / OC', 'https://www.facebook.com/groups/943184966968506', '943184966968506', 0, 'marketplace', 68],
-        ['Người Việt Bolsa / OC (2)', 'https://www.facebook.com/groups/586925666725063', '586925666725063', 0, 'marketplace', 66],
-        ['Người Việt Bolsa/Orange County', 'https://www.facebook.com/groups/nguoivietorangecounty', null, 0, 'marketplace', 65],
-        ['Vietnamese in OC / Người Việt quận Cam', 'https://www.facebook.com/groups/1260392491241184', '1260392491241184', 0, 'marketplace', 65],
-        ['Hội Người Việt Bolsa / Orange County', 'https://www.facebook.com/groups/759047485018056', '759047485018056', 0, 'marketplace', 65],
-        ['Người Việt San Jose - Mua Bán', 'https://www.facebook.com/groups/425102139960929', '425102139960929', 0, 'marketplace', 65],
-        ['Mua Bán Tại San Jose California', 'https://www.facebook.com/groups/1090116142283766', '1090116142283766', 0, 'marketplace', 63],
-        // Existing confirmed
+        // === TQ CROSS-BORDER ONLY (not TQ→VN imports) ===
         ['Đặt Hàng TQ Giao US/EU', 'https://www.facebook.com/groups/1157826901501932', '1157826901501932', 0, 'tq-goods', 92],
         ['Đặt Hàng TQ Ship ĐNA & US', 'https://www.facebook.com/groups/778601457112289', '778601457112289', 0, 'tq-goods', 90],
-        ['Vận chuyển Quốc tế VN', 'https://www.facebook.com/groups/914341367037223', '914341367037223', 0, 'logistics', 82],
-        ['Du học sinh VN tại Mỹ', 'https://www.facebook.com/groups/888744671201380', '888744671201380', 0, 'viet-kieu', 70],
-        ['Cộng Đồng Người Việt tại Mỹ', 'https://www.facebook.com/groups/238061523539498', '238061523539498', 0, 'viet-kieu', 78],
-        ['Người Việt NC USA', 'https://www.facebook.com/groups/696936451159951', '696936451159951', 0, 'viet-kieu', 72],
+        ['Order Hàng TQ - Vận Chuyển XNK', 'https://www.facebook.com/groups/1698840756986636', '1698840756986636', 21000, 'tq-goods', 88],
+        ['Order hàng Trung Quốc - XNK', 'https://www.facebook.com/groups/109909824518356', '109909824518356', 0, 'tq-goods', 80],
 
-        // === VIỆT KIỀU NHẬT BẢN (Cat 6) — REAL VERIFIED GROUPS ===
-        ['Người Việt Tại Nhật (1)', 'https://www.facebook.com/groups/1865177740463468', '1865177740463468', 0, 'viet-kieu-jp', 80],
-        ['Người Việt Tại Nhật (2)', 'https://www.facebook.com/groups/2802477133261922', '2802477133261922', 0, 'viet-kieu-jp', 78],
-        ['Cộng Đồng Việt Nhật', 'https://www.facebook.com/groups/6529136897109988', '6529136897109988', 0, 'viet-kieu-jp', 76],
-
-        // === VIỆT KIỀU HÀN QUỐC (Cat 7) — REAL VERIFIED GROUPS ===
-        ['Nhóm Hàn Quốc Cho Tôi Nhé', 'https://www.facebook.com/groups/nhomhanquocchotoinhe', null, 0, 'viet-kieu-kr', 76],
-        ['Chợ Hàn Việt', 'https://www.facebook.com/groups/chohanviet', null, 0, 'viet-kieu-kr', 78],
-        ['Người Việt Hàn Quốc (1)', 'https://www.facebook.com/groups/866386191328211', '866386191328211', 0, 'viet-kieu-kr', 76],
-        ['Người Việt Hàn Quốc (2)', 'https://www.facebook.com/groups/866065734117094', '866065734117094', 0, 'viet-kieu-kr', 74],
-        ['Cộng Đồng Việt Hàn', 'https://www.facebook.com/groups/609457587817529', '609457587817529', 0, 'viet-kieu-kr', 74],
-
-        // === VIỆT KIỀU ĐỨC (Cat 8) — REAL VERIFIED GROUPS ===
-        ['Người Việt Tại Đức (1)', 'https://www.facebook.com/groups/309101452541796', '309101452541796', 0, 'viet-kieu-de', 76],
-        ['Người Việt Tại Đức (2)', 'https://www.facebook.com/groups/1124144362028765', '1124144362028765', 0, 'viet-kieu-de', 74],
-
-        // === VIỆT KIỀU PHÁP (Cat 9) — REAL VERIFIED GROUPS ===
-        ['Người Việt Tại Pháp (1)', 'https://www.facebook.com/groups/587964651367916', '587964651367916', 0, 'viet-kieu-fr', 74],
-        ['Người Việt Tại Pháp (2)', 'https://www.facebook.com/groups/1580597225555214', '1580597225555214', 0, 'viet-kieu-fr', 72],
-        ['Cộng Đồng Việt Pháp', 'https://www.facebook.com/groups/392764544390470', '392764544390470', 0, 'viet-kieu-fr', 72],
-        ['Hội Người Việt Pháp', 'https://www.facebook.com/groups/1565441847208981', '1565441847208981', 0, 'viet-kieu-fr', 70],
-
-        // === VIỆT KIỀU ANH / UK (Cat 10) — REAL VERIFIED GROUPS ===
-        ['Người Việt Tại Anh (1)', 'https://www.facebook.com/groups/1008082862556764', '1008082862556764', 0, 'viet-kieu-uk', 74],
-        ['Người Việt Tại Anh (2)', 'https://www.facebook.com/groups/1687952858253341', '1687952858253341', 0, 'viet-kieu-uk', 72],
-        ['Cộng Đồng Việt Kiều Anh', 'https://www.facebook.com/groups/435561229925226', '435561229925226', 0, 'viet-kieu-uk', 72],
     ];
 
     const insertMany = _db.transaction((rows) => {
