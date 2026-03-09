@@ -360,8 +360,8 @@ async function _getGroupPostsInner(groupUrl, groupName) {
             timeout: 30000,
         });
 
-        // Wait for React to hydrate (5s — images blocked so DOM loads faster)
-        await delay(5000);
+        // Wait for React to hydrate (8s — need enough time for feed to render)
+        await delay(8000);
 
         // Check for login redirect
         if (page.url().includes('/login')) {
@@ -383,23 +383,69 @@ async function _getGroupPostsInner(groupUrl, groupName) {
 
             if (isDead) {
                 console.warn(`[FBScraper] 💀 ${groupName}: DEAD GROUP — auto-deactivating`);
-                // Auto-deactivate in DB so it's never scanned again
                 try {
                     const gd = require('../agent/groupDiscovery');
                     if (gd.deactivateGroup) gd.deactivateGroup(groupUrl);
                 } catch (_) { }
+                await page.close();
+                return [];
             } else if (isJoinPage) {
-                console.warn(`[FBScraper] ⚠️ ${groupName}: NOT A MEMBER — need to join first`);
+                // AUTO-JOIN: click "Join Group" button and retry
+                console.log(`[FBScraper] 🚪 ${groupName}: NOT A MEMBER — auto-joining...`);
+                try {
+                    // Try clicking Join button (FB uses various labels)
+                    const joinBtn = await page.$('div[role="button"]:has-text("Join"), div[role="button"]:has-text("Tham gia"), div[role="button"]:has-text("Join group"), div[role="button"]:has-text("Tham gia nhóm")');
+                    if (joinBtn) {
+                        await joinBtn.click();
+                        await delay(3000);
+
+                        // Check if we got in (public group) or pending (private group)
+                        const afterText = await page.evaluate(() => document.body?.innerText?.substring(0, 300) || '');
+                        if (afterText.includes('Pending') || afterText.includes('Chờ phê duyệt') || afterText.includes('pending')) {
+                            console.log(`[FBScraper] ⏳ ${groupName}: Join request sent — pending admin approval`);
+                        } else {
+                            // Might have joined instantly — reload and try to scrape
+                            console.log(`[FBScraper] ✅ ${groupName}: Joined! Reloading to scrape...`);
+                            await page.goto(`${FB_URL}/groups/${groupId}?sorting_setting=CHRONOLOGICAL`, {
+                                waitUntil: 'domcontentloaded', timeout: 25000,
+                            });
+                            await delay(5000);
+                            // Check if feed is now visible
+                            const hasFeed = await page.$('div[role="feed"], div[role="article"]');
+                            if (hasFeed) {
+                                // Success! Don't close page — fall through to scrolling below
+                                console.log(`[FBScraper] 🎉 ${groupName}: Feed loaded after join!`);
+                                // We need to NOT return here — let code continue to scroll+extract
+                                // Use a flag
+                            } else {
+                                console.warn(`[FBScraper] ⚠️ ${groupName}: Joined but feed still not visible`);
+                                await page.close();
+                                return [];
+                            }
+                        }
+                    } else {
+                        console.warn(`[FBScraper] ⚠️ ${groupName}: Join button not found`);
+                        await page.close();
+                        return [];
+                    }
+                } catch (joinErr) {
+                    console.warn(`[FBScraper] ⚠️ ${groupName}: Auto-join failed: ${joinErr.message}`);
+                    await page.close();
+                    return [];
+                }
+                // If we reach here with pending status, skip for now
+                if (!await page.$('div[role="feed"]')) {
+                    await page.close();
+                    return [];
+                }
             } else {
                 console.warn(`[FBScraper] ⚠️ Feed not found for ${groupName} (url: ${currentUrl.substring(0, 60)})`);
+                await page.close();
+                return [];
             }
-
-            // Skip this group — no point scrolling an empty page
-            await page.close();
-            return [];
         }
 
-        // Smart scroll — stops early if no new content loads
+        // Smart scroll — minimum 5 scrolls, stops after 4 consecutive no-growth
         let prevHeight = 0;
         let noGrowthCount = 0;
         for (let i = 0; i < 25; i++) {
@@ -408,7 +454,7 @@ async function _getGroupPostsInner(groupUrl, groupName) {
             const curHeight = await page.evaluate(() => document.body.scrollHeight);
             if (curHeight === prevHeight) {
                 noGrowthCount++;
-                if (noGrowthCount >= 2) break; // No new content for 2 scrolls → done
+                if (i >= 5 && noGrowthCount >= 4) break; // Min 5 scrolls, then stop if 4x no growth
             } else {
                 noGrowthCount = 0;
             }
@@ -538,9 +584,9 @@ async function _getGroupPostsInner(groupUrl, groupName) {
                     }
                     if (!createdAt) createdAt = new Date().toISOString();
 
-                    // Filter stale posts (>7 days old = no longer actionable)
+                    // Filter stale posts (>14 days old = no longer actionable)
                     const postAge = (Date.now() - new Date(createdAt).getTime()) / 86400000;
-                    if (postAge > 7) continue;
+                    if (postAge > 14) continue;
 
                     // Comment count
                     let commentCount = 0;

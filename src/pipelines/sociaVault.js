@@ -496,8 +496,8 @@ async function fbGetPostComments(postUrl, source) {
 }
 
 async function fbGetGroupPosts(groupUrl, groupName) {
-    // ═══ SELF-HOSTED MODE: use fbScraper (FREE) ═══
-    if (SCRAPE_MODE === 'self-hosted') {
+    // ═══ SELF-HOSTED ONLY: no SV credits ═══
+    if (SCRAPE_MODE === 'self-hosted' && !canSpend()) {
         try {
             return await fbScraper.getGroupPosts(groupUrl, groupName);
         } catch (err) {
@@ -506,45 +506,72 @@ async function fbGetGroupPosts(groupUrl, groupName) {
         }
     }
 
-    // ═══ SOCIAVAULT MODE: paid API (auto-failover to self-hosted when credits exhausted) ═══
-    if (!canSpend()) {
-        console.log(`[SV:FB] 🔄 Credits exhausted → auto-failover to self-hosted Playwright`);
-        try {
-            return await fbScraper.getGroupPosts(groupUrl, groupName);
-        } catch (err) {
-            console.warn(`[SV:FB] ⚠️ Failover group scrape failed: ${err.message}`);
-            return [];
+    // ═══ DUAL ENGINE: SociaVault API + Playwright in PARALLEL ═══
+    // Both engines run simultaneously, results merged + deduped
+    const engines = [];
+
+    // Engine 1: Playwright (always runs — FREE)
+    engines.push(
+        fbScraper.getGroupPosts(groupUrl, groupName)
+            .then(posts => ({ engine: 'PW', posts }))
+            .catch(err => ({ engine: 'PW', posts: [], error: err.message }))
+    );
+
+    // Engine 2: SociaVault API (runs if credits available)
+    if (canSpend()) {
+        engines.push(
+            (async () => {
+                try {
+                    const data = await svGet('facebook/group/posts', { url: groupUrl, sort_by: 'CHRONOLOGICAL', count: 20 });
+                    logCredit('facebook/group/posts', 'facebook', groupName);
+                    const postsArr = toArr(data.posts || data);
+                    const posts = postsArr.map(item => ({
+                        url: item.url || item.post_url || '',
+                        content: (item.text || item.message || '').trim(),
+                        author_name: item.author?.name || item.author?.short_name || 'Unknown',
+                        author_url: item.author?.url || '',
+                        author_avatar: item.author?.profile_picture || '',
+                        created_at: item.publishTime ? new Date(item.publishTime * 1000).toISOString() : null,
+                        commentCount: item.commentCount || 0,
+                        topComments: toArr(item.topComments).map(c => ({
+                            text: (c.text || '').trim(),
+                            publishTime: c.publishTime ? new Date(c.publishTime * 1000).toISOString() : null,
+                            author_name: c.author?.name || 'Unknown',
+                            author_url: c.author?.url || '',
+                        })),
+                    })).filter(p => p.content.length > 15);
+                    return { engine: 'SV', posts };
+                } catch (err) {
+                    return { engine: 'SV', posts: [], error: err.message };
+                }
+            })()
+        );
+    }
+
+    const results = await Promise.allSettled(engines);
+
+    // Merge + dedup by content hash
+    const seenHashes = new Set();
+    const merged = [];
+    for (const r of results) {
+        if (r.status !== 'fulfilled') continue;
+        const { engine, posts, error } = r.value;
+        if (error) console.warn(`[SV:FB] ⚠️ ${engine} engine error: ${error}`);
+        for (const p of posts) {
+            const hash = (p.content || '').substring(0, 80);
+            if (!hash || seenHashes.has(hash)) continue;
+            seenHashes.add(hash);
+            merged.push(p);
         }
     }
 
-    try {
-        const data = await svGet('facebook/group/posts', { url: groupUrl, sort_by: 'CHRONOLOGICAL', count: 20 });
-        logCredit('facebook/group/posts', 'facebook', groupName);
-
-        const postsArr = toArr(data.posts || data);
-        return postsArr.map(item => ({
-            url: item.url || item.post_url || '',
-            content: (item.text || item.message || '').trim(),
-            author_name: item.author?.name || item.author?.short_name || 'Unknown',
-            created_at: item.publishTime ? new Date(item.publishTime * 1000).toISOString() : null,
-            commentCount: item.commentCount || 0,
-            topComments: toArr(item.topComments).map(c => ({
-                text: (c.text || '').trim(),
-                publishTime: c.publishTime ? new Date(c.publishTime * 1000).toISOString() : null,
-                author_name: c.author?.name || 'Unknown',
-                author_url: c.author?.url || '',
-            })),
-        })).filter(p => p.content.length > 15);
-    } catch (apiErr) {
-        // API error → auto-failover to self-hosted
-        console.warn(`[SV:FB] ⚠️ SociaVault API error: ${apiErr.message} → failover to self-hosted`);
-        try {
-            return await fbScraper.getGroupPosts(groupUrl, groupName);
-        } catch (err) {
-            console.warn(`[SV:FB] ⚠️ Failover group scrape also failed: ${err.message}`);
-            return [];
-        }
+    const svCount = results.find(r => r.status === 'fulfilled' && r.value.engine === 'SV')?.value?.posts?.length || 0;
+    const pwCount = results.find(r => r.status === 'fulfilled' && r.value.engine === 'PW')?.value?.posts?.length || 0;
+    if (svCount > 0 || pwCount > 0) {
+        console.log(`[SV:FB]   🔀 Dual: SV=${svCount} PW=${pwCount} → merged=${merged.length}`);
     }
+
+    return merged;
 }
 
 async function scrapeFacebookGroups(maxPosts = 500) {
