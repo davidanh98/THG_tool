@@ -206,48 +206,9 @@ app.get('/api/leads/:id', (req, res) => {
     }
 });
 
-app.patch('/api/leads/:id', (req, res) => {
-    try {
-        const { status, notes, suggested_response } = req.body;
-        if (status && !['new', 'contacted', 'converted', 'ignored'].includes(status)) {
-            return res.status(400).json({ success: false, error: 'Invalid status' });
-        }
-        database.updateLeadStatus.run({
-            id: parseInt(req.params.id),
-            status: status || 'new',
-            notes: notes !== undefined ? notes : null,
-            suggested_response: suggested_response !== undefined ? suggested_response : null,
-        });
-        const updated = database.getLeadById.get(parseInt(req.params.id));
-
-        // Auto-feed classification_memory so Agent learns from user actions
-        if (updated && updated.content) {
-            if (status === 'ignored') {
-                // User said this is NOT a lead → teach agent it's wrong
-                memoryStore.saveFeedbackByContent(updated.content, {
-                    type: 'wrong',
-                    correct_role: 'irrelevant',
-                    note: 'User ignored — misclassified as lead',
-                    platform: updated.platform,
-                });
-                logger.info('Agent', `[Train] Lead #${updated.id} ignored → feedback: wrong`);
-            } else if (status === 'converted') {
-                // User confirmed this is a real buyer → reinforce correct classification
-                memoryStore.saveFeedbackByContent(updated.content, {
-                    type: 'correct',
-                    correct_role: 'buyer',
-                    note: 'User converted — confirmed genuine buyer',
-                    platform: updated.platform,
-                });
-                logger.info('Agent', `[Train] Lead #${updated.id} converted → feedback: correct`);
-            }
-        }
-
-        res.json({ success: true, data: updated });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
+// NOTE: PATCH /api/leads/:id is defined later (line ~898) with full field support
+// including assigned_to, status, notes, suggested_response
+// DO NOT add another PATCH here — it would shadow the correct one
 
 // Delete single lead
 app.delete('/api/leads/:id', (req, res) => {
@@ -907,6 +868,24 @@ app.patch('/api/leads/:id', (req, res) => {
         database.db.prepare(`UPDATE leads SET ${sets}, updated_at = datetime('now') WHERE id = @id`)
             .run({ ...updates, id });
         const lead = database.db.prepare('SELECT * FROM leads WHERE id = ?').get(id);
+
+        // Auto-train Agent when status changes
+        if (lead && lead.content && updates.status) {
+            if (updates.status === 'ignored') {
+                memoryStore.saveFeedbackByContent(lead.content, {
+                    type: 'wrong', correct_role: 'irrelevant',
+                    note: 'User ignored — misclassified as lead', platform: lead.platform,
+                });
+                logger.info('Agent', `[Train] Lead #${id} ignored → feedback: wrong`);
+            } else if (updates.status === 'converted') {
+                memoryStore.saveFeedbackByContent(lead.content, {
+                    type: 'correct', correct_role: 'buyer',
+                    note: 'User converted — confirmed genuine buyer', platform: lead.platform,
+                });
+                logger.info('Agent', `[Train] Lead #${id} converted → feedback: correct`);
+            }
+        }
+
         res.json({ ok: true, ...lead });
     } catch (err) {
         res.status(500).json({ ok: false, error: err.message });
