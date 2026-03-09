@@ -9,74 +9,76 @@ function getPostDate(lead) {
 }
 
 function renderLeadsList(leadsArray, gridId = 'leadsGrid') {
-  const grid = document.getElementById(gridId);
-  if (!leadsArray || leadsArray.length === 0) {
-    grid.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔍</div><h3>No leads found</h3><p>Try adjusting filters or run a new scan.</p></div>`;
-    return;
-  }
+  if (gridId === 'leadsGrid') {
+    renderKanbanBoard(leadsArray);
+  } else {
+    // Fallback for Ignored/Inbox tabs
+    const grid = document.getElementById(gridId);
+    if (!leadsArray || leadsArray.length === 0) {
+      grid.innerHTML = `<div class="empty-state"><div class="empty-state-icon">✅</div><h3>Không có dữ liệu</h3></div>`;
+      return;
+    }
 
-  // Apply Date & Time Filters (only for leadsGrid, ignoredGrid usually doesn't need it, but we can keep it safe)
+    let html = '';
+    for (const lead of leadsArray) {
+      html += renderLeadCard(lead);
+    }
+    grid.innerHTML = html;
+  }
+}
+
+function renderKanbanBoard(leadsArray) {
+  const colHot = document.getElementById('col-hot');
+  const colWarm = document.getElementById('col-warm');
+  const colCold = document.getElementById('col-cold');
+  const cntHot = document.getElementById('count-hot');
+  const cntWarm = document.getElementById('count-warm');
+  const cntCold = document.getElementById('count-cold');
+
+  if (!colHot || !colWarm || !colCold) return;
+
+  // Apply filters
   const filterDate = document.getElementById('filterDate')?.value;
   const filterTime = document.getElementById('filterTime')?.value;
 
   const filteredLeads = leadsArray.filter(lead => {
-    // If we're on ignoredGrid, bypass time filter for simplicity or keep it if wanted
-    if (gridId === 'ignoredGrid') return true;
-
     if (!filterDate && !filterTime) return true;
-
     const dt = getPostDate(lead);
     const d = dt.toLocaleDateString('sv-SE');
     const h = String(dt.getHours()).padStart(2, '0');
     const t = `${h}:00`;
-
     if (filterDate && d !== filterDate) return false;
     if (filterTime && t !== filterTime) return false;
     return true;
   });
 
-  if (filteredLeads.length === 0) {
-    grid.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔍</div><h3>No leads match filter</h3><p>Try changing your date or time selection.</p></div>`;
-    return;
-  }
+  // Buckets
+  const hotLeads = [];
+  const warmLeads = [];
+  const coldLeads = [];
 
-  // Group leads by exact post hour (1-hour blocks)
-  const grouped = groupLeadsByDateTime(filteredLeads);
-  let html = '';
+  for (const lead of filteredLeads) {
+    const isHot = lead.profit_estimate || lead.score >= 80;
+    const isWarm = (lead.score >= 50 && lead.score < 80) || lead.pain_score > 0;
 
-  for (const [dateKey, timeSlots] of Object.entries(grouped)) {
-    const isToday = dateKey === todayStr();
-    const isYesterday = dateKey === yesterdayStr();
-    const dateLabel = isToday ? `📅 Hôm nay — ${dateKey}`
-      : isYesterday ? `📅 Hôm qua — ${dateKey}`
-        : `📅 ${dateKey}`;
-    const totalForDay = Object.values(timeSlots).reduce((s, arr) => s + arr.length, 0);
-
-    html += `<div class="leads-date-group">
-      <div class="leads-date-header">
-        <span>${dateLabel}</span>
-        <span class="leads-date-count">${totalForDay} leads</span>
-      </div>`;
-
-    for (const [timeKey, leads] of Object.entries(timeSlots)) {
-      html += `<div class="leads-time-group">
-        <div class="leads-time-header">
-          <span>🕐 Khung giờ: ${timeKey}</span>
-          <span class="leads-time-count">${leads.length} bài đăng</span>
-        </div>
-        <div class="leads-time-cards">`;
-
-      for (const lead of leads) {
-        html += renderLeadCard(lead);
-      }
-
-      html += `</div></div>`;
+    if (isHot) {
+      hotLeads.push(lead);
+    } else if (isWarm) {
+      warmLeads.push(lead);
+    } else {
+      coldLeads.push(lead);
     }
-
-    html += `</div>`;
   }
 
-  grid.innerHTML = html;
+  // Update Counters
+  cntHot.textContent = hotLeads.length;
+  cntWarm.textContent = warmLeads.length;
+  cntCold.textContent = coldLeads.length;
+
+  // Render HTML
+  colHot.innerHTML = hotLeads.length ? hotLeads.map(l => renderLeadCard(l, 'hot')).join('') : `<div class="empty-state">Không có deal ưu tiên</div>`;
+  colWarm.innerHTML = warmLeads.length ? warmLeads.map(l => renderLeadCard(l, 'warm')).join('') : `<div class="empty-state">Chưa có lead tiềm năng</div>`;
+  colCold.innerHTML = coldLeads.length ? coldLeads.map(l => renderLeadCard(l, 'cold')).join('') : `<div class="empty-state">Chưa có thông tin hỏi giá</div>`;
 }
 
 function renderLeads() {
@@ -139,7 +141,7 @@ function timeAgo(dateStr) {
   return `📅 ${days} ngày trước`;
 }
 
-function renderLeadCard(lead) {
+function renderLeadCard(lead, columnType = 'warm') {
   const scoreClass = lead.score >= 80 ? 'score-high' : lead.score >= 60 ? 'score-med' : 'score-low';
   const platformIcons = { facebook: '📘', instagram: '📷', tiktok: '🎵' };
   const categoryEmojis = { POD: '🖨️', Dropship: '📦', Fulfillment: '🏭', Express: '✈️', Warehouse: '🏢', General: '🔄' };
@@ -201,7 +203,7 @@ function renderLeadCard(lead) {
     </div>`;
 
   return `
-    <div class="lead-card ${scoreClass} ${isClaimed ? 'lead-card--claimed' : ''}" id="lead-${lead.id}" data-lead-id="${lead.id}" data-tone="friendly">
+    <div class="lead-card lead-card--${columnType} ${scoreClass} ${isClaimed ? 'lead-card--claimed' : ''}" id="lead-${lead.id}" data-lead-id="${lead.id}" data-tone="friendly">
       <div class="lead-main">
         <div class="lead-score-badge ${scoreClass}">${lead.score}</div>
         <div class="lead-body">

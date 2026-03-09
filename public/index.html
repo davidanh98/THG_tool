@@ -196,11 +196,38 @@
             </button>
             <span class="leads-count" id="leadsCount">0 leads</span>
           </div>
-          <div class="leads-grid" id="leadsGrid">
-            <div class="empty-state">
-              <div class="empty-state-icon">🔍</div>
-              <h3>No leads yet</h3>
-              <p>Click "Start Scan" to find potential leads.</p>
+          <div class="kanban-board" id="kanbanBoard">
+            <!-- Priority Deals (Hot & High Ticket) -->
+            <div class="kanban-col kanban-hot">
+              <div class="kanban-header">
+                <div class="kh-title">🏆 Priority Deals</div>
+                <span class="col-count" id="count-hot">0</span>
+              </div>
+              <div class="kanban-list" id="col-hot">
+                <div class="empty-state" id="empty-hot">Chưa có deal HOT</div>
+              </div>
+            </div>
+
+            <!-- Warm Leads (Nurturing) -->
+            <div class="kanban-col kanban-warm">
+              <div class="kanban-header">
+                <div class="kh-title">⚡ Warm Leads</div>
+                <span class="col-count" id="count-warm">0</span>
+              </div>
+              <div class="kanban-list" id="col-warm">
+                <div class="empty-state" id="empty-warm">Chưa có lead tiềm năng</div>
+              </div>
+            </div>
+
+            <!-- Inquiries & Cold -->
+            <div class="kanban-col kanban-cold">
+              <div class="kanban-header">
+                <div class="kh-title">💬 Inquiries (Ao)</div>
+                <span class="col-count" id="count-cold">0</span>
+              </div>
+              <div class="kanban-list" id="col-cold">
+                <div class="empty-state" id="empty-cold">Chưa có thắc mắc</div>
+              </div>
             </div>
           </div>
         </div>
