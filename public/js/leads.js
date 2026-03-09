@@ -25,9 +25,18 @@ function renderLeadsList(leadsArray, gridId = 'leadsGrid') {
     if (gridId === 'ignoredGrid') return true;
 
     // Check Sidebar Category Filter
-    if (AppState.currentCategory) {
-      if (AppState.currentCategory !== 'All') {
-        if (lead.category !== AppState.currentCategory) return false;
+    if (AppState.currentCategory && AppState.currentCategory !== 'All') {
+      const cat = lead.category || 'General';
+      if (AppState.currentCategory === 'Fulfill') {
+        const fulfillTypes = ['Fulfillment', 'POD', 'Dropship'];
+        if (!fulfillTypes.includes(cat)) return false;
+      } else if (AppState.currentCategory === 'Warehouse') {
+        if (cat !== 'Warehouse' && cat !== 'THG Warehouse') return false;
+      } else if (AppState.currentCategory === 'General') {
+        const generalTypes = ['General', 'NotRelevant'];
+        if (!generalTypes.includes(cat) && cat !== '') return false;
+      } else {
+        if (cat !== AppState.currentCategory) return false;
       }
     }
 
