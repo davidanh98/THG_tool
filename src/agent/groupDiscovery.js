@@ -146,34 +146,59 @@ function seedGroups() {
     `);
 
     const groups = [
-        // === LOGISTICS / SHIPPING (Cat 1) — Relevance 70-90 ===
-        ['Vận Chuyển Mỹ - Việt & Quốc Tế', 'https://www.facebook.com/groups/ship.viet.my', null, 75000, 'logistics', 85],
-        ['Mua Hộ Order Vận Chuyển Hàng Mỹ', 'https://www.facebook.com/groups/vanchuyenhangmy', null, 108000, 'logistics', 88],
-        ['CỘNG ĐỒNG VẬN CHUYỂN HÀNG HOÁ VIỆT - MỸ', 'https://www.facebook.com/groups/198874301317672', '198874301317672', 13000, 'logistics', 90],
-        ['GỬI HÀNG ĐI MỸ', 'https://www.facebook.com/groups/511057606227863', '511057606227863', 15000, 'logistics', 92],
-        ['Vận Chuyển Hàng Hóa Quốc Tế - Mỹ, Úc, CA', 'https://www.facebook.com/groups/1769375073378312', '1769375073378312', 33000, 'logistics', 85],
-        ['VẬN CHUYỂN HÀNG ĐI MỸ - ÚC - CANADA', 'https://www.facebook.com/groups/2733989140224151', '2733989140224151', 0, 'logistics', 82],
-        ['Gửi Hàng Đi Mỹ - Úc - Canada - Châu Âu', 'https://www.facebook.com/groups/2485669168339896', '2485669168339896', 0, 'logistics', 82],
-        ['Vận Chuyển Quốc Tế', 'https://www.facebook.com/groups/369902271922489', '369902271922489', 0, 'logistics', 78],
-        ['HỘI VẬN CHUYỂN HÀNG HÓA QUỐC TẾ', 'https://www.facebook.com/groups/hoivanchuyenhanghoaquocte', null, 36000, 'logistics', 80],
-        ['VẬN CHUYỂN HÀNG HÓA QUỐC TẾ', 'https://www.facebook.com/groups/vanchuyenhhqt', null, 42000, 'logistics', 80],
-        ['VẬN CHUYỂN QUỐC TẾ', 'https://www.facebook.com/groups/vanchuyenquocte.hcm', null, 21000, 'logistics', 78],
-        ['CHUYỂN PHÁT NHANH QUỐC TẾ', 'https://www.facebook.com/groups/chuyenphatnhanhquocte.hcm', null, 12000, 'logistics', 75],
-        ['Vận Chuyển Hàng Mỹ Việt Giá Rẻ', 'https://www.facebook.com/groups/2347372242199015', '2347372242199015', 0, 'logistics', 83],
-        ['Gửi hàng đi Mỹ', 'https://www.facebook.com/groups/701183890614920', '701183890614920', 0, 'logistics', 82],
-        ['Gửi hàng đi Mỹ - Canada - Úc - NZ', 'https://www.facebook.com/groups/2272449176537942', '2272449176537942', 0, 'logistics', 80],
-        ['Gửi hàng đi Mỹ,Úc,Canada,Nhật Bản,...', 'https://www.facebook.com/groups/guihangdimyre', null, 0, 'logistics', 78],
-        ['Gửi Hàng Đi Mỹ (2)', 'https://www.facebook.com/groups/guihangdimy', null, 0, 'logistics', 78],
-        ['Gửi hàng đi Mỹ, Úc, Canada, Pháp...', 'https://www.facebook.com/groups/356310528854487', '356310528854487', 0, 'logistics', 76],
-        ['Gửi hàng đi Mỹ, Úc, Canada giá rẻ', 'https://www.facebook.com/groups/965976281069076', '965976281069076', 0, 'logistics', 76],
-        ['Gửi Hàng Đi Mỹ giá rẻ (2)', 'https://www.facebook.com/groups/1600769086782925', '1600769086782925', 0, 'logistics', 74],
+        // ═══════════════════════════════════════════════════════
+        // CORE E-COMMERCE SELLER GROUPS — Amazon, Shopify, Etsy, POD, Dropship
+        // ═══════════════════════════════════════════════════════
 
-        // === TQ CROSS-BORDER ONLY (not TQ→VN imports) ===
-        ['Đặt Hàng TQ Giao US/EU', 'https://www.facebook.com/groups/1157826901501932', '1157826901501932', 0, 'tq-goods', 92],
-        ['Đặt Hàng TQ Ship ĐNA & US', 'https://www.facebook.com/groups/778601457112289', '778601457112289', 0, 'tq-goods', 90],
-        ['Order Hàng TQ - Vận Chuyển XNK', 'https://www.facebook.com/groups/1698840756986636', '1698840756986636', 21000, 'tq-goods', 88],
-        ['Order hàng Trung Quốc - XNK', 'https://www.facebook.com/groups/109909824518356', '109909824518356', 0, 'tq-goods', 80],
+        // === AMAZON FBA / FBM SELLERS ===
+        ['Amazon Seller Việt Nam', 'https://www.facebook.com/groups/amazonsellervietnam', null, 200000, 'ecommerce', 95],
+        ['Cộng Đồng Amazon Seller VN', 'https://www.facebook.com/groups/congdongamazonsellervietnam', null, 100000, 'ecommerce', 95],
+        ['Cộng đồng Amazon VN', 'https://www.facebook.com/groups/congdongamazonvn', null, 0, 'ecommerce', 90],
+        ['Amazon FBA Vietnam', 'https://www.facebook.com/groups/430998570008556', '430998570008556', 0, 'ecommerce', 92],
+        ['VECOM FBA - Vietnam Sellers on Amazon', 'https://www.facebook.com/groups/vietnamsellersonamazon', null, 0, 'ecommerce', 90],
+        ['Amazon Global Selling VN Community', 'https://www.facebook.com/groups/amazonglobalsellingvn', null, 0, 'ecommerce', 88],
+        ['Sourcing From Vietnam - Amazon FBA', 'https://www.facebook.com/groups/sourcingfromvietnam', null, 0, 'ecommerce', 92],
 
+        // === SHOPIFY / WOOCOMMERCE SELLERS ===
+        ['Cộng đồng Shopify Việt Nam', 'https://www.facebook.com/groups/congdongshopifyvietnam', null, 0, 'ecommerce', 90],
+        ['Shopify Việt Nam', 'https://www.facebook.com/groups/shopifyvn', null, 0, 'ecommerce', 88],
+        ['Shopify & Dropship VN', 'https://www.facebook.com/groups/514921692619278', '514921692619278', 0, 'ecommerce', 88],
+        ['Kiếm Tiền Shopify - Dropshipping - FBA', 'https://www.facebook.com/groups/kiemtienvoishopifly', null, 0, 'ecommerce', 85],
+        ['Shopify Vietnam Community (Meowcart)', 'https://www.facebook.com/groups/shopifyvietnamcommunity', null, 0, 'ecommerce', 85],
+        ['WooCommerce Vietnam', 'https://www.facebook.com/groups/woocommercevietnam', null, 0, 'ecommerce', 80],
+
+        // === ETSY SELLERS ===
+        ['Etsy Việt Nam', 'https://www.facebook.com/groups/etsyvietnam', null, 0, 'ecommerce', 88],
+        ['Cộng đồng ETSY Việt Nam', 'https://www.facebook.com/groups/congdongetsyvietnam', null, 0, 'ecommerce', 85],
+
+        // === POD / PRINT ON DEMAND ===
+        ['POD Vietnam Sellers', 'https://www.facebook.com/groups/112253537621629', '112253537621629', 0, 'ecommerce', 92],
+        ['Customily Vietnam Community', 'https://www.facebook.com/groups/customilyvietnam', null, 0, 'ecommerce', 95],
+        ['Printify Vietnam', 'https://www.facebook.com/groups/printifyvietnam', null, 0, 'ecommerce', 88],
+        ['ShopBase VN - Dropship & POD', 'https://www.facebook.com/groups/shopbasevn', null, 0, 'ecommerce', 85],
+
+        // === DROPSHIPPING / FULFILLMENT ===
+        ['Dropshipping - POD Vietnam', 'https://www.facebook.com/groups/273760436440263', '273760436440263', 50000, 'ecommerce', 92],
+        ['Tìm Supplier Fulfill POD/Drop', 'https://www.facebook.com/groups/1312868109620530', '1312868109620530', 0, 'ecommerce', 95],
+        ['Dropship & Fulfill VN', 'https://www.facebook.com/groups/646444174604027', '646444174604027', 0, 'ecommerce', 92],
+        ['CỘNG ĐỒNG DROPSHIPPING & FBA VN', 'https://www.facebook.com/groups/congdongdropshippingfbavn', null, 0, 'ecommerce', 90],
+        ['Dropship Việt Nam - Vươn Ra Biển Lớn', 'https://www.facebook.com/groups/dropshipvietnam', null, 0, 'ecommerce', 88],
+        ['Cộng Đồng Dropshipping Việt Nam', 'https://www.facebook.com/groups/congdongdropshippingvietnam', null, 0, 'ecommerce', 85],
+        ['Cộng Đồng Dropship Việt Nam', 'https://www.facebook.com/groups/congdongdropshipvn', null, 0, 'ecommerce', 85],
+
+        // === TIKTOK SHOP / E-COMMERCE GENERAL ===
+        ['TikTok Shop US Underground', 'https://www.facebook.com/groups/1631859190422638', '1631859190422638', 0, 'ecommerce', 88],
+        ['Seller E-commerce VN', 'https://www.facebook.com/groups/494286704652111', '494286704652111', 0, 'ecommerce', 85],
+
+        // === CROSS-BORDER / SOURCING (E-COM FOCUSED) ===
+        ['Đặt Hàng TQ Giao US/EU', 'https://www.facebook.com/groups/1157826901501932', '1157826901501932', 0, 'cross-border', 92],
+        ['Đặt Hàng TQ Ship ĐNA & US', 'https://www.facebook.com/groups/778601457112289', '778601457112289', 0, 'cross-border', 90],
+        ['Order Hàng TQ - Vận Chuyển XNK', 'https://www.facebook.com/groups/1698840756986636', '1698840756986636', 21000, 'cross-border', 88],
+        ['Order hàng Trung Quốc - XNK', 'https://www.facebook.com/groups/109909824518356', '109909824518356', 0, 'cross-border', 85],
+
+        // === E-COM FULFILLMENT LOGISTICS (buyer-focused, not generic shipping) ===
+        ['Vận chuyển Quốc tế VN', 'https://www.facebook.com/groups/914341367037223', '914341367037223', 0, 'fulfillment', 82],
+        ['CỘNG ĐỒNG VẬN CHUYỂN HÀNG HOÁ VIỆT - MỸ', 'https://www.facebook.com/groups/198874301317672', '198874301317672', 13000, 'fulfillment', 80],
     ];
 
     const insertMany = _db.transaction((rows) => {
