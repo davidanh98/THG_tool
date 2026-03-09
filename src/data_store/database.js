@@ -228,8 +228,16 @@ const getLeads = (filters = {}) => {
     params.platform = filters.platform;
   }
   if (filters.category) {
-    query += ' AND category = @category';
-    params.category = filters.category;
+    if (filters.category === 'Fulfill') {
+      query += " AND category IN ('Fulfillment', 'POD', 'Dropship')";
+    } else if (filters.category === 'Warehouse') {
+      query += " AND category IN ('Warehouse', 'THG Warehouse')";
+    } else if (filters.category === 'General') {
+      query += " AND (category IN ('General', 'NotRelevant') OR category IS NULL OR category = '')";
+    } else {
+      query += ' AND category = @category';
+      params.category = filters.category;
+    }
   }
   if (filters.status) {
     query += ' AND status = @status';

@@ -782,10 +782,13 @@ function filterByMenu(category, btnEl) {
   if (ignoredTab) ignoredTab.style.display = 'none';
 
   // 4. Force filter reload
-  // We hijack the loadLeads logic. If 'All', clear the hidden value. 
-  // Otherwise, set a global variable to keep track of the chosen category since the dropdown is gone.
+  // Set a global variable to keep track of the chosen category since the dropdown is gone.
   AppState.currentCategory = category === 'All' ? '' : category;
 
-  // Render immediately from Memory
-  renderLeadsList(AppState.leads, 'leadsGrid');
+  // Fetch the fresh data from the backend to ensure we have the full scoped list
+  if (typeof loadLeads === 'function') {
+    loadLeads();
+  } else {
+    renderLeadsList(AppState.leads, 'leadsGrid');
+  }
 }

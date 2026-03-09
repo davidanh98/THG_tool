@@ -38,13 +38,13 @@ async function loadLeads() {
     try {
         const params = new URLSearchParams();
         const platform = document.getElementById('filterPlatform').value;
-        const category = document.getElementById('filterCategory').value;
-        const status = document.getElementById('filterStatus').value;
-        const minScore = document.getElementById('filterScore').value;
-        const search = document.getElementById('filterSearch').value;
+        const category = AppState.currentCategory || '';
+        const status = document.getElementById('filterStatus')?.value || '';
+        const minScore = document.getElementById('filterScore')?.value || '';
+        const search = document.getElementById('filterSearch')?.value || '';
 
         if (platform) params.set('platform', platform);
-        if (category) params.set('category', category);
+        if (category && category !== 'All') params.set('category', category); // Let backend know we want a specific bucket or leave empty for all
         if (status) params.set('status', status);
         if (minScore) params.set('minScore', minScore);
         if (search) params.set('search', search);
