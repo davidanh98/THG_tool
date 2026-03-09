@@ -360,8 +360,8 @@ async function _getGroupPostsInner(groupUrl, groupName) {
             timeout: 30000,
         });
 
-        // Wait for React to hydrate (8s — need enough time for feed to render)
-        await delay(8000);
+        // Wait for React to hydrate (6s — balanced speed vs reliability)
+        await delay(6000);
 
         // Check for login redirect
         if (page.url().includes('/login')) {
@@ -445,16 +445,16 @@ async function _getGroupPostsInner(groupUrl, groupName) {
             }
         }
 
-        // Smart scroll — minimum 5 scrolls, stops after 4 consecutive no-growth
+        // Smart scroll — minimum 3 scrolls, stops after 3 consecutive no-growth
         let prevHeight = 0;
         let noGrowthCount = 0;
-        for (let i = 0; i < 25; i++) {
-            await page.evaluate(() => window.scrollBy(0, 2500));
-            await delay(1000);
+        for (let i = 0; i < 20; i++) {
+            await page.evaluate(() => window.scrollBy(0, 3000));
+            await delay(800);
             const curHeight = await page.evaluate(() => document.body.scrollHeight);
             if (curHeight === prevHeight) {
                 noGrowthCount++;
-                if (i >= 5 && noGrowthCount >= 4) break; // Min 5 scrolls, then stop if 4x no growth
+                if (i >= 3 && noGrowthCount >= 3) break;
             } else {
                 noGrowthCount = 0;
             }
@@ -630,7 +630,7 @@ async function _getGroupPostsInner(groupUrl, groupName) {
 
         console.log(`[FBScraper] ✅ ${groupName}: ${posts.length} posts`);
         await page.close();
-        await delay(2500);
+        await delay(500);
         return posts;
 
     } catch (err) {

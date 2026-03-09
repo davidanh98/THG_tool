@@ -595,119 +595,208 @@ async function scrapeFacebookGroups(maxPosts = 500) {
     const all = [];
     let svGroupCount = 0, pwGroupCount = 0;
 
-    // ═══ PARALLEL 2-TAB SCRAPING — process groups in pairs ═══
-    const PARALLEL = 2;
-    for (let i = 0; i < groups.length; i += PARALLEL) {
-        const batch = groups.slice(i, i + PARALLEL);
+    // ════════════════════════════════════════════════════════════
+    // PHASE 1: SociaVault API BLAST — fast batch, ~2s per group
+    // Fire all SV calls in batches of 5 (API-only, no browser)
+    // ════════════════════════════════════════════════════════════
+    const svResults = new Map(); // groupUrl → posts[]
+    const SV_BATCH = 5;
 
-        // Scrape all groups in batch simultaneously (2 tabs)
-        const scrapeResults = await Promise.allSettled(
-            batch.map(async (group) => {
-                const willUseSV = SCRAPE_MODE !== 'self-hosted' && canSpend();
-                const engineTag = willUseSV ? '🔵 SV' : '🟢 PW';
-                console.log(`[SV:FB] 📌 [${engineTag}] ${group.name}`);
-                const posts = await fbGetGroupPosts(group.url, group.name);
-                console.log(`[SV:FB]   ${posts.length} posts (CHRONOLOGICAL)`);
-                if (willUseSV) svGroupCount++; else pwGroupCount++;
-                try { require('../agent/groupDiscovery').markScanned(group.url); } catch (_) { }
-                return { group, posts };
-            })
-        );
-
-        // Process results sequentially (signal gating is CPU-bound, fine to serialize)
-        for (const result of scrapeResults) {
-            if (result.status !== 'fulfilled') continue;
-            const { group, posts } = result.value;
-
-            let postKept = 0, postSkipped = 0, commentKept = 0, commentSkipped = 0;
-
-            for (const post of posts) {
-                const sig = signalScores(post.content || '');
-                const postIsCustomer = isRealCustomer(post.content || '');
-
-                if (post.content) {
-                    if (postIsCustomer || sig.providerLogistics) {
-                        all.push({
-                            platform: 'facebook',
-                            item_type: 'post',
-                            post_url: post.url,
-                            author_name: post.author_name,
-                            author_url: post.author_url || '',
-                            author_avatar: post.author_avatar || '',
-                            content: post.content,
-                            post_created_at: post.created_at || new Date().toISOString(),
-                            scraped_at: new Date().toISOString(),
-                            source: `sv:fb:group:${group.name}`,
-                            persona: sig.persona,
-                        });
-                        postKept++;
-                    } else {
-                        postSkipped++;
-                    }
-                }
-
-                // Comment Scout
-                for (const tc of (post.topComments || []).slice(0, 5)) {
-                    if (tc.text && tc.text.length > 3) {
-                        if (isRealCustomerComment(tc.text)) {
-                            all.push({
-                                platform: 'facebook',
-                                item_type: 'comment',
-                                post_url: post.url,
-                                author_name: tc.author_name,
-                                author_url: tc.author_url,
-                                content: tc.text,
-                                post_created_at: tc.publishTime || new Date().toISOString(),
-                                parent_created_at: post.created_at,
-                                parent_excerpt: (post.content || '').slice(0, 300),
-                                scraped_at: new Date().toISOString(),
-                                source: `sv:fb:topComments:${group.name}`,
-                                persona: 'buyer',
-                            });
-                            commentKept++;
-                        } else {
-                            commentSkipped++;
-                        }
-                    }
-                }
-
-                // Paid comments hydration
-                const shouldHydrate = sig.providerLogistics
-                    ? (post.url && post.commentCount >= 5 && isFresh(post.created_at, 7))
-                    : (post.url && post.commentCount > 0 && sig.any >= 15 && isFresh(post.created_at, 14));
-
-                if (shouldHydrate) {
+    if (SCRAPE_MODE !== 'self-hosted' && canSpend()) {
+        console.log(`[SV:FB] ⚡ Phase 1: SociaVault API blast (${groups.length} groups)...`);
+        for (let i = 0; i < groups.length; i += SV_BATCH) {
+            const batch = groups.slice(i, i + SV_BATCH);
+            const results = await Promise.allSettled(
+                batch.map(async (group) => {
+                    if (!canSpend()) return { group, posts: [] };
                     try {
-                        await delay(1500);
-                        const comments = await fbGetPostComments(post.url, `sv:fb:comments:${group.name}`);
-                        const filtered = comments.slice(0, 8).filter(c => isRealCustomerComment(c.content || ''));
-                        all.push(...filtered.map(c => ({
-                            ...c,
-                            item_type: 'comment',
-                            parent_excerpt: (post.content || '').slice(0, 300),
-                            parent_created_at: post.created_at || null,
-                            persona: 'buyer',
-                        })));
-                        commentKept += filtered.length;
-                        commentSkipped += (comments.slice(0, 8).length - filtered.length);
-                        const type = sig.providerLogistics ? 'provider-logistics' : 'buyer';
-                        console.log(`[SV:FB]   ↳ ${filtered.length}/${comments.length} paid comments kept (${type}, signal=${sig.any})`);
-                    } catch (e) {
-                        console.warn(`[SV:FB]   ↳ comments err: ${e.message}`);
+                        const data = await svGet('facebook/group/posts', { url: group.url, sort_by: 'CHRONOLOGICAL', count: 20 });
+                        logCredit('facebook/group/posts', 'facebook', group.name);
+                        const postsArr = toArr(data.posts || data);
+                        const posts = postsArr.map(item => ({
+                            url: item.url || item.post_url || '',
+                            content: (item.text || item.message || '').trim(),
+                            author_name: item.author?.name || item.author?.short_name || 'Unknown',
+                            author_url: item.author?.url || '',
+                            author_avatar: item.author?.profile_picture || '',
+                            created_at: item.publishTime ? new Date(item.publishTime * 1000).toISOString() : null,
+                            commentCount: item.commentCount || 0,
+                            topComments: toArr(item.topComments).map(c => ({
+                                text: (c.text || '').trim(),
+                                publishTime: c.publishTime ? new Date(c.publishTime * 1000).toISOString() : null,
+                                author_name: c.author?.name || 'Unknown',
+                                author_url: c.author?.url || '',
+                            })),
+                        })).filter(p => p.content.length > 15);
+                        return { group, posts };
+                    } catch (err) {
+                        return { group, posts: [], error: err.message };
                     }
-                } else if (post.url) {
-                    const reasons = [];
-                    if (post.commentCount === 0) reasons.push('0 comments');
-                    if (!sig.providerLogistics && sig.any < 25) reasons.push('weak signal');
-                    if (sig.providerLogistics && post.commentCount < 5) reasons.push(`low engagement(${post.commentCount})`);
-                    if (!isFresh(post.created_at, sig.providerLogistics ? 7 : 14)) reasons.push('old');
-                    console.log(`[SV:FB]   ↳ skip paid comments (${reasons.join(', ')})`);
+                })
+            );
+            for (const r of results) {
+                if (r.status === 'fulfilled') {
+                    const { group, posts, error } = r.value;
+                    svResults.set(group.url, { group, posts });
+                    if (error) console.warn(`[SV:FB] ⚠️ SV error for ${group.name}: ${error}`);
+                    svGroupCount++;
+                }
+            }
+        }
+        const svTotal = [...svResults.values()].reduce((s, r) => s + r.posts.length, 0);
+        console.log(`[SV:FB] ⚡ Phase 1 done: ${svTotal} posts from ${svResults.size} groups via SV API`);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 2: Playwright GAP FILL — only groups with SV=0 posts
+    // Runs 2 tabs in parallel (browser-based, slower)
+    // ════════════════════════════════════════════════════════════
+    const pwGroups = groups.filter(g => {
+        const sv = svResults.get(g.url);
+        return !sv || sv.posts.length === 0; // SV missed this group
+    });
+
+    if (pwGroups.length > 0) {
+        console.log(`[SV:FB] 🟢 Phase 2: Playwright gap fill (${pwGroups.length}/${groups.length} groups)...`);
+        const PW_PARALLEL = 2;
+        for (let i = 0; i < pwGroups.length; i += PW_PARALLEL) {
+            const batch = pwGroups.slice(i, i + PW_PARALLEL);
+            const results = await Promise.allSettled(
+                batch.map(async (group) => {
+                    console.log(`[SV:FB] 📌 [🟢 PW] ${group.name}`);
+                    try {
+                        const posts = await fbScraper.getGroupPosts(group.url, group.name);
+                        try { require('../agent/groupDiscovery').markScanned(group.url); } catch (_) { }
+                        pwGroupCount++;
+                        return { group, posts };
+                    } catch (err) {
+                        console.warn(`[SV:FB] ⚠️ PW error: ${group.name}: ${err.message}`);
+                        return { group, posts: [] };
+                    }
+                })
+            );
+            for (const r of results) {
+                if (r.status === 'fulfilled') {
+                    const { group, posts } = r.value;
+                    // Merge with any SV results
+                    const existing = svResults.get(group.url);
+                    if (existing) {
+                        const seenHashes = new Set(existing.posts.map(p => (p.content || '').substring(0, 80)));
+                        for (const p of posts) {
+                            const hash = (p.content || '').substring(0, 80);
+                            if (hash && !seenHashes.has(hash)) {
+                                existing.posts.push(p);
+                                seenHashes.add(hash);
+                            }
+                        }
+                    } else {
+                        svResults.set(group.url, { group, posts });
+                    }
+                }
+            }
+            await delay(500);
+        }
+    }
+
+    // Mark SV-only groups as scanned too
+    for (const [url, { group }] of svResults) {
+        try { require('../agent/groupDiscovery').markScanned(url); } catch (_) { }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // PROCESS: Signal gating on all merged results
+    // ════════════════════════════════════════════════════════════
+    for (const [groupUrl, { group, posts }] of svResults) {
+        const totalPosts = posts.length;
+        console.log(`[SV:FB] ${totalPosts} posts (CHRONOLOGICAL)`);
+
+        let postKept = 0, postSkipped = 0, commentKept = 0, commentSkipped = 0;
+
+        for (const post of posts) {
+            const sig = signalScores(post.content || '');
+            const postIsCustomer = isRealCustomer(post.content || '');
+
+            if (post.content) {
+                if (postIsCustomer || sig.providerLogistics) {
+                    all.push({
+                        platform: 'facebook',
+                        item_type: 'post',
+                        post_url: post.url,
+                        author_name: post.author_name,
+                        author_url: post.author_url || '',
+                        author_avatar: post.author_avatar || '',
+                        content: post.content,
+                        post_created_at: post.created_at || new Date().toISOString(),
+                        scraped_at: new Date().toISOString(),
+                        source: `sv:fb:group:${group.name}`,
+                        persona: sig.persona,
+                    });
+                    postKept++;
+                } else {
+                    postSkipped++;
                 }
             }
 
-            console.log(`[SV:FB]   📊 Persona: ${postKept} posts kept, ${postSkipped} provider-ads filtered | ${commentKept} comments kept, ${commentSkipped} sale-comments filtered`);
+            // Comment Scout
+            for (const tc of (post.topComments || []).slice(0, 5)) {
+                if (tc.text && tc.text.length > 3) {
+                    if (isRealCustomerComment(tc.text)) {
+                        all.push({
+                            platform: 'facebook',
+                            item_type: 'comment',
+                            post_url: post.url,
+                            author_name: tc.author_name,
+                            author_url: tc.author_url,
+                            content: tc.text,
+                            post_created_at: tc.publishTime || new Date().toISOString(),
+                            parent_created_at: post.created_at,
+                            parent_excerpt: (post.content || '').slice(0, 300),
+                            scraped_at: new Date().toISOString(),
+                            source: `sv:fb:topComments:${group.name}`,
+                            persona: 'buyer',
+                        });
+                        commentKept++;
+                    } else {
+                        commentSkipped++;
+                    }
+                }
+            }
+
+            // Paid comments hydration
+            const shouldHydrate = sig.providerLogistics
+                ? (post.url && post.commentCount >= 5 && isFresh(post.created_at, 7))
+                : (post.url && post.commentCount > 0 && sig.any >= 15 && isFresh(post.created_at, 14));
+
+            if (shouldHydrate) {
+                try {
+                    await delay(1500);
+                    const comments = await fbGetPostComments(post.url, `sv:fb:comments:${group.name}`);
+                    const filtered = comments.slice(0, 8).filter(c => isRealCustomerComment(c.content || ''));
+                    all.push(...filtered.map(c => ({
+                        ...c,
+                        item_type: 'comment',
+                        parent_excerpt: (post.content || '').slice(0, 300),
+                        parent_created_at: post.created_at || null,
+                        persona: 'buyer',
+                    })));
+                    commentKept += filtered.length;
+                    commentSkipped += (comments.slice(0, 8).length - filtered.length);
+                    const type = sig.providerLogistics ? 'provider-logistics' : 'buyer';
+                    console.log(`[SV:FB]   ↳ ${filtered.length}/${comments.length} paid comments kept (${type}, signal=${sig.any})`);
+                } catch (e) {
+                    console.warn(`[SV:FB]   ↳ comments err: ${e.message}`);
+                }
+            } else if (post.url) {
+                const reasons = [];
+                if (post.commentCount === 0) reasons.push('0 comments');
+                if (!sig.providerLogistics && sig.any < 25) reasons.push('weak signal');
+                if (sig.providerLogistics && post.commentCount < 5) reasons.push(`low engagement(${post.commentCount})`);
+                if (!isFresh(post.created_at, sig.providerLogistics ? 7 : 14)) reasons.push('old');
+                console.log(`[SV:FB]   ↳ skip paid comments (${reasons.join(', ')})`);
+            }
         }
-        await delay(500);
+
+        console.log(`[SV:FB]   📊 Persona: ${postKept} posts kept, ${postSkipped} provider-ads filtered | ${commentKept} comments kept, ${commentSkipped} sale-comments filtered`);
     }
 
     // Competitor page comments
