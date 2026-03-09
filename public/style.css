@@ -1781,7 +1781,7 @@ body.light-mode .feedback-btn {
   background: rgba(239, 68, 68, 0.15) !important;
 }
 
-/* ── Staff Assignment Pills ── */
+/* ── Staff Claim & Lock Pills ── */
 .staff-assign {
   display: flex;
   gap: 6px;
@@ -1800,7 +1800,7 @@ body.light-mode .feedback-btn {
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1809,35 +1809,240 @@ body.light-mode .feedback-btn {
   letter-spacing: 0.2px;
 }
 
-.assigned-badge {
-  font-size: 11px;
-  color: #fff;
-  background: linear-gradient(135deg, #7c3aed, #6d28d9);
-  padding: 3px 8px;
-  border-radius: 12px;
-  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
-  margin-left: 6px;
+.staff-pill:hover:not(:disabled) {
+  border-color: #22d3ee;
+  color: #22d3ee;
+  transform: scale(1.08);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.2);
+}
+
+/* ── CLAIMED: Neon Cyan Glow ── */
+.staff-pill--claimed {
+  background: linear-gradient(135deg, #22d3ee, #06b6d4) !important;
+  border-color: #22d3ee !important;
+  color: #000 !important;
+  font-weight: 700;
+  box-shadow: 0 0 15px rgba(34, 211, 238, 0.6), 0 0 30px rgba(34, 211, 238, 0.2);
+  animation: neonPulse 2s ease-in-out infinite;
+}
+
+@keyframes neonPulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 15px rgba(34, 211, 238, 0.6), 0 0 30px rgba(34, 211, 238, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 20px rgba(34, 211, 238, 0.8), 0 0 40px rgba(34, 211, 238, 0.3);
+  }
+}
+
+/* ── LOCKED: Others dimmed ── */
+.staff-pill--locked {
+  opacity: 0.25;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+/* ── Card claimed border glow ── */
+.lead-card--claimed {
+  border: 1px solid rgba(34, 211, 238, 0.3) !important;
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.08);
+}
+
+/* ── Claim Status Badge ── */
+.claim-status-badge {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.15), rgba(6, 182, 212, 0.1));
+  color: #22d3ee;
+  border: 1px solid rgba(34, 211, 238, 0.25);
+}
+
+/* ═══════════════════════════════════════════════════
+   HOT METER — Urgency Gradient Bar
+═══════════════════════════════════════════════════ */
+.hot-meter {
+  position: relative;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  margin: 6px 0 2px;
+  overflow: hidden;
+}
+
+.hot-meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #3b82f6 0%, #22d3ee 30%, #f59e0b 60%, #ef4444 100%);
+  transition: width 0.6s ease;
+}
+
+.hot-meter-label {
+  position: absolute;
+  right: 4px;
+  top: -14px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+/* ═══════════════════════════════════════════════════
+   SENTIMENT TAGS — Smart Icons
+═══════════════════════════════════════════════════ */
+.sentiment-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.sentiment-frustrated {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.sentiment-urgent {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.sentiment-inquiry {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.sentiment-vip {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(236, 72, 153, 0.15));
+  color: #c084fc;
+  border: 1px solid rgba(139, 92, 246, 0.25);
+}
+
+/* ═══════════════════════════════════════════════════
+   NEURAL RESPONSE — Templates & Tone
+═══════════════════════════════════════════════════ */
+.neural-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.template-cases {
+  display: flex;
+  gap: 4px;
+}
+
+.template-btn {
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  background: rgba(34, 211, 238, 0.06);
+  color: #67e8f9;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.template-btn:hover {
+  background: rgba(34, 211, 238, 0.15);
+  border-color: rgba(34, 211, 238, 0.4);
+  transform: translateY(-1px);
+}
+
+.template-btn--active {
+  background: rgba(34, 211, 238, 0.2) !important;
+  border-color: #22d3ee !important;
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.2);
+}
+
+.tone-selector {
+  display: flex;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.tone-btn {
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
   font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.assigned-badge strong {
-  margin-left: 4px;
-  font-weight: 800;
+.tone-btn:hover {
+  color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
-.staff-pill:hover {
-  border-color: #8b5cf6;
-  color: #8b5cf6;
-  transform: scale(1.15);
+.tone-btn--active {
+  background: rgba(139, 92, 246, 0.12);
+  color: #a78bfa;
+  border-color: rgba(139, 92, 246, 0.3);
 }
 
-.staff-pill--active {
-  background: linear-gradient(135deg, #7c3aed, #6d28d9);
-  border-color: #7c3aed;
-  color: #fff !important;
-  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.4);
+/* ═══════════════════════════════════════════════════
+   TOAST NOTIFICATIONS
+═══════════════════════════════════════════════════ */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(30, 30, 50, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  z-index: 9999;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.3s ease;
+  backdrop-filter: blur(12px);
+}
+
+.toast-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-success {
+  border-left: 4px solid #22d3ee;
+}
+
+.toast-warning {
+  border-left: 4px solid #f59e0b;
+}
+
+.toast-error {
+  border-left: 4px solid #ef4444;
+}
+
+.toast-info {
+  border-left: 4px solid #3b82f6;
 }
 
 /* ── Tabbed Footer ── */
@@ -1988,6 +2193,11 @@ body.light-mode .staff-pill {
   background: rgba(0, 0, 0, 0.04);
   color: #6b7280;
   border-color: #d1d5db;
+}
+
+body.light-mode .staff-pill--claimed {
+  background: linear-gradient(135deg, #22d3ee, #06b6d4) !important;
+  color: #000 !important;
 }
 
 body.light-mode .lead-action-bar {

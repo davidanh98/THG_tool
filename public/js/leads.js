@@ -149,22 +149,55 @@ function renderLeadCard(lead) {
 
   const postDateStr = lead.post_created_at || lead.scraped_at || lead.created_at;
   const timeStr = timeAgo(postDateStr);
-  const exactTimeStr = new Date(postDateStr.endsWith('Z') ? postDateStr : postDateStr + 'Z').toLocaleString('vi-VN', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-  });
 
-  // Staff assignment pills
+  // ═══ SENTIMENT TAG ═══
+  let sentimentTag = '';
+  if (lead.urgency === 'critical' || lead.score >= 90) {
+    sentimentTag = `<span class="sentiment-tag sentiment-frustrated">😤 Frustrated</span>`;
+  } else if (lead.score >= 85) {
+    sentimentTag = `<span class="sentiment-tag sentiment-vip">💎 VIP</span>`;
+  } else if (lead.urgency === 'high') {
+    sentimentTag = `<span class="sentiment-tag sentiment-urgent">⚡ Cần gấp</span>`;
+  } else if (lead.urgency === 'medium') {
+    sentimentTag = `<span class="sentiment-tag sentiment-inquiry">💬 Hỏi thăm</span>`;
+  }
+
+  // ═══ HOT METER ═══
+  const hotPercent = Math.min(lead.score || 0, 100);
+  const hotLabel = hotPercent >= 80 ? '🔥 HOT' : hotPercent >= 60 ? '⚡ WARM' : '💤 LOW';
+
+  // ═══ CLAIM & LOCK PILLS ═══
   const STAFF = ['Trang', 'Min', 'Moon', 'Lê Huyền', 'Ngọc Huyền'];
-  const assigned = lead.assigned_to || '';
+  const claimedBy = lead.claimed_by || lead.assigned_to || '';
+  const isClaimed = !!claimedBy;
   const staffPills = STAFF.map(name => {
-    const isAssigned = assigned === name;
-    return `<button class="staff-pill ${isAssigned ? 'staff-pill--active' : ''}" 
-      onclick="assignStaff(${lead.id}, '${name}', this)" 
-      title="Giao lead cho ${name}">${name}</button>`;
+    const isMe = claimedBy === name;
+    const lockedClass = isClaimed && !isMe ? 'staff-pill--locked' : '';
+    const claimedClass = isMe ? 'staff-pill--claimed' : '';
+    const disabled = isClaimed && !isMe ? 'disabled' : '';
+    return `<button class="staff-pill ${claimedClass} ${lockedClass}" 
+      onclick="claimLead(${lead.id}, '${name}', this)" 
+      ${disabled}
+      title="${isMe ? 'Nhả lead' : isClaimed ? `🔒 ${claimedBy} đang xử lý` : `Tiếp nhận lead`}">${name}${isMe ? ' 🛡️' : ''}</button>`;
   }).join('');
 
+  // ═══ NEURAL RESPONSE TEMPLATES ═══
+  const templateButtons = `
+    <div class="neural-templates">
+      <div class="template-cases">
+        <button class="template-btn" onclick="fillTemplate(${lead.id}, 'quote')" title="Báo giá nhanh">📋 Báo giá</button>
+        <button class="template-btn" onclick="fillTemplate(${lead.id}, 'fulfill')" title="Tư vấn Kho/Fulfill">🏭 Kho/FF</button>
+        <button class="template-btn" onclick="fillTemplate(${lead.id}, 'complaint')" title="Xử lý khiếu nại">🛡️ Khiếu nại</button>
+      </div>
+      <div class="tone-selector">
+        <button class="tone-btn tone-btn--active" onclick="setTone(${lead.id}, 'friendly', this)">🤝 Thân thiện</button>
+        <button class="tone-btn" onclick="setTone(${lead.id}, 'professional', this)">👔 Pro</button>
+        <button class="tone-btn" onclick="setTone(${lead.id}, 'concise', this)">⚡ Ngắn</button>
+      </div>
+    </div>`;
+
   return `
-    <div class="lead-card ${scoreClass}" id="lead-${lead.id}" data-lead-id="${lead.id}">
+    <div class="lead-card ${scoreClass} ${isClaimed ? 'lead-card--claimed' : ''}" id="lead-${lead.id}" data-lead-id="${lead.id}" data-tone="friendly">
       <div class="lead-main">
         <div class="lead-score-badge ${scoreClass}">${lead.score}</div>
         <div class="lead-body">
@@ -174,8 +207,15 @@ function renderLeadCard(lead) {
             <span class="platform-badge platform-${lead.platform}">${platformIcons[lead.platform] || '🌐'} ${lead.platform}</span>
             <span class="category-tag">${categoryEmojis[lead.category] || '🏷️'} ${lead.category || 'N/A'}</span>
             ${lead.role === 'buyer' ? '<span class="category-tag" style="background:rgba(16,185,129,0.15);color:#10b981;">🎯 Buyer</span>' : ''}
-            ${lead.status !== 'new' ? `<span class="category-tag" style="background:rgba(59,130,246,0.1);color:#3b82f6;">● ${lead.status}</span>` : ''}
+            ${sentimentTag}
+            ${isClaimed ? `<span class="claim-status-badge">🛡️ ${claimedBy}</span>` : ''}
             <span class="category-tag" style="opacity:0.8;color:#94a3b8;">🕐 ${timeStr}</span>
+          </div>
+
+          <!-- Hot Meter -->
+          <div class="hot-meter" title="Lead Score: ${hotPercent}%">
+            <div class="hot-meter-fill" style="width: ${hotPercent}%"></div>
+            <span class="hot-meter-label">${hotLabel}</span>
           </div>
 
           <!-- Author -->
@@ -184,7 +224,6 @@ function renderLeadCard(lead) {
             <strong style="color:var(--text);font-size:0.95rem;">
               ${lead.author_url ? `<a href="${lead.author_url}" target="_blank" rel="noopener" style="text-decoration:none;color:var(--accent);">${author}</a>` : author}
             </strong>
-            ${assigned ? `<span class="assigned-badge">Phụ trách: <strong>${assigned}</strong></span>` : ''}
           </div>
 
           ${summary ? `<div class="lead-summary">💡 ${summary}</div>` : ''}
@@ -203,8 +242,8 @@ function renderLeadCard(lead) {
             <button class="lab-btn ${lead.status === 'ignored' ? 'lab-active-red' : ''}" onclick="updateStatus(${lead.id}, 'ignored')" title="Ignore">⛔</button>
             <button class="lab-btn" onclick="deleteLead(${lead.id})" title="Xóa" style="color:#ef4444;">🗑️</button>
             <div style="flex:1"></div>
-            <!-- Staff assignment -->
-            <div class="staff-assign" title="Assign nhân viên">${staffPills}</div>
+            <!-- Staff Claim & Lock -->
+            <div class="staff-assign" title="Tiếp nhận lead">${staffPills}</div>
           </div>
 
           <!-- ─── TABBED FOOTER ─── -->
@@ -214,8 +253,9 @@ function renderLeadCard(lead) {
             <button class="lead-tab" onclick="switchLeadTab(${lead.id},'agent',this)">🧠 Agent</button>
           </div>
 
-          <!-- Tab: Response -->
+          <!-- Tab: Response + Neural Templates -->
           <div class="lead-tab-panel" id="tab-response-${lead.id}">
+            ${templateButtons}
             <div style="display:flex;gap:6px;margin-bottom:4px;">
               <button class="copy-btn" onclick="copyResponse(${lead.id})">📋 Copy</button>
               <button class="copy-btn" onclick="saveResponse(${lead.id})">💾 Save</button>
@@ -268,7 +308,6 @@ function switchLeadTab(leadId, tab, btnEl) {
     const panel = document.getElementById(`tab-${t}-${leadId}`);
     if (panel) panel.style.display = t === tab ? '' : 'none';
   });
-  // Update active tab button
   if (btnEl) {
     const allTabs = btnEl.closest('.lead-tabs')?.querySelectorAll('.lead-tab');
     allTabs?.forEach(b => b.classList.remove('lead-tab--active'));
@@ -277,39 +316,117 @@ function switchLeadTab(leadId, tab, btnEl) {
 }
 
 // ═══════════════════════════════════════════════════════
-// Staff Assignment
+// Claim & Lock — Neon Cyan Staff Assignment
 // ═══════════════════════════════════════════════════════
-async function assignStaff(leadId, staffName, pillBtn) {
+async function claimLead(leadId, staffName, pillBtn) {
   const card = document.getElementById(`lead-${leadId}`);
   const allPills = card?.querySelectorAll('.staff-pill');
-  const currentAssigned = pillBtn?.classList.contains('staff-pill--active');
-  const newAssigned = currentAssigned ? '' : staffName; // toggle off if same
+  const isMyClaim = pillBtn?.classList.contains('staff-pill--claimed');
+  const newClaim = isMyClaim ? '' : staffName; // Toggle off if same
 
   try {
     const resp = await fetch(`/api/leads/${leadId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assigned_to: newAssigned }),
+      body: JSON.stringify({ claimed_by: newClaim }),
     });
     const data = await resp.json();
-    if (data.ok || data.id) {
+
+    if (resp.status === 403 && data.locked) {
+      // Someone else claimed — show lock feedback
+      showToast(`🔒 Lead đã được ${data.by} tiếp nhận`, 'warning');
+      return;
+    }
+
+    if (data.ok) {
       // Update pills UI
-      allPills?.forEach(p => p.classList.remove('staff-pill--active'));
-      if (newAssigned) pillBtn?.classList.add('staff-pill--active');
-      // Update badge in author row
-      const authorRow = card?.querySelector('.lead-author');
-      const existingBadge = authorRow?.querySelector('.assigned-badge');
-      if (existingBadge) existingBadge.remove();
-      if (newAssigned && authorRow) {
-        const badge = document.createElement('span');
-        badge.className = 'assigned-badge';
-        badge.innerHTML = `Phụ trách: <strong>${newAssigned}</strong>`;
-        authorRow.appendChild(badge);
+      allPills?.forEach(p => {
+        p.classList.remove('staff-pill--claimed', 'staff-pill--locked');
+        p.disabled = false;
+        p.textContent = p.textContent.replace(' 🛡️', '');
+      });
+
+      if (newClaim) {
+        // Claim: light up claimed pill, dim others
+        pillBtn?.classList.add('staff-pill--claimed');
+        pillBtn.textContent = staffName + ' 🛡️';
+        allPills?.forEach(p => {
+          if (p !== pillBtn) {
+            p.classList.add('staff-pill--locked');
+            p.disabled = true;
+          }
+        });
+        card?.classList.add('lead-card--claimed');
+        showToast(`🛡️ ${staffName} đã tiếp nhận lead`, 'success');
+      } else {
+        // Unclaim
+        card?.classList.remove('lead-card--claimed');
+        showToast(`🔓 Lead đã được nhả`, 'info');
       }
     }
   } catch (err) {
-    console.error('assignStaff error:', err);
+    console.error('claimLead error:', err);
+    showToast('❌ Lỗi khi tiếp nhận lead', 'error');
   }
+}
+
+// ═══════════════════════════════════════════════════════
+// Neural Response — Templates & Tone
+// ═══════════════════════════════════════════════════════
+const TEMPLATES = {
+  quote: {
+    friendly: 'Chào bạn! Em THG Logistics ở đây. Về nhu cầu của bạn, bên em có thể hỗ trợ báo giá chi tiết. Bạn cho em biết thêm về sản phẩm và số lượng nhé, em sẽ gửi bảng giá sớm nhất! 😊',
+    professional: 'Kính gửi Anh/Chị,\n\nTHG Logistics xin gửi lời chào. Chúng tôi đã ghi nhận nhu cầu của Anh/Chị. Để báo giá chính xác, xin vui lòng cung cấp:\n- Loại sản phẩm\n- Số lượng\n- Điểm đến\n\nTrân trọng,\nTHG Logistics Team',
+    concise: 'THG báo giá: Inbox em thông tin sản phẩm + SL, em gửi giá ngay ạ!',
+  },
+  fulfill: {
+    friendly: 'Chào bạn! THG có dịch vụ fulfill chuyên nghiệp, hỗ trợ pick-pack-ship từ kho VN/US/EU. Bạn đang bán trên sàn nào, em tư vấn giải pháp phù hợp nhé! 🚀',
+    professional: 'Kính gửi Anh/Chị,\n\nTHG Logistics cung cấp dịch vụ Fulfillment toàn diện:\n✅ Nhập kho & Quản lý tồn kho\n✅ Pick-Pack-Ship tự động\n✅ Tracking real-time\n\nXin liên hệ để được tư vấn.\nTrân trọng,\nTHG Logistics',
+    concise: 'THG Fulfill: Kho VN/US/EU, pick-pack-ship tự động. Inbox để tư vấn!',
+  },
+  complaint: {
+    friendly: 'Dạ em xin lỗi về sự bất tiện bạn đã gặp phải! Em sẽ kiểm tra và xử lý ngay cho bạn. Bạn gửi em mã đơn hoặc thông tin chi tiết nhé, em ưu tiên giải quyết sớm nhất! 🙏',
+    professional: 'Kính gửi Anh/Chị,\n\nChúng tôi rất tiếc về sự cố này. Đội ngũ THG đã tiếp nhận và đang xử lý ưu tiên.\n\nXin Anh/Chị cung cấp mã vận đơn để chúng tôi truy xuất nhanh nhất.\n\nTrân trọng,\nBộ phận CSKH - THG Logistics',
+    concise: 'Em ghi nhận và sẽ xử lý ngay. Gửi em mã đơn để kiểm tra ạ!',
+  },
+};
+
+function fillTemplate(leadId, caseType) {
+  const card = document.getElementById(`lead-${leadId}`);
+  const tone = card?.dataset?.tone || 'friendly';
+  const textarea = document.getElementById(`response-${leadId}`);
+  if (textarea && TEMPLATES[caseType]?.[tone]) {
+    textarea.value = TEMPLATES[caseType][tone];
+    textarea.style.borderColor = '#22d3ee';
+    setTimeout(() => { textarea.style.borderColor = ''; }, 1500);
+  }
+  // Highlight active template button
+  const btns = card?.querySelectorAll('.template-btn');
+  btns?.forEach(b => b.classList.remove('template-btn--active'));
+  event?.target?.classList.add('template-btn--active');
+}
+
+function setTone(leadId, tone, btnEl) {
+  const card = document.getElementById(`lead-${leadId}`);
+  if (card) card.dataset.tone = tone;
+  // Highlight active tone button
+  const allTones = btnEl?.closest('.tone-selector')?.querySelectorAll('.tone-btn');
+  allTones?.forEach(b => b.classList.remove('tone-btn--active'));
+  btnEl?.classList.add('tone-btn--active');
+  // Re-apply current template if one is active
+  const activeTemplate = card?.querySelector('.template-btn--active');
+  if (activeTemplate) activeTemplate.click();
+}
+
+function showToast(message, type = 'info') {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.classList.add('toast-show'), 50);
+  setTimeout(() => { toast.classList.remove('toast-show'); setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
 

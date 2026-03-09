@@ -855,15 +855,40 @@ app.get('/api/agent/feedback-history', (req, res) => {
     }
 });
 
-// PATCH /api/leads/:id — Update any safe field (assigned_to, status, notes, etc.)
+// PATCH /api/leads/:id — Update fields + Claim & Lock
 app.patch('/api/leads/:id', (req, res) => {
     try {
         const { id } = req.params;
-        const ALLOWED = ['assigned_to', 'status', 'notes', 'suggested_response'];
+        const ALLOWED = ['assigned_to', 'claimed_by', 'claimed_at', 'status', 'notes', 'suggested_response'];
         const updates = Object.fromEntries(
             Object.entries(req.body).filter(([k]) => ALLOWED.includes(k))
         );
         if (!Object.keys(updates).length) return res.status(400).json({ ok: false, error: 'No valid fields' });
+
+        // ═══ CLAIM & LOCK CHECK ═══
+        if (updates.claimed_by !== undefined) {
+            const current = database.db.prepare('SELECT claimed_by, status FROM leads WHERE id = ?').get(id);
+            if (current && current.claimed_by && updates.claimed_by && current.claimed_by !== updates.claimed_by) {
+                // Someone else already claimed this lead → LOCK
+                return res.status(403).json({
+                    ok: false, locked: true,
+                    by: current.claimed_by,
+                    error: `Lead đã được ${current.claimed_by} tiếp nhận`
+                });
+            }
+            // Auto-manage claim state
+            if (updates.claimed_by) {
+                updates.claimed_at = new Date().toISOString();
+                if (!updates.status) updates.status = 'claimed';
+                updates.assigned_to = updates.claimed_by; // Keep assigned_to in sync
+            } else {
+                // Unclaim
+                updates.claimed_at = '';
+                if (!updates.status || updates.status === 'claimed') updates.status = 'new';
+                updates.assigned_to = '';
+            }
+        }
+
         const sets = Object.keys(updates).map(k => `${k} = @${k}`).join(', ');
         database.db.prepare(`UPDATE leads SET ${sets}, updated_at = datetime('now') WHERE id = @id`)
             .run({ ...updates, id });
