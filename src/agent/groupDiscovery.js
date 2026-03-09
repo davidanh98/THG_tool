@@ -199,10 +199,31 @@ function seedGroups() {
         ['CỘNG ĐỒNG VẬN CHUYỂN HÀNG HOÁ VIỆT - MỸ', 'https://www.facebook.com/groups/198874301317672', '198874301317672', 13000, 'fulfillment', 80],
 
         // ═══════════════════════════════════════════════════════
-        // EU / INTERNATIONAL (VERIFIED via Google index)
+        // EU / INTERNATIONAL SELLER GROUPS (VERIFIED via Google index)
         // ═══════════════════════════════════════════════════════
+
+        // === 🇬🇧 UK — Amazon FBA / Ecommerce ===
+        ['Amazon FBA UK', 'https://www.facebook.com/groups/431609530309988', '431609530309988', 0, 'ecommerce-uk', 90],
+        ['Amazon FBA UK Sellers', 'https://www.facebook.com/groups/amazonfbauksellers', null, 0, 'ecommerce-uk', 88],
+        ['Amazon FBA UK - Private Label', 'https://www.facebook.com/groups/608958253952057', '608958253952057', 0, 'ecommerce-uk', 88],
+        ['eBay DropShipping UK', 'https://www.facebook.com/groups/ebaydsuk', null, 0, 'ecommerce-uk', 82],
+        ['Ecommerce UK Sellers', 'https://www.facebook.com/groups/1601344433466856', '1601344433466856', 0, 'ecommerce-uk', 85],
+
+        // === 🇫🇷 FRANCE — Amazon FBA / Shopify / Dropshipping ===
+        ['Vendeur Amazon FBA France', 'https://www.facebook.com/groups/vendeuramazonfbafrance', null, 0, 'ecommerce-fr', 90],
+        ['Dropshipping & E-commerce France', 'https://www.facebook.com/groups/dropshipping.france.shopify', null, 0, 'ecommerce-fr', 88],
+        ['Communauté Shopify France', 'https://www.facebook.com/groups/1730863100534539', '1730863100534539', 0, 'ecommerce-fr', 85],
+        ['Entraide Shopify France', 'https://www.facebook.com/groups/752050182880832', '752050182880832', 0, 'ecommerce-fr', 85],
+
+        // === 🇩🇪 GERMANY — Amazon FBA / Shopify / Dropshipping ===
+        ['Amazon FBA Verkäufer Deutschland', 'https://www.facebook.com/groups/AmazonDeutschland', null, 0, 'ecommerce-de', 90],
+        ['Dropshipping Deutschland', 'https://www.facebook.com/groups/dropshipping.de', null, 0, 'ecommerce-de', 85],
+        ['Shopify Deutschland/Österreich/Schweiz', 'https://www.facebook.com/groups/shopifydeutschland', null, 0, 'ecommerce-de', 85],
+
+        // === 🇪🇺 PAN-EU — Amazon Europe / Cross-border ===
         ['Amazon FBA UK & Europe', 'https://www.facebook.com/groups/1754716777951998', '1754716777951998', 0, 'ecommerce-eu', 88],
-        ['Amazon Fulfillment FBA Sellers Europe', 'https://www.facebook.com/groups/amazoneurope', null, 0, 'ecommerce-eu', 90],
+        ['Amazon Europe Sellers', 'https://www.facebook.com/groups/amazoneurope', null, 0, 'ecommerce-eu', 90],
+        ['Amazon FBA Europe Sellers', 'https://www.facebook.com/groups/amazoneuropesellers', null, 0, 'ecommerce-eu', 88],
         ['Amazon FBA Europe', 'https://www.facebook.com/groups/1007531559318711', '1007531559318711', 0, 'ecommerce-eu', 85],
         ['Amazon DE Sellers Community', 'https://www.facebook.com/groups/971577527971421', '971577527971421', 0, 'ecommerce-eu', 88],
     ];
