@@ -2,6 +2,29 @@
  * app.js — Main application controller (init, state, tab switching, theme)
  */
 
+// ─── Auth Guard — run before anything else ────────────────────────────────────
+(async function checkAuth() {
+    const token = localStorage.getItem('thg_token');
+    if (!token) { window.location.href = '/login'; return; }
+    try {
+        const res = await fetch('/api/auth/me', {
+            headers: { 'Authorization': 'Bearer ' + token },
+            credentials: 'include',
+        });
+        if (!res.ok) throw new Error('401');
+        const data = await res.json();
+        if (!data.ok) throw new Error('invalid');
+        // Show user name in header if element exists
+        const userEl = document.getElementById('headerUserName');
+        if (userEl) userEl.textContent = data.user.name;
+        // Expose user globally
+        window.THGUser = data.user;
+    } catch {
+        localStorage.removeItem('thg_token');
+        window.location.href = '/login';
+    }
+})();
+
 // --- Global App State ---
 const AppState = {
     leads: [],
@@ -31,7 +54,7 @@ function switchTab(tabId, person) {
         const safe = person.replace('Lê Huyền', 'LeHuyen').replace('Ngọc Huyền', 'NgocHuyen').replace(/\s/g, '_');
         navElId = 'tabSales-' + safe;
     } else {
-        const elMap = { leads: 'tabLeads', inbox: 'tabInbox', ignored: 'tabIgnored', data: 'tabData', analytics: 'tabAnalytics', credits: 'tabCredits', groups: 'tabGroups' };
+        const elMap = { leads: 'tabLeads', inbox: 'tabInbox', ignored: 'tabIgnored', data: 'tabData', analytics: 'tabAnalytics', credits: 'tabCredits', groups: 'tabGroups', crawbot: 'tabCrawbot' };
         navElId = elMap[tabId] || null;
     }
     if (navElId) {
@@ -63,6 +86,8 @@ function switchTab(tabId, person) {
 
     const groupsTab = document.getElementById('groupsTab');
     if (groupsTab) groupsTab.style.display = 'none';
+    const crawbotTab = document.getElementById('crawbotTab');
+    if (crawbotTab) crawbotTab.style.display = 'none';
 
     // Stats bar only active on leads
     document.getElementById('statsBar').style.pointerEvents = (tabId === 'leads') ? 'auto' : 'none';
@@ -114,6 +139,10 @@ function switchTab(tabId, person) {
         document.getElementById('pageTitleText').textContent = '🏆 Leaderboard — Hall of Fame';
         if (typeof loadLeaderboard === 'function') loadLeaderboard();
         if (typeof startLiveTicker === 'function') startLiveTicker();
+    } else if (tabId === 'crawbot') {
+        if (crawbotTab) crawbotTab.style.display = 'block';
+        document.getElementById('pageTitleText').textContent = '🏗️ Tổng Quan Hệ Thống THG';
+        if (typeof onCrawbotTabOpen === 'function') onCrawbotTabOpen();
     }
 }
 
@@ -205,3 +234,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (AppState.currentTab === 'leads') loadLeads();
     }, 60000);
 });
+
+// ─── Logout ────────────────────────────────────────────────────────────────────
+async function doLogout() {
+    try {
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch { }
+    localStorage.removeItem('thg_token');
+    localStorage.removeItem('thg_user');
+    window.location.href = '/login';
+}

@@ -1,24 +1,18 @@
 /**
- * THG Lead Gen — Multi-Platform Scraper v7 (SociaVault)
- * 
- * All scraping powered by SociaVault REST API:
- * - Facebook: Group Posts scraping
- * - Instagram: Hashtag search
- * - TikTok: Keyword search
- * 
- * Clean single-source pipeline. No more Apify/RapidAPI/PhantomBuster.
+ * THG Lead Gen — Multi-Platform Scraper (Self-Hosted Only)
+ *
+ * Pipeline: Playwright Stealth → mbasic.facebook.com → FB session cookie → posts
+ *
+ * SociaVault removed (credits exhausted). This is now the sole scraping engine.
  */
 
 const config = require('../config');
-const sv = require('./sociaVault');
+const fbScraper = require('../agents/fbScraper');
+const { contentHash } = require('../agent/memoryStore');
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
-const { contentHash } = require('../agent/memoryStore');
-
-// ═══════════════════════════════════════════════════════
-// Dedup helper — compound key to preserve comments
-// ═══════════════════════════════════════════════════════
+// ── Dedup — compound key to prevent storing duplicates ────────────────────────
 function dedup(posts) {
     const seen = new Set();
     return posts.filter(p => {
@@ -29,7 +23,7 @@ function dedup(posts) {
             p.post_url || '',
             p.author_name || '',
             p.post_created_at || '',
-            h
+            h,
         ].join('|');
         if (seen.has(key)) return false;
         seen.add(key);
@@ -37,53 +31,39 @@ function dedup(posts) {
     });
 }
 
-// ═══════════════════════════════════════════════════════
-// Platform scrapers — all SociaVault
-// ═══════════════════════════════════════════════════════
-
-async function scrapeFacebook(_keywords, maxPosts = 20) {
-    console.log('[Scraper:FB] 📘 Scraping Facebook via SociaVault...');
+// ── Facebook ──────────────────────────────────────────────────────────────────
+async function scrapeFacebook(_keywords, maxPosts = 30) {
+    console.log('[Scraper:FB] 📘 Scraping Facebook via Playwright (self-hosted)...');
     try {
-        const posts = await sv.scrapeFacebookGroups(maxPosts);
-        console.log(`[Scraper:FB] ✅ ${posts.length} posts`);
-        return dedup(posts);
+        const posts = await fbScraper.scrapeFacebookGroups(maxPosts);
+        const deduped = dedup(posts);
+        console.log(`[Scraper:FB] ✅ ${deduped.length} posts (before dedup: ${posts.length})`);
+        return deduped;
     } catch (err) {
         console.error(`[Scraper:FB] ❌ ${err.message}`);
         return [];
     }
 }
 
-async function scrapeInstagram(_hashtags, maxPosts = 30) {
-    console.log('[Scraper:IG] 📷 Scraping Instagram via SociaVault...');
-    try {
-        const posts = await sv.scrapeInstagram(maxPosts);
-        console.log(`[Scraper:IG] ✅ ${posts.length} posts`);
-        return dedup(posts);
-    } catch (err) {
-        console.error(`[Scraper:IG] ❌ ${err.message}`);
-        return [];
-    }
+// ── Instagram ─────────────────────────────────────────────────────────────────
+// Placeholder — add Playwright IG scraper when ready
+async function scrapeInstagram(_hashtags, _maxPosts = 30) {
+    console.log('[Scraper:IG] ⏭ Instagram scraper not yet implemented in self-hosted mode.');
+    return [];
 }
 
-async function scrapeTikTok(_keywords, maxPosts = 20) {
-    console.log('[Scraper:TT] 🎵 Scraping TikTok via SociaVault...');
-    try {
-        const posts = await sv.scrapeTikTok(maxPosts);
-        console.log(`[Scraper:TT] ✅ ${posts.length} posts`);
-        return dedup(posts);
-    } catch (err) {
-        console.error(`[Scraper:TT] ❌ ${err.message}`);
-        return [];
-    }
+// ── TikTok ────────────────────────────────────────────────────────────────────
+// Placeholder — add Playwright TT scraper when ready
+async function scrapeTikTok(_keywords, _maxPosts = 20) {
+    console.log('[Scraper:TT] ⏭ TikTok scraper not yet implemented in self-hosted mode.');
+    return [];
 }
 
-// ═══════════════════════════════════════════════════════
-// Full Scan Orchestrator
-// ═══════════════════════════════════════════════════════
+// ── Full Scan Orchestrator ────────────────────────────────────────────────────
 const SCRAPERS = {
-    facebook: { fn: scrapeFacebook, getKeywords: () => [] },
-    instagram: { fn: scrapeInstagram, getKeywords: () => config.SEARCH_KEYWORDS?.instagram || [] },
-    tiktok: { fn: scrapeTikTok, getKeywords: () => config.SEARCH_KEYWORDS?.tiktok || [] },
+    facebook: { fn: scrapeFacebook },
+    instagram: { fn: scrapeInstagram },
+    tiktok: { fn: scrapeTikTok },
 };
 
 async function runFullScan(options = {}) {
@@ -91,23 +71,25 @@ async function runFullScan(options = {}) {
     const maxPerPlatform = options.maxPosts || config.MAX_POSTS_PER_SCAN || 30;
 
     console.log(`\n${'═'.repeat(55)}`);
-    console.log(`  🔵 SociaVault API — All platforms`);
-    console.log(`  📊 Max per platform: ${maxPerPlatform} posts`);
+    console.log(`  🤖 THG Self-Hosted Scraper — Playwright Engine`);
+    console.log(`  📊 Platforms: ${platforms.join(', ')} | Max: ${maxPerPlatform}/platform`);
     console.log(`${'═'.repeat(55)}\n`);
 
     const results = {};
     for (const platform of platforms) {
         const scraper = SCRAPERS[platform];
-        if (!scraper) { console.error(`[Scraper] Unknown platform: ${platform}`); continue; }
+        if (!scraper) {
+            console.error(`[Scraper] Unknown platform: ${platform}`);
+            continue;
+        }
         try {
-            const keywords = scraper.getKeywords();
-            results[platform] = await scraper.fn(keywords, maxPerPlatform);
+            results[platform] = await scraper.fn([], maxPerPlatform);
             console.log(`[Scraper] ✅ ${platform}: ${results[platform].length} posts\n`);
         } catch (err) {
             console.error(`[Scraper] ❌ ${platform}: ${err.message}`);
             results[platform] = [];
         }
-        await delay(3000);
+        await delay(2000);
     }
 
     const total = Object.values(results).reduce((sum, arr) => sum + arr.length, 0);
@@ -119,7 +101,4 @@ async function runFullScan(options = {}) {
     return results;
 }
 
-module.exports = {
-    scrapeFacebook, scrapeInstagram,
-    scrapeTikTok, runFullScan,
-};
+module.exports = { scrapeFacebook, scrapeInstagram, scrapeTikTok, runFullScan };

@@ -20,11 +20,13 @@ const fs = require('fs');
 const path = require('path');
 const { pool } = require('../proxy/proxyPool');
 const { generateFingerprint } = require('../proxy/fingerprint');
+const accountManager = require('../agent/accountManager');
 
 chromium.use(StealthPlugin());
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms + Math.random() * 1500));
 const FB_URL = 'https://www.facebook.com';
+// Legacy single-account session path (fallback)
 const COOKIES_PATH = path.join(__dirname, '..', '..', 'data', 'fb_session.json');
 
 const FB_EMAIL = process.env.FB_EMAIL || '';
@@ -91,13 +93,14 @@ async function saveSession(context) {
 }
 
 /**
- * Load saved session cookies
+ * Load saved session cookies for a specific account
  */
-function loadSession() {
+function loadSession(sessionPath) {
+    const p = sessionPath || COOKIES_PATH;
     try {
-        if (fs.existsSync(COOKIES_PATH)) {
-            const cookies = JSON.parse(fs.readFileSync(COOKIES_PATH, 'utf8'));
-            console.log(`[FBScraper] 📂 Loaded saved session (${cookies.length} cookies)`);
+        if (fs.existsSync(p)) {
+            const cookies = JSON.parse(fs.readFileSync(p, 'utf8'));
+            console.log(`[FBScraper] 📂 Loaded session: ${path.basename(p)} (${cookies.length} cookies)`);
             return cookies;
         }
     } catch (e) {
@@ -210,15 +213,31 @@ async function loginToFacebook(page) {
 }
 
 /**
- * Get or create an authenticated browser context
+ * Get or create an authenticated browser context.
+ * Now account-aware: uses AccountManager for rotation + per-account session/proxy.
+ * @param {object|null} account - from accountManager.getNextAccount()
  */
-async function getAuthContext() {
+async function getAuthContext(account = null) {
+    // Use provided account or fall back to env credentials
+    const accEmail = account?.email || FB_EMAIL;
+    const accPassword = account?.password || FB_PASSWORD;
+    const accProxy = account?.proxy_url || '';
+    const sessionPath = account ? accountManager.getSessionPath(account) : COOKIES_PATH;
+
     sessionAge++;
 
-    // Rotate browser session periodically
+    // Rotate browser session periodically (or when account changes)
     if (activeBrowser && sessionAge > MAX_SESSION_AGE) {
         console.log('[FBScraper] 🔄 Rotating browser session...');
-        if (activeContext) await saveSession(activeContext);
+        if (activeContext) {
+            // Save session to account-specific path
+            try {
+                const cookies = await activeContext.cookies();
+                fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
+                fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
+                console.log(`[FBScraper] 💾 Session saved → ${path.basename(sessionPath)}`);
+            } catch { }
+        }
         try { await activeBrowser.close(); } catch { }
         activeBrowser = null;
         activeContext = null;
@@ -228,11 +247,24 @@ async function getAuthContext() {
 
     if (activeContext && isLoggedIn) return activeContext;
 
-    // Build launch options
+    // ── Build launch options ──
     const launchOptions = { headless: true };
 
-    // Proxy support
-    if (pool.loaded && pool.hasProxies()) {
+    // Per-account proxy (1 account : 1 proxy — prevents Chain-ban)
+    if (accProxy) {
+        try {
+            const pUrl = new URL(accProxy);
+            launchOptions.proxy = {
+                server: `${pUrl.protocol}//${pUrl.hostname}:${pUrl.port}`,
+            };
+            if (pUrl.username) {
+                launchOptions.proxy.username = decodeURIComponent(pUrl.username);
+                launchOptions.proxy.password = decodeURIComponent(pUrl.password);
+            }
+            console.log(`[FBScraper] 🔒 Using dedicated proxy for ${accEmail}`);
+        } catch { }
+    } else if (pool.loaded && pool.hasProxies()) {
+        // Fallback: shared proxy pool (less safe)
         const best = pool.getBestProxy();
         if (best) {
             try {
@@ -258,7 +290,7 @@ async function getAuthContext() {
         timezoneId: 'America/New_York',
     });
 
-    // Block images, fonts, CSS to speed up page loads (~3-5s faster per group)
+    // Block images, fonts, CSS to speed up page loads
     await activeContext.route('**/*', (route) => {
         const type = route.request().resourceType();
         if (['image', 'font', 'stylesheet', 'media'].includes(type)) {
@@ -267,47 +299,73 @@ async function getAuthContext() {
         return route.continue();
     });
 
-    // Try loading saved session first
-    const savedCookies = loadSession();
+    // Try loading saved session first (account-specific)
+    const savedCookies = loadSession(sessionPath);
     if (savedCookies && savedCookies.length > 0) {
         await activeContext.addCookies(savedCookies);
-        console.log(`[FBScraper] 🍪 Restored saved session`);
+        console.log(`[FBScraper] 🍪 Restored session: ${accEmail}`);
 
-        // Verify session is still valid
         const page = await activeContext.newPage();
         await page.goto(`${FB_URL}`, { waitUntil: 'domcontentloaded', timeout: 25000 });
         await delay(3000);
 
         const url = page.url();
-        const hasNav = await page.$('div[role="navigation"], div[aria-label="Facebook"]');
 
+        // ── Checkpoint detection ──
+        if (url.includes('checkpoint') || url.includes('two_step') ||
+            await page.$('text="Confirm your identity"') ||
+            await page.$('text="Xác nhận danh tính"')) {
+            console.log(`[FBScraper] 🚨 CHECKPOINT trên session của ${accEmail}!`);
+            if (account) accountManager.reportCheckpoint(account.id);
+            await page.close();
+            throw new Error(`Checkpoint: ${accEmail}`);
+        }
+
+        const hasNav = await page.$('div[role="navigation"], div[aria-label="Facebook"]');
         if (hasNav && !url.includes('/login')) {
-            console.log(`[FBScraper] ✅ Saved session valid — skipping login`);
+            console.log(`[FBScraper] ✅ Session valid: ${accEmail}`);
             isLoggedIn = true;
             await page.close();
             return activeContext;
         }
 
-        console.log(`[FBScraper] ⚠️ Saved session expired, re-logging in...`);
+        console.log(`[FBScraper] ⚠️ Session expired: ${accEmail} — đăng nhập lại...`);
         await page.close();
     }
 
-    // Login with credentials
-    const page = await activeContext.newPage();
-    const success = await loginToFacebook(page);
-    await page.close();
+    // ── Login ──
+    // Temporarily override env vars so loginToFacebook uses the right account
+    const prevEmail = process.env.FB_EMAIL;
+    const prevPassword = process.env.FB_PASSWORD;
+    process.env.FB_EMAIL = accEmail;
+    process.env.FB_PASSWORD = accPassword;
+
+    const loginPage = await activeContext.newPage();
+    const success = await loginToFacebook(loginPage);
+    await loginPage.close();
+
+    process.env.FB_EMAIL = prevEmail;
+    process.env.FB_PASSWORD = prevPassword;
 
     if (success) {
-        await saveSession(activeContext);
+        // Save account-specific session
+        try {
+            const cookies = await activeContext.cookies();
+            fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
+            fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
+            console.log(`[FBScraper] 💾 New session saved → ${path.basename(sessionPath)}`);
+        } catch (e) {
+            console.warn(`[FBScraper] ⚠️ Session save failed: ${e.message}`);
+        }
     } else {
-        throw new Error('Facebook login failed');
+        if (account) accountManager.reportCheckpoint(account.id);
+        throw new Error(`Login failed: ${accEmail}`);
     }
 
     return activeContext;
 }
 
 async function closeBrowser() {
-    if (activeContext) await saveSession(activeContext);
     if (activeBrowser) try { await activeBrowser.close(); } catch { }
     activeBrowser = null;
     activeContext = null;
@@ -330,28 +388,44 @@ function extractGroupId(url) {
 
 /**
  * Get posts from a Facebook group (with 2-minute timeout).
- * Uses authenticated Playwright session on www.facebook.com.
- * Output format matches SociaVault fbGetGroupPosts.
+ * Uses AccountManager for multi-account rotation.
  */
 async function getGroupPosts(groupUrl, groupName) {
+    // ── Time window check: only scrape during active hours ──
+    if (!accountManager.isInActiveWindow()) {
+        console.log(`[CrawBot] 🌙 Ngoài giờ hoạt động (8h-23h VN) — bỏ qua ${groupName}`);
+        return [];
+    }
+
+    // ── Get next available account ──
+    const account = accountManager.getNextAccount();
+    if (!account) {
+        console.log(`[CrawBot] ❌ Không có tài khoản nào sẵn sàng — bỏ qua ${groupName}`);
+        return [];
+    }
+
     const timeout = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('⏰ Group timeout (2min)')), 120000)
     );
     try {
-        return await Promise.race([timeout, _getGroupPostsInner(groupUrl, groupName)]);
+        const posts = await Promise.race([timeout, _getGroupPostsInner(groupUrl, groupName, account)]);
+        // Report success back to AccountManager
+        if (posts.length >= 0) accountManager.reportSuccess(account.id, posts.length);
+        return posts;
     } catch (err) {
-        console.warn(`[FBScraper] ⚠️ ${groupName}: ${err.message}`);
+        console.warn(`[CrawBot] ⚠️ ${groupName}: ${err.message}`);
+        // If it's a checkpoint error, it was already reported inside getAuthContext()
         return [];
     }
 }
 
-async function _getGroupPostsInner(groupUrl, groupName) {
+async function _getGroupPostsInner(groupUrl, groupName, account = null) {
     const groupId = extractGroupId(groupUrl);
     if (!groupId) return [];
 
     let page = null;
     try {
-        const context = await getAuthContext();
+        const context = await getAuthContext(account);
         page = await context.newPage();
 
         console.log(`[FBScraper] 📥 ${groupName}`);

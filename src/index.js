@@ -249,6 +249,7 @@ async function runPipeline(options = {}) {
                     gap_opportunity: lead.gapOpportunity || '',
                     pain_score: lead.painScore || 0,
                     spam_score: lead.spamScore || 0,
+                    item_type: lead.item_type || 'post',
                 });
                 totalLeads++;
                 if (stats.platforms[lead.platform]) stats.platforms[lead.platform].leads++;

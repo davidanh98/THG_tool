@@ -72,7 +72,59 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_leads_platform ON leads(platform);
   CREATE INDEX IF NOT EXISTS idx_leads_category ON leads(category);
   CREATE INDEX IF NOT EXISTS idx_conv_status ON conversations(status);
+
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'sales',
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 `);
+
+// ── Seed admin account from .env if users table is empty ──────────────────
+(async () => {
+  try {
+    const count = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+    if (count === 0) {
+      const adminEmail = process.env.ADMIN_EMAIL;
+      const adminPass = process.env.ADMIN_PASSWORD;
+      const adminName = process.env.ADMIN_NAME || 'Admin';
+      if (adminEmail && adminPass) {
+        const bcrypt = require('bcrypt');
+        const hash = await bcrypt.hash(adminPass, 12);
+        db.prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)').run(adminName, adminEmail.toLowerCase(), hash, 'admin');
+        console.log(`[Auth] Admin account seeded: ${adminEmail}`);
+      }
+    }
+  } catch (e) { /* bcrypt not yet available on first require */ }
+})();
+
+// --- raw_leads staging table (CrawBot async pipeline) ---
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS raw_leads (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      url         TEXT UNIQUE NOT NULL,
+      author      TEXT DEFAULT '',
+      author_url  TEXT DEFAULT '',
+      content     TEXT NOT NULL,
+      platform    TEXT DEFAULT 'facebook',
+      group_name  TEXT DEFAULT '',
+      scraped_at  TEXT DEFAULT (datetime('now')),
+      received_at TEXT DEFAULT (datetime('now')),
+      status      TEXT DEFAULT 'PENDING',
+      -- PENDING | PROCESSING | QUALIFIED | REJECTED
+      reject_reason TEXT DEFAULT '',
+      score       INTEGER DEFAULT 0,
+      assigned_to TEXT DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_raw_leads_status ON raw_leads(status);
+    CREATE INDEX IF NOT EXISTS idx_raw_leads_url    ON raw_leads(url);
+  `);
+} catch { /* table already exists */ }
 
 // --- Schema migration: add role & buyer_signals columns if missing ---
 try {
@@ -211,6 +263,9 @@ try {
 try {
   db.exec(`ALTER TABLE leads ADD COLUMN spam_score INTEGER DEFAULT 0`);
 } catch { /* column already exists */ }
+try {
+  db.exec(`ALTER TABLE leads ADD COLUMN item_type TEXT DEFAULT 'post'`);
+} catch { /* column already exists */ }
 
 // ─── Personal Agent Profiles ───────────────────────────────────────────────
 db.exec(`
@@ -256,6 +311,77 @@ const toggleAgentTakeover = (name) => {
   return next;
 };
 
+// ─── Migrations: extend agent_profiles ────────────────────────────────────
+try { db.exec(`ALTER TABLE agent_profiles ADD COLUMN mode TEXT DEFAULT 'learning'`); } catch { }
+try { db.exec(`ALTER TABLE agent_profiles ADD COLUMN avatar TEXT DEFAULT ''`); } catch { }
+
+// ─── Chat History (source for style learning) ──────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS chat_history (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    sales_name  TEXT    NOT NULL,
+    lead_id     INTEGER DEFAULT 0,
+    direction   TEXT    NOT NULL,   -- 'sales' | 'customer'
+    message     TEXT    NOT NULL,
+    is_teaching INTEGER DEFAULT 0,  -- 1 = Sales đánh dấu "Dạy Agent"
+    created_at  TEXT    DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_chat_sales ON chat_history(sales_name, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_chat_teach ON chat_history(sales_name, is_teaching);
+`);
+
+// ─── Sales Styles (AI-extracted tone profiles) ─────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sales_styles (
+    sales_name      TEXT PRIMARY KEY,
+    tone_profile    TEXT DEFAULT '{}',   -- JSON: greeting, pronouns, icons, formality, avg_length
+    writing_samples TEXT DEFAULT '[]',   -- JSON array: 10-20 câu mẫu tốt nhất
+    sample_count    INTEGER DEFAULT 0,
+    last_extracted  TEXT DEFAULT '',
+    updated_at      TEXT DEFAULT (datetime('now'))
+  );
+`);
+
+// Seed styles row for each agent (safe to re-run)
+const seedStyle = db.prepare(`INSERT OR IGNORE INTO sales_styles (sales_name) VALUES (?)`);
+for (const name of SALES_TEAM) {
+  try { seedStyle.run(name); } catch (_) { }
+}
+
+// ─── chat_history helpers ──────────────────────────────────────────────────
+const logChatMessage = (salesName, leadId, direction, message, isTeaching = 0) =>
+  db.prepare(`
+    INSERT INTO chat_history (sales_name, lead_id, direction, message, is_teaching)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(salesName, leadId || 0, direction, message, isTeaching ? 1 : 0);
+
+const getRecentChats = (salesName, limit = 50) =>
+  db.prepare(`
+    SELECT * FROM chat_history
+    WHERE sales_name = ? AND direction = 'sales'
+    ORDER BY created_at DESC LIMIT ?
+  `).all(salesName, limit);
+
+const getTeachingSamples = (salesName) =>
+  db.prepare(`
+    SELECT message FROM chat_history
+    WHERE sales_name = ? AND is_teaching = 1 AND direction = 'sales'
+    ORDER BY created_at DESC LIMIT 20
+  `).all(salesName).map(r => r.message);
+
+const markTeachingSample = (chatId) =>
+  db.prepare(`UPDATE chat_history SET is_teaching = 1 WHERE id = ?`).run(chatId);
+
+const getSalesStyle = (salesName) =>
+  db.prepare(`SELECT * FROM sales_styles WHERE sales_name = ?`).get(salesName);
+
+const saveSalesStyle = (salesName, toneProfile, writingSamples, sampleCount) =>
+  db.prepare(`
+    UPDATE sales_styles
+    SET tone_profile = ?, writing_samples = ?, sample_count = ?,
+        last_extracted = datetime('now'), updated_at = datetime('now')
+    WHERE sales_name = ?
+  `).run(JSON.stringify(toneProfile), JSON.stringify(writingSamples), sampleCount, salesName);
 
 
 // ─── Gamification: Sales Performance & Points ─────────────────────────────
@@ -351,8 +477,8 @@ const getPointsLog = (limit = 20) =>
 
 
 const insertLead = db.prepare(`
-  INSERT OR IGNORE INTO leads (platform, post_url, author_name, author_url, author_avatar, content, score, category, summary, urgency, suggested_response, role, buyer_signals, scraped_at, post_created_at, profit_estimate, gap_opportunity, pain_score, spam_score)
-  VALUES (@platform, @post_url, @author_name, @author_url, @author_avatar, @content, @score, @category, @summary, @urgency, @suggested_response, @role, @buyer_signals, @scraped_at, @post_created_at, @profit_estimate, @gap_opportunity, @pain_score, @spam_score)
+  INSERT OR IGNORE INTO leads (platform, post_url, author_name, author_url, author_avatar, content, score, category, summary, urgency, suggested_response, role, buyer_signals, scraped_at, post_created_at, profit_estimate, gap_opportunity, pain_score, spam_score, item_type)
+  VALUES (@platform, @post_url, @author_name, @author_url, @author_avatar, @content, @score, @category, @summary, @urgency, @suggested_response, @role, @buyer_signals, @scraped_at, @post_created_at, @profit_estimate, @gap_opportunity, @pain_score, @spam_score, @item_type)
 `);
 
 const getLeads = (filters = {}) => {
@@ -364,17 +490,20 @@ const getLeads = (filters = {}) => {
     params.platform = filters.platform;
   }
   if (filters.category) {
-    if (filters.category === 'Fulfill') {
+    const cat = filters.category;
+    // Support both exact DB values ('THG Fulfillment') and nav shorthand ('Fulfill')
+    if (cat === 'THG Fulfillment' || cat === 'Fulfill') {
       query += " AND category IN ('THG Fulfillment', 'Fulfillment', 'POD', 'Dropship', 'THG Fulfill')";
-    } else if (filters.category === 'Express') {
+    } else if (cat === 'THG Express' || cat === 'Express') {
       query += " AND category IN ('THG Express', 'Express')";
-    } else if (filters.category === 'Warehouse') {
+    } else if (cat === 'THG Warehouse' || cat === 'Warehouse') {
       query += " AND category IN ('THG Warehouse', 'Warehouse')";
-    } else if (filters.category === 'General') {
+    } else if (cat === 'General') {
       query += " AND (category IN ('General', 'NotRelevant') OR category IS NULL OR category = '')";
     } else {
-      query += ' AND category = @category';
-      params.category = filters.category;
+      // Fallback: LIKE search so partial names still match
+      query += ' AND category LIKE @category';
+      params.category = `%${cat}%`;
     }
   }
   if (filters.status) {
@@ -626,6 +755,13 @@ module.exports = {
   awardPoints,
   getLeaderboard,
   getPointsLog,
+  // Chat history & style learning
+  logChatMessage,
+  getRecentChats,
+  getTeachingSamples,
+  markTeachingSample,
+  getSalesStyle,
+  saveSalesStyle,
   db,
 };
 

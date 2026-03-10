@@ -28,14 +28,18 @@ function renderLeadsList(leadsArray, gridId = 'leadsGrid') {
     if (gridId === 'ignoredGrid') return true;
     if (currentCat && currentCat !== 'All') {
       const cat = lead.category || '';
-      if (currentCat === 'Fulfill') {
+      // Support both old nav shorthand and new full DB names
+      if (currentCat === 'THG Fulfillment' || currentCat === 'Fulfill') {
         if (!['THG Fulfillment', 'Fulfillment', 'POD', 'Dropship', 'THG Fulfill'].includes(cat)) return false;
-      } else if (currentCat === 'Express') {
+      } else if (currentCat === 'THG Express' || currentCat === 'Express') {
         if (cat !== 'Express' && cat !== 'THG Express') return false;
-      } else if (currentCat === 'Warehouse') {
+      } else if (currentCat === 'THG Warehouse' || currentCat === 'Warehouse') {
         if (cat !== 'Warehouse' && cat !== 'THG Warehouse') return false;
       } else if (currentCat === 'General') {
         if (!['General', 'NotRelevant', ''].includes(cat)) return false;
+      } else {
+        // Generic: partial match
+        if (!cat.toLowerCase().includes(currentCat.toLowerCase())) return false;
       }
     }
     if (!filterDate && !filterTime) return true;
@@ -83,7 +87,7 @@ function renderLeadTableRow(lead, gridId) {
   const scoreLabel = score >= 80 ? '🔥 HOT' : score >= 60 ? '⚡ WARM' : '💤 LOW';
 
   const platformMap = {
-    facebook: { icon: '📘', label: 'Facebook', color: '#4096ff' },
+    facebook: { icon: '📘', label: 'Facebook', color: '#1877f2' },
     instagram: { icon: '📷', label: 'Instagram', color: '#e1306c' },
     tiktok: { icon: '🎵', label: 'TikTok', color: '#ff0050' },
   };
@@ -110,14 +114,49 @@ function renderLeadTableRow(lead, gridId) {
   const status = statusMap[lead.status] || statusMap['new'];
 
   const author = escapeHtml(lead.author_name || 'Unknown');
-  const summary = escapeHtml((lead.gap_opportunity || lead.summary || lead.content || '').substring(0, 130));
+
+  // ── Smart summary: skip trivial values like "có", pick first meaningful text ──
+  const TRIVIAL = /^(có|co|yes|ok|oke|không|khong|no|na|\.+|-+)$/i;
+  const rawSummary = [lead.gap_opportunity, lead.summary, lead.content]
+    .map(s => (s || '').trim())
+    .find(s => s.length > 8 && !TRIVIAL.test(s)) || '';
+  const summary = escapeHtml(rawSummary.substring(0, 140));
+  const summaryDisplay = summary
+    ? summary
+    : '<em style="opacity:0.38;font-style:italic;font-size:0.78rem">Chưa có tóm tắt</em>';
+
   const dt = getPostDate(lead);
   const dateLabel = dt.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
   const timeLabel = String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
 
   const isClaimed = !!(lead.claimed_by || lead.assigned_to);
-  const urgencyDot = lead.urgency === 'critical' ? '<span class="urgency-dot urgency-critical" title="Critical"></span>' :
-    lead.urgency === 'high' ? '<span class="urgency-dot urgency-high" title="High urgency"></span>' : '';
+  const urgencyDot = lead.urgency === 'critical'
+    ? '<span class="urgency-dot urgency-critical" title="Critical"></span>'
+    : lead.urgency === 'high'
+      ? '<span class="urgency-dot urgency-high" title="High urgency"></span>'
+      : '';
+
+  // ── Platform cell: type-aware (post vs comment) ──
+  const rawPostUrl = lead.post_url || '';
+  const rawAuthorUrl = lead.author_url || '';
+  const isComment = (lead.item_type === 'comment');
+
+  // For comments: show 💬 icon in amber; for posts: show platform emoji in brand color
+  const linkIcon = isComment ? '💬' : platform.icon;
+  const linkLabel = isComment ? 'Comment' : platform.label;
+  const linkColor = isComment ? '#f59e0b' : platform.color;
+  const linkTitle = isComment
+    ? `💬 Comment trên bài post ${platform.label} — Click để xem bài viết gốc`
+    : `🔗 Xem bài đăng ${platform.label}`;
+
+  const postIconEl = rawPostUrl
+    ? `<a href="${rawPostUrl}" target="_blank" rel="noopener noreferrer" title="${linkTitle}" style="text-decoration:none;font-size:1.2rem;line-height:1;display:block">${linkIcon}</a>`
+    : `<span style="font-size:1.2rem;opacity:0.5" title="Không có link">${linkIcon}</span>`;
+
+  // ── Seller cell: name → author profile link ──
+  const sellerEl = rawAuthorUrl
+    ? `<a href="${rawAuthorUrl}" target="_blank" rel="noopener noreferrer" title="👤 Xem profile người đăng" class="author-name author-link-cell">${author}</a>`
+    : `<span class="author-name">${author}</span>`;
 
   return `
     <tr class="ant-tr${isClaimed ? ' ant-tr-claimed' : ''}" onclick="openLeadDetail(${lead.id})" title="Click to open The Closing Room">
@@ -127,18 +166,21 @@ function renderLeadTableRow(lead, gridId) {
           <span class="score-lbl">${scoreLabel}</span>
         </div>
       </td>
-      <td class="ant-td">
-        <span style="color:${platform.color};font-weight:500;font-size:0.82rem">${platform.icon} ${platform.label}</span>
+      <td class="ant-td" style="text-align:center" onclick="event.stopPropagation()">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+          ${postIconEl}
+          <span style="color:${linkColor};font-weight:600;font-size:0.76rem;letter-spacing:0.02em">${linkLabel}</span>
+        </div>
       </td>
-      <td class="ant-td">
+      <td class="ant-td" onclick="event.stopPropagation()">
         <div class="author-cell">
           ${urgencyDot}
-          <span class="author-name">${author}</span>
+          ${sellerEl}
           ${isClaimed ? '<span class="claimed-badge" title="Being handled">⚡</span>' : ''}
         </div>
       </td>
       <td class="ant-td">
-        <div class="summary-cell">${summary}</div>
+        <div class="summary-cell">${summaryDisplay}</div>
       </td>
       <td class="ant-td">
         <span class="category-tag" style="color:${catInfo.color};border-color:${catInfo.color}55;background:${catInfo.color}18">${catInfo.label}</span>
@@ -1105,9 +1147,17 @@ function filterByMenu(category, btnEl) {
     if (groupHeader) groupHeader.classList.add('active');
   }
 
-  // 3. Set category
+  // 3. Set category + clear stale search/date filters
   AppState.currentCategory = category === 'All' ? '' : category;
   AppState.currentTab = 'leads';
+
+  // Clear search & date so previous filter doesn't block new category results
+  const searchEl = document.getElementById('filterSearch');
+  const dateEl = document.getElementById('filterDate');
+  const timeEl = document.getElementById('filterTime');
+  if (searchEl) searchEl.value = '';
+  if (dateEl) dateEl.value = '';
+  if (timeEl) timeEl.value = '';
 
   // 4. Show leadsTab, hide ALL other tabs (fixes: switching from Analytics/Data to leads)
   const allTabDivs = ['leadsTab', 'inboxTab', 'dataTab', 'analyticsTab', 'creditsTab', 'ignoredTab', 'groupsTab'];
@@ -1124,7 +1174,12 @@ function filterByMenu(category, btnEl) {
   const statsBar = document.getElementById('statsBar');
   if (statsBar) { statsBar.style.opacity = '1'; statsBar.style.pointerEvents = 'auto'; }
 
-  // 6. Fetch and render
-  loadLeads();
+  // 6. Render instantly from cache if data exists, then refresh in background
+  if (AppState.leads && AppState.leads.length > 0) {
+    renderLeads(); // instant UI update from cache
+    loadLeads();   // background refresh to get filtered data from API
+  } else {
+    loadLeads();   // first load — must fetch
+  }
 }
 

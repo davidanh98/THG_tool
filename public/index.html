@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 
 <head>
@@ -28,7 +28,26 @@
             <div class="logo-sub">AI Cyborg Pipeline</div>
           </div>
         </div>
-      </div>
+        <!-- Auth User Badge -->
+        <div id="authUserBadge" style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:8px 10px;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.2);border-radius:10px;font-size:0.78rem;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <div style="width:26px;height:26px;background:linear-gradient(135deg,#a78bfa,#60a5fa);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;">&#9786;</div>
+            <span id="headerUserName" style="color:#e2e8f0;font-weight:500;">...</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:2px;">
+            <button onclick="openChangePw()" title="&#272;&#7893;i m&#7853;t kh&#7849;u"
+              style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:0.85rem;padding:3px 7px;border-radius:6px;transition:all 0.2s;"
+              onmouseover="this.style.color='#a78bfa'" onmouseout="this.style.color='rgba(255,255,255,0.35)'">
+              &#128273;
+            </button>
+            <button onclick="doLogout()" title="&#272;&#259;ng xu&#7845;t"
+              style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:0.85rem;padding:3px 7px;border-radius:6px;transition:all 0.2s;"
+              onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='rgba(255,255,255,0.35)'">
+              &#128682;
+            </button>
+          </div>
+        </div>
+
 
       <nav class="sidebar-nav">
         <!-- NEW: ANT DESIGN NESTED MENU FOR LEADS -->
@@ -137,10 +156,7 @@
             <button class="nav-sub-item" id="tabAnalytics" onclick="switchTab('analytics')">
               <span class="nav-text">📈 Analytics</span>
             </button>
-            <button class="nav-sub-item" id="tabCredits" onclick="switchTab('credits')">
-              <span class="nav-text">💳 Credits</span>
-              <span class="nav-badge" id="tabCreditsCount" style="margin-left:auto">0</span>
-            </button>
+            
             <button class="nav-sub-item" id="tabGroups" onclick="switchTab('groups')">
               <span class="nav-text" style="color:#0ea5e9">👥 Group Discovery</span>
               <span class="nav-badge" id="tabGroupsCount"
@@ -153,6 +169,13 @@
           <span class="nav-icon" style="color:#ef4444">⛔</span>
           <span class="nav-text" style="color:#ef4444">Agent Training</span>
           <span class="nav-badge" id="tabIgnoredCount" style="background:rgba(239,68,68,0.1);color:#ef4444">0</span>
+        </button>
+
+        <button class="nav-item" id="tabCrawbot" onclick="switchTab('crawbot')">
+          <span class="nav-icon">🏗️</span>
+          <span class="nav-text">Tổng Quan Hệ Thống</span>
+          <span class="nav-badge"
+            style="margin-left:auto;background:rgba(139,92,246,0.2);color:#a78bfa;font-size:0.65rem">AI</span>
         </button>
 
         <div class="nav-divider"></div>
@@ -460,6 +483,305 @@
           </div>
         </div>
 
+        <!-- ========== TOOL OVERVIEW TAB ========== -->
+        <div id="crawbotTab" style="display:none;">
+
+          <!-- Header -->
+          <div
+            style="background:linear-gradient(135deg,rgba(139,92,246,0.18),rgba(59,130,246,0.12),rgba(16,185,129,0.08));border:1px solid rgba(139,92,246,0.25);border-radius:16px;padding:28px 32px;margin-bottom:24px;">
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;">
+              <div style="font-size:2.8rem">🏗️</div>
+              <div>
+                <h2
+                  style="margin:0;font-size:1.5rem;background:linear-gradient(135deg,#a78bfa,#60a5fa,#34d399);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">
+                  THG Intelligence System</h2>
+                <p style="margin:6px 0 0;opacity:0.75;font-size:0.9rem;">Tổng quan toàn bộ công cụ AI — tự động hóa từ
+                  tìm khách &rarr; học văn phong &rarr; chốt đơn</p>
+              </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+              <span
+                style="padding:5px 14px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:20px;font-size:0.78rem;color:#60a5fa;">🤖
+                CrawBot &mdash; Máy Săn Lead</span>
+              <span
+                style="padding:5px 14px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:20px;font-size:0.78rem;color:#a78bfa;">🧠
+                AI Classifier (Gemini)</span>
+              <span
+                style="padding:5px 14px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:20px;font-size:0.78rem;color:#34d399;">💬
+                Sales Copilot Agent</span>
+              <span
+                style="padding:5px 14px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);border-radius:20px;font-size:0.78rem;color:#fbbf24;">📊
+                Multi-Sales Tracker</span>
+              <span
+                style="padding:5px 14px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:20px;font-size:0.78rem;color:#f87171;">🔍
+                Facebook Scraper</span>
+            </div>
+          </div>
+
+          <!-- Tool Cards -->
+          <div
+            style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px;margin-bottom:24px;">
+            <div
+              style="background:var(--card-bg);border:1px solid rgba(59,130,246,0.2);border-radius:14px;padding:20px;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                <div style="font-size:1.6rem">🤖</div>
+                <div>
+                  <div style="font-weight:700;color:#60a5fa;">CrawBot (Facebook Scraper)</div>
+                  <div style="font-size:0.75rem;opacity:0.55;">Playwright + Stealth Mode</div>
+                </div>
+              </div>
+              <ul style="margin:0;padding-left:18px;font-size:0.82rem;line-height:1.9;opacity:0.85;">
+                <li>Vào <strong>50+ group Facebook</strong> mỗi 10 phút, quét bài + comment</li>
+                <li>Vượt qua bảo mật nền tảng (Fingerprint bypass)</li>
+                <li>Đọc Messenger Sales &rarr; học văn phong mỗi đêm 2AM</li>
+              </ul>
+              <div
+                style="margin-top:10px;font-size:0.75rem;padding:8px 12px;background:rgba(59,130,246,0.07);border-radius:8px;">
+                &zwnj;&zwnj;Thay thế hoàn toàn SociaVault &mdash; tiết kiệm 100% chi phí API</div>
+            </div>
+            <div
+              style="background:var(--card-bg);border:1px solid rgba(139,92,246,0.2);border-radius:14px;padding:20px;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                <div style="font-size:1.6rem">🧠</div>
+                <div>
+                  <div style="font-weight:700;color:#a78bfa;">AI Classifier Pipeline</div>
+                  <div style="font-size:0.75rem;opacity:0.55;">Regex &rarr; ProviderGuard &rarr; Gemini AI</div>
+                </div>
+              </div>
+              <ul style="margin:0;padding-left:18px;font-size:0.82rem;line-height:1.9;opacity:0.85;">
+                <li><strong>Phase 1:</strong> Regex filter &mdash; loại rác, không tốn AI</li>
+                <li><strong>Phase 2:</strong> ProviderGuard &mdash; loại đơn vị khác</li>
+                <li><strong>Phase 3:</strong> Gemini AI chấm điểm 0&ndash;100 + phân loại</li>
+              </ul>
+              <div
+                style="margin-top:10px;font-size:0.75rem;padding:8px 12px;background:rgba(139,92,246,0.07);border-radius:8px;">
+                Độ chính xác ~85% &mdash; tự cải thiện theo feedback</div>
+            </div>
+            <div
+              style="background:var(--card-bg);border:1px solid rgba(16,185,129,0.2);border-radius:14px;padding:20px;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                <div style="font-size:1.6rem">💬</div>
+                <div>
+                  <div style="font-weight:700;color:#34d399;">Personal Sales Agent</div>
+                  <div style="font-size:0.75rem;opacity:0.55;">AI học giọng của từng Sales</div>
+                </div>
+              </div>
+              <ul style="margin:0;padding-left:18px;font-size:0.82rem;line-height:1.9;opacity:0.85;">
+                <li>Học từ lịch sử Messenger của Sales</li>
+                <li>Phân tích văn phong, tone, cách xưng hô</li>
+                <li>Tự reply đúng giọng Trang / Moon / Min...</li>
+              </ul>
+              <div
+                style="margin-top:10px;font-size:0.75rem;padding:8px 12px;background:rgba(16,185,129,0.07);border-radius:8px;">
+                Học thêm mỗi đêm &mdash; Agent ngày càng giỏi hơn</div>
+            </div>
+          </div>
+
+          <!-- Pipeline -->
+          <div
+            style="background:var(--card-bg);border-radius:16px;border:1px solid var(--border-color);padding:28px;margin-bottom:24px;">
+            <h3 style="margin:0 0 20px;font-size:1rem;color:#a78bfa;">📊 Pipeline Tự Động Hoàn Chỉnh</h3>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+              <div
+                style="flex:1;min-width:120px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:1.3rem">🔍</div>
+                <div style="font-weight:700;color:#60a5fa;font-size:0.8rem;margin-top:6px;">SĂN LEAD</div>
+                <div style="font-size:0.7rem;opacity:0.6;margin-top:4px;">50+ groups &bull; 10 phút</div>
+              </div>
+              <div style="color:#6b7280;font-size:1.1rem;">&rarr;</div>
+              <div
+                style="flex:1;min-width:120px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.2);border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:1.3rem">🧹</div>
+                <div style="font-weight:700;color:#fbbf24;font-size:0.8rem;margin-top:6px;">LỌC RÁC</div>
+                <div style="font-size:0.7rem;opacity:0.6;margin-top:4px;">Regex + Guard</div>
+              </div>
+              <div style="color:#6b7280;font-size:1.1rem;">&rarr;</div>
+              <div
+                style="flex:1;min-width:120px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:1.3rem">🧠</div>
+                <div style="font-weight:700;color:#4ade80;font-size:0.8rem;margin-top:6px;">PHÂN LOẠI</div>
+                <div style="font-size:0.7rem;opacity:0.6;margin-top:4px;">Gemini 0&ndash;100</div>
+              </div>
+              <div style="color:#6b7280;font-size:1.1rem;">&rarr;</div>
+              <div
+                style="flex:1;min-width:120px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:1.3rem">📬</div>
+                <div style="font-weight:700;color:#f87171;font-size:0.8rem;margin-top:6px;">SALES NHẬN</div>
+                <div style="font-size:0.7rem;opacity:0.6;margin-top:4px;">Dashboard</div>
+              </div>
+              <div style="color:#6b7280;font-size:1.1rem;">&rarr;</div>
+              <div
+                style="flex:1;min-width:120px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:1.3rem">💜</div>
+                <div style="font-weight:700;color:#a78bfa;font-size:0.8rem;margin-top:6px;">AGENT HỌC</div>
+                <div style="font-size:0.7rem;opacity:0.6;margin-top:4px;">Messenger &bull; 2AM</div>
+              </div>
+            </div>
+            <div
+              style="margin-top:14px;padding:12px;background:rgba(139,92,246,0.05);border-radius:8px;border:1px solid rgba(139,92,246,0.12);font-size:0.78rem;opacity:0.7;">
+              🤖 Cyber Agents: <span class="cw-mode-badge" data-name="Trang">💜 Trang</span> &bull; <span
+                class="cw-mode-badge" data-name="Moon">🩵 Moon</span> &bull; <span class="cw-mode-badge"
+                data-name="Min">💙 Min</span> &bull; <span class="cw-mode-badge" data-name="Lê Huyền">🧡 Lê Huyền</span>
+              &bull; <span class="cw-mode-badge" data-name="Ngọc Huyền">💚 Ngọc Huyền</span>
+            </div>
+          </div>
+
+          <!-- Security -->
+          <div
+            style="background:var(--card-bg);border-radius:16px;border:1px solid rgba(16,185,129,0.25);padding:28px;margin-bottom:24px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+              <div style="font-size:1.8rem">🔒</div>
+              <div>
+                <h3 style="margin:0;font-size:1rem;color:#34d399;">Bảo Mật Tài Khoản &mdash; Cam Kết Của Hệ Thống</h3>
+                <p style="margin:4px 0 0;font-size:0.82rem;opacity:0.6;">Tài khoản Facebook của bạn được bảo vệ theo
+                  tiêu chuẩn doanh nghiệp</p>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;">
+              <div
+                style="padding:14px;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.15);border-radius:10px;">
+                <div style="font-size:1.1rem;margin-bottom:7px;">💾</div>
+                <div style="font-weight:600;font-size:0.85rem;margin-bottom:4px;">Lưu cookie, không lưu mật khẩu</div>
+                <div style="font-size:0.78rem;opacity:0.7;line-height:1.5;">Sau khi đăng nhập, <strong>mật khẩu bị xóa
+                    ngay.</strong> Hệ thống chỉ giữ session cookie, giống trình duyệt bình thường.</div>
+              </div>
+              <div
+                style="padding:14px;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.15);border-radius:10px;">
+                <div style="font-size:1.1rem;margin-bottom:7px;">🔤</div>
+                <div style="font-weight:600;font-size:0.85rem;margin-bottom:4px;">Không đọc nội dung cá nhân</div>
+                <div style="font-size:0.78rem;opacity:0.7;line-height:1.5;">Bot chỉ đọc chat giữa <strong>bạn và khách
+                    hàng.</strong> Không đụng tin nhắn bạn bè, gia đình, group riêng tư.</div>
+              </div>
+              <div
+                style="padding:14px;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.15);border-radius:10px;">
+                <div style="font-size:1.1rem;margin-bottom:7px;">🛁</div>
+                <div style="font-weight:600;font-size:0.85rem;margin-bottom:4px;">Không chia sẻ ra ngoài</div>
+                <div style="font-size:0.78rem;opacity:0.7;line-height:1.5;">Dữ liệu lưu trên <strong>server nội bộ
+                    THG,</strong> không gửi cho bất kỳ bên thứ ba nào.</div>
+              </div>
+              <div
+                style="padding:14px;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.15);border-radius:10px;">
+                <div style="font-size:1.1rem;margin-bottom:7px;">🔄</div>
+                <div style="font-weight:600;font-size:0.85rem;margin-bottom:4px;">Thu hồi quyền bất kỳ lúc</div>
+                <div style="font-size:0.78rem;opacity:0.7;line-height:1.5;">Yêu cầu Admin <strong>xóa session</strong>
+                  là bot dừng ngay. Không cần thảo luận thêm.</div>
+              </div>
+            </div>
+            <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+              <span style="font-size:0.72rem;opacity:0.45;">Chuẩn bảo mật:</span>
+              <span
+                style="padding:3px 10px;border:1px solid rgba(16,185,129,0.3);border-radius:20px;font-size:0.72rem;color:#34d399;">&check;
+                Không log cá nhân</span>
+              <span
+                style="padding:3px 10px;border:1px solid rgba(16,185,129,0.3);border-radius:20px;font-size:0.72rem;color:#34d399;">&check;
+                Server nội bộ THG</span>
+              <span
+                style="padding:3px 10px;border:1px solid rgba(16,185,129,0.3);border-radius:20px;font-size:0.72rem;color:#34d399;">&check;
+                Xóa session theo yêu cầu</span>
+              <span
+                style="padding:3px 10px;border:1px solid rgba(16,185,129,0.3);border-radius:20px;font-size:0.72rem;color:#34d399;">&check;
+                Mật khẩu không lưu</span>
+            </div>
+          </div>
+
+          <!-- CrawBot Login -->
+          <div
+            style="background:var(--card-bg);border-radius:16px;border:1px solid rgba(251,191,36,0.25);padding:28px;margin-bottom:24px;">
+            <h3 style="margin:0 0 6px;font-size:1rem;color:#fbbf24;">🔐 Kết Nối CrawBot vào Messenger (Chỉ làm 1 lần)
+            </h3>
+            <p style="margin:0 0 16px;font-size:0.875rem;opacity:0.6;">Sau khi xác thực, mật khẩu bị xóa ngay. Hệ thống
+              chỉ lưu session cookie.</p>
+            <div
+              style="background:rgba(251,191,36,0.07);border-left:3px solid #fbbf24;border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:18px;font-size:0.83rem;line-height:1.6;">
+              <strong>Tại sao cần login?</strong> Facebook bảo vệ Messenger rất kỹ &mdash; CrawBot cần giả vờ là chính
+              bạn. Sau khi login 1 lần, hệ thống lưu &ldquo;thẻ ra vào&rdquo; (cookie). Từ đó CrawBot tự vào mà
+              <strong>không cần mật khẩu nữa.</strong>
+            </div>
+            <div
+              style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px;">
+              <div>
+                <label style="display:block;margin-bottom:6px;font-size:0.82rem;opacity:0.6;">Tên Sales *</label>
+                <select id="cwLoginName"
+                  style="width:100%;padding:10px 12px;border:1px solid var(--border-color);background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary);border-radius:8px;">
+                  <option value="">-- Chọn tên --</option>
+                  <option value="Trang">Trang</option>
+                  <option value="Moon">Moon</option>
+                  <option value="Min">Min</option>
+                  <option value="Lê Huyền">Lê Huyền</option>
+                  <option value="Ngọc Huyền">Ngọc Huyền</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block;margin-bottom:6px;font-size:0.82rem;opacity:0.6;">Email Facebook *</label>
+                <input type="email" id="cwLoginEmail" placeholder="vd: trang@gmail.com" autocomplete="off"
+                  style="width:100%;padding:10px 12px;border:1px solid var(--border-color);background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary);border-radius:8px;">
+              </div>
+              <div>
+                <label style="display:block;margin-bottom:6px;font-size:0.82rem;opacity:0.6;">Mật khẩu *</label>
+                <input type="password" id="cwLoginPass" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+                  autocomplete="new-password"
+                  style="width:100%;padding:10px 12px;border:1px solid var(--border-color);background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary);border-radius:8px;">
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+              <button class="btn btn-primary" id="cwLoginBtn" onclick="cwStartLogin()"
+                style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;padding:10px 26px;font-weight:600;">
+                🔑 Login &amp; Lưu Session
+              </button>
+              <span id="cwLoginStatus" style="font-size:0.84rem;opacity:0.7;"></span>
+              <span style="font-size:0.74rem;opacity:0.4;">🔒 Mật khẩu xóa ngay sau xác thực</span>
+            </div>
+            <div
+              style="margin-top:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+              <div
+                style="text-align:center;padding:12px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid var(--border-color);">
+                <div style="font-size:1.3rem;">1️⃣</div>
+                <div style="font-size:0.8rem;font-weight:600;margin:5px 0 3px;">Login 1 lần</div>
+                <div style="font-size:0.73rem;opacity:0.6;">CrawBot mở trình duyệt ẩn, đăng nhập, lưu session. Mật khẩu
+                  xóa ngay.</div>
+              </div>
+              <div
+                style="text-align:center;padding:12px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid var(--border-color);">
+                <div style="font-size:1.3rem;">2️⃣</div>
+                <div style="font-size:0.8rem;font-weight:600;margin:5px 0 3px;">Bắt đầu học</div>
+                <div style="font-size:0.73rem;opacity:0.6;">Nhấn &ldquo;Học từ Messenger&rdquo; &mdash; bot đọc 15 cuộc
+                  + học văn phong.</div>
+              </div>
+              <div
+                style="text-align:center;padding:12px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid var(--border-color);">
+                <div style="font-size:1.3rem;">3️⃣</div>
+                <div style="font-size:0.8rem;font-weight:600;margin:5px 0 3px;">Bật Agent</div>
+                <div style="font-size:0.73rem;opacity:0.6;">Chuyển mode &rarr; Active. Agent tự reply đúng giọng.</div>
+              </div>
+              <div
+                style="text-align:center;padding:12px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid var(--border-color);">
+                <div style="font-size:1.3rem;">4️⃣</div>
+                <div style="font-size:0.8rem;font-weight:600;margin:5px 0 3px;">Tự động mỗi đêm</div>
+                <div style="font-size:0.73rem;opacity:0.6;">Hệ thống tự cập nhật 2AM. Agent ngày càng giỏi.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Agent Manager -->
+          <div
+            style="background:var(--card-bg);border-radius:16px;border:1px solid rgba(139,92,246,0.2);padding:28px;margin-bottom:24px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+              <h3 style="margin:0;font-size:1rem;color:#a78bfa;">🤖 Quản Lý Agents</h3>
+              <div style="display:flex;gap:10px;">
+                <button class="btn btn-secondary" onclick="cwLearnAll()" style="font-size:0.8rem;padding:7px 14px;">🌙
+                  Học tất cả</button>
+                <button class="btn btn-secondary" onclick="cwRefreshAgents()"
+                  style="font-size:0.8rem;padding:7px 14px;">🔄 Refresh</button>
+              </div>
+            </div>
+            <div id="cwAgentList"
+              style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">
+              <div style="text-align:center;padding:40px;opacity:0.4;">⏳ Đang tải...</div>
+            </div>
+          </div>
+
+        </div>
+
       </main>
     </div>
   </div>
@@ -537,13 +859,92 @@
   <script src="js/inbox.js"></script>
   <script src="js/dataFiles.js"></script>
   <script src="js/analytics.js"></script>
-  <script src="js/credits.js"></script>
-  <script src="js/api.js"></script>
+    <script src="js/api.js"></script>
   <script src="js/groups.js"></script>
   <script src="js/agents.js"></script>
   <script src="js/leaderboard.js"></script>
+  <script src="js/crawbot.js"></script>
   <script src="js/app.js"></script>
 
+
+    <!-- Change Password Modal -->
+  <div id="changePwModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#1e1b4b;border:1px solid rgba(167,139,250,0.35);border-radius:18px;padding:32px 36px;width:380px;max-width:94vw;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <span style="font-size:1.4rem;">&#128273;</span>
+        <h3 style="margin:0;font-size:1.1rem;font-weight:700;color:#c4b5fd;">&#272;&#7893;i M&#7853;t Kh&#7849;u</h3>
+      </div>
+      <p style="margin:0 0 22px;font-size:0.85rem;color:#94a3b8;line-height:1.5;">Nh&#7853;p m&#7853;t kh&#7849;u hi&#7879;n t&#7841;i, sau &#273;&#243; &#273;&#7863;t m&#7853;t kh&#7849;u m&#7899;i.</p>
+
+      <div id="changePwErr" style="display:none;margin-bottom:14px;padding:10px 14px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);border-radius:8px;color:#fca5a5;font-size:0.85rem;"></div>
+      <div id="changePwOk" style="display:none;margin-bottom:14px;padding:10px 14px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);border-radius:8px;color:#6ee7b7;font-size:0.85rem;"></div>
+
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:0.85rem;font-weight:600;color:#e2e8f0;margin-bottom:7px;">M&#7853;t kh&#7849;u hi&#7879;n t&#7841;i</label>
+        <input type="password" id="cpCurrent" placeholder="Nh&#7853;p m&#7853;t kh&#7849;u c&#361;" autocomplete="current-password"
+          style="width:100%;padding:11px 14px;border:1.5px solid rgba(167,139,250,0.25);background:rgba(255,255,255,0.06);color:#f1f5f9;border-radius:10px;outline:none;font-size:0.95rem;transition:border 0.2s;box-sizing:border-box;"
+          onfocus="this.style.borderColor='#a78bfa'" onblur="this.style.borderColor='rgba(167,139,250,0.25)'">
+      </div>
+      <div style="margin-bottom:24px;">
+        <label style="display:block;font-size:0.85rem;font-weight:600;color:#e2e8f0;margin-bottom:7px;">M&#7853;t kh&#7849;u m&#7899;i <span style="font-weight:400;color:#94a3b8;">(t&#7889;i thi&#7875;u 6 k&#253; t&#7921;)</span></label>
+        <input type="password" id="cpNew" placeholder="Nh&#7853;p m&#7853;t kh&#7849;u m&#7899;i" autocomplete="new-password"
+          style="width:100%;padding:11px 14px;border:1.5px solid rgba(167,139,250,0.25);background:rgba(255,255,255,0.06);color:#f1f5f9;border-radius:10px;outline:none;font-size:0.95rem;transition:border 0.2s;box-sizing:border-box;"
+          onfocus="this.style.borderColor='#a78bfa'" onblur="this.style.borderColor='rgba(167,139,250,0.25)'">
+      </div>
+      <div style="display:flex;gap:12px;">
+        <button id="cpBtn" onclick="doChangePassword()"
+          style="flex:1;padding:12px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:10px;font-size:0.95rem;font-weight:700;cursor:pointer;letter-spacing:0.3px;transition:opacity 0.2s;"
+          onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">
+          &#10004; L&#432;u
+        </button>
+        <button onclick="document.getElementById('changePwModal').style.display='none'"
+          style="flex:1;padding:12px;background:rgba(255,255,255,0.08);color:#e2e8f0;border:1.5px solid rgba(255,255,255,0.15);border-radius:10px;font-size:0.95rem;font-weight:600;cursor:pointer;transition:all 0.2s;"
+          onmouseover="this.style.background='rgba(255,255,255,0.14)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">
+          H&#7911;y
+        </button>
+      </div>
+    </div>
+  </div>
+  <script>
+  function openChangePw() {
+    document.getElementById('cpCurrent').value='';
+    document.getElementById('cpNew').value='';
+    document.getElementById('changePwErr').style.display='none';
+    document.getElementById('changePwOk').style.display='none';
+    document.getElementById('changePwModal').style.display='flex';
+    setTimeout(()=>document.getElementById('cpCurrent').focus(),100);
+  }
+  async function doChangePassword() {
+    const btn=document.getElementById('cpBtn');
+    const errEl=document.getElementById('changePwErr');
+    const okEl=document.getElementById('changePwOk');
+    errEl.style.display='none'; okEl.style.display='none';
+    const cur=document.getElementById('cpCurrent').value;
+    const nw=document.getElementById('cpNew').value;
+    if(!cur){errEl.textContent='Vui l&#242;ng nh&#7853;p m&#7853;t kh&#7849;u hi&#7879;n t&#7841;i.';errEl.style.display='block';return;}
+    if(nw.length<6){errEl.textContent='M&#7853;t kh&#7849;u m&#7899;i ph&#7843;i &#237;t nh&#7845;t 6 k&#253; t&#7921;.';errEl.style.display='block';return;}
+    btn.disabled=true; btn.textContent='&#8987;...';
+    try {
+      const res=await authFetch('/api/auth/change-password',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({currentPassword:cur,newPassword:nw})
+      });
+      const d=await res.json();
+      if(d.ok){
+        okEl.textContent='&#10004; '+d.message;
+        okEl.style.display='block';
+        setTimeout(()=>document.getElementById('changePwModal').style.display='none',1800);
+      } else {
+        errEl.textContent=d.error; errEl.style.display='block';
+      }
+    } catch {
+      errEl.textContent='L&#7895;i k&#7871;t n&#7889;i server.';
+      errEl.style.display='block';
+    }
+    btn.disabled=false; btn.textContent='&#10004; L&#432;u';
+  }
+  </script>
 </body>
 
 </html>

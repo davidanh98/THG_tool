@@ -11,6 +11,7 @@ const Groq = require('groq-sdk');
 const config = require('../config');
 const { buildSystemPrompt, buildUserPrompt, buildBatchPrompt } = require('../agent/promptBuilder');
 const { saveClassification } = require('../agent/memoryStore');
+const { runProviderGuard, buildKnownProviderSet, buildKnownProviderNameSet } = require('../agent/providerGuard');
 
 const groq = new Groq({ apiKey: config.GROQ_API_KEY });
 
@@ -390,9 +391,17 @@ async function classifyPosts(posts) {
 
     // ── Load forbidden keywords from DB (cached per batch) ──
     let forbiddenKws = [];
+    let knownProviderUrls = new Set();
+    let knownProviderNames = new Set();
     try {
         const database = require('../data_store/database');
         forbiddenKws = database.db.prepare('SELECT keyword FROM forbidden_keywords').all().map(r => r.keyword.toLowerCase());
+        // ── ProviderGuard: build known-provider sets once per batch ──
+        knownProviderUrls = buildKnownProviderSet(database);
+        knownProviderNames = buildKnownProviderNameSet(database);
+        if (knownProviderUrls.size > 0) {
+            console.log(`[ProviderGuard] 🛡️ Loaded ${knownProviderUrls.size} known provider URLs from DB`);
+        }
     } catch (e) { /* DB not available in test env */ }
 
     for (const post of posts) {
@@ -408,6 +417,14 @@ async function classifyPosts(posts) {
         // ─ Compute scores early (used for both filtering and saving) ─
         const spamScore = computeSpamScore(content, bio);
         const painScore = computePainScore(content);
+
+        // ── LAYER G0: ProviderGuard Orchestrator (runs FIRST, zero AI cost) ──
+        const guardResult = runProviderGuard(post, knownProviderUrls, knownProviderNames, painScore, spamScore);
+        if (guardResult) {
+            preFiltered.push({ ...post, isLead: false, role: 'provider', score: 0, category: 'NotRelevant', summary: guardResult.reason, urgency: 'low', buyerSignals: '', spamScore, painScore: 0 });
+            console.log(`[ProviderGuard] 🛡️ ${guardResult.layer} BLOCKED: ${guardResult.reason.substring(0, 80)} | ${content.substring(0, 50)}...`);
+            continue;
+        }
 
         // Blacklist: posts from competitor accounts → skip
         if (BLACKLIST_AUTHORS.some(b => authorLower.includes(b))) {

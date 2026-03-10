@@ -1,11 +1,33 @@
-/**
+﻿/**
  * api.js — All API calls (fetch wrappers)
  */
+
+// ─── JWT Auth Helper ──────────────────────────────────────────────────────────
+function getToken() {
+    return localStorage.getItem('thg_token') || '';
+}
+
+async function authFetch(url, options = {}) {
+    const token = getToken();
+    const headers = {
+        ...(options.headers || {}),
+        ...(token ? { 'Authorization': 'Bearer ' + token } : {}),
+    };
+    // Use window.fetch (native) to avoid infinite recursion
+    const res = await window.fetch(url, { ...options, headers, credentials: 'include' });
+    if (res.status === 401) {
+        localStorage.removeItem('thg_token');
+        localStorage.removeItem('thg_user');
+        window.location.href = '/login';
+        return res;
+    }
+    return res;
+}
 
 // --- Stats ---
 async function loadStats() {
     try {
-        const res = await fetch('/api/stats');
+        const res = await authFetch('/api/stats');
         const { data } = await res.json();
         document.getElementById('statTotal').textContent = data.total || 0;
         document.getElementById('statToday').textContent = `${data.today || 0} hôm nay`;
@@ -52,7 +74,7 @@ async function loadLeads() {
         // Tell backend to hide ignored leads from main dashboard
         params.set('exclude_ignored', 'true');
 
-        const res = await fetch(`/api/leads?${params}`);
+        const res = await authFetch(`/api/leads?${params}`);
         const { data, count } = await res.json();
         AppState.leads = data || [];
         console.log('[THG] loadLeads:', AppState.leads.length, 'leads, category:', AppState.currentCategory);
@@ -68,7 +90,7 @@ async function loadLeads() {
 
 async function loadIgnoredLeads() {
     try {
-        const res = await fetch(`/api/leads?status=ignored`);
+        const res = await authFetch(`/api/leads?status=ignored`);
         const { data, count } = await res.json();
         AppState.ignoredLeads = data || [];
         document.getElementById('ignoredCount').textContent = `${count || 0} leads`;
@@ -81,7 +103,7 @@ async function loadIgnoredLeads() {
 
 async function updateStatus(id, status) {
     try {
-        const res = await fetch(`/api/leads/${id}`, {
+        const res = await authFetch(`/api/leads/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status }),
@@ -111,7 +133,7 @@ async function contactLead(id) {
         }
 
         // Save status + response + notes
-        await fetch(`/api/leads/${id}`, {
+        await authFetch(`/api/leads/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'contacted', suggested_response: responseText, notes }),
@@ -132,7 +154,7 @@ async function convertLead(id) {
     if (!notes && !confirm('Chưa có ghi chú. Vẫn muốn đánh dấu Converted?')) return;
 
     try {
-        await fetch(`/api/leads/${id}`, {
+        await authFetch(`/api/leads/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'converted', notes }),
@@ -150,7 +172,7 @@ async function saveResponse(id) {
     const textarea = document.getElementById(`response-${id}`);
     if (!textarea) return;
     try {
-        await fetch(`/api/leads/${id}`, {
+        await authFetch(`/api/leads/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ suggested_response: textarea.value }),
@@ -166,7 +188,7 @@ async function saveNotes(id) {
     const textarea = document.getElementById(`notes-${id}`);
     if (!textarea) return;
     try {
-        await fetch(`/api/leads/${id}`, {
+        await authFetch(`/api/leads/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ notes: textarea.value }),
@@ -189,7 +211,7 @@ function copyResponse(id) {
 async function deleteLead(id) {
     if (!confirm(`Xóa lead #${id}? Không thể hoàn tác.`)) return;
     try {
-        const res = await fetch(`/api/leads/${id}`, { method: 'DELETE' });
+        const res = await authFetch(`/api/leads/${id}`, { method: 'DELETE' });
         if (res.ok) {
             showToast(`🗑️ Lead #${id} đã xóa`, 'success');
             loadLeads();
@@ -205,7 +227,7 @@ async function clearAllLeads() {
     if (!confirm(`⚠️ XÓA TẤT CẢ ${count} leads?\n\nHành động này KHÔNG thể hoàn tác!`)) return;
     if (!confirm('Bạn chắc chắn muốn xóa hết? Bấm OK để xác nhận lần cuối.')) return;
     try {
-        const res = await fetch('/api/leads?confirm=true', { method: 'DELETE' });
+        const res = await authFetch('/api/leads?confirm=true', { method: 'DELETE' });
         const data = await res.json();
         if (res.ok) {
             showToast(`🗑️ Đã xóa ${data.deleted} leads`, 'success');
@@ -225,7 +247,7 @@ async function triggerScan() {
     statusEl.textContent = 'Keyword scanning...';
 
     try {
-        await fetch('/api/scan', { method: 'POST' });
+        await authFetch('/api/scan', { method: 'POST' });
         showToast('Keyword scan started! Results will appear shortly.', 'info');
         let pollCount = 0;
         const poll = setInterval(async () => {
@@ -254,7 +276,7 @@ async function loadConversations() {
     try {
         const status = document.getElementById('inboxFilter').value;
         const params = status ? `?status=${status}` : '';
-        const res = await fetch(`/api/conversations${params}`);
+        const res = await authFetch(`/api/conversations${params}`);
         const { data, count } = await res.json();
         AppState.conversations = data || [];
         document.getElementById('inboxCount').textContent = `${count || 0} messages`;
@@ -266,7 +288,7 @@ async function loadConversations() {
 
 async function updateConversation(id, saleReply, status) {
     try {
-        const res = await fetch(`/api/conversations/${id}`, {
+        const res = await authFetch(`/api/conversations/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sale_reply: saleReply, status }),
@@ -285,7 +307,7 @@ async function regenerateReply(id) {
     const btn = document.getElementById(`regen-${id}`);
     if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
     try {
-        const res = await fetch(`/api/conversations/${id}/regenerate`, { method: 'POST' });
+        const res = await authFetch(`/api/conversations/${id}/regenerate`, { method: 'POST' });
         const { data } = await res.json();
         if (data) {
             const textarea = document.getElementById(`reply-${id}`);
@@ -307,7 +329,7 @@ async function sendTestMessage() {
     btn.disabled = true; btn.textContent = '⏳ AI đang soạn...';
 
     try {
-        const res = await fetch('/api/test-message', {
+        const res = await authFetch('/api/test-message', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -333,7 +355,7 @@ async function sendTestMessage() {
 // --- Data Files ---
 async function loadDataFiles() {
     try {
-        const res = await fetch('/api/data-files');
+        const res = await authFetch('/api/data-files');
         const { data } = await res.json();
         AppState.dataFiles = data || [];
         document.getElementById('dataCount').textContent = `${AppState.dataFiles.length} files`;
@@ -354,7 +376,7 @@ async function viewFileContent(fileName) {
     panel.style.display = '';
 
     try {
-        const res = await fetch(`/api/data-files/${fileName}`);
+        const res = await authFetch(`/api/data-files/${fileName}`);
         const { data } = await res.json();
 
         if (!data || data.length === 0) {
@@ -373,7 +395,7 @@ async function viewFileContent(fileName) {
 
 async function triggerCleanup() {
     try {
-        const res = await fetch('/api/data-files/cleanup', { method: 'POST' });
+        const res = await authFetch('/api/data-files/cleanup', { method: 'POST' });
         const { deleted } = await res.json();
         showToast(`🧹 Cleaned ${deleted} old files`, 'success');
         loadDataFiles();

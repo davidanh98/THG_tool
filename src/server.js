@@ -1,12 +1,15 @@
-const express = require('express');
+﻿const express = require('express');
 const path = require('path');
 const axios = require('axios');
 const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 const config = require('./config');
 const database = require('./data_store/database');
 const logger = require('./logger');
 const { generateCopilotReply, classifyIntent } = require('./prompts/salesCopilot');
 const { listDataFiles, readDataFile, cleanOldData, saveConversationToFile } = require('./data_store/fileManager');
+const { verifyToken } = require('./auth/authMiddleware');
+const authRoutes = require('./auth/authRoutes');
 
 // ╔═══════════════════════════════════════════════════════════╗
 // ║  IN-MEMORY LOG CAPTURE (for Dev Dashboard)                ║
@@ -42,7 +45,16 @@ app.set('trust proxy', 1);
 
 // --- Middleware ---
 app.use(express.json());
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// ── Auth pages (public routes) ─────────────────────────────────────────────
+app.get('/login', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'login.html')));
+app.get('/signup', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'signup.html')));
+
+// ── Auth API (no JWT needed) ────────────────────────────────────────────────
+app.use('/api/auth', authRoutes);
+
 
 // CORS — cho phép admin panel ở domain khác gọi API
 app.use((req, res, next) => {
@@ -69,6 +81,15 @@ const scanLimiter = rateLimit({
 });
 
 app.use('/api/', apiLimiter);
+
+// ── JWT Auth Guard — protects ALL /api/* except /api/auth/* ───────────────
+app.use('/api/', (req, res, next) => {
+    // /api/auth/* routes are already handled above — skip double-check
+    if (req.path.startsWith('/auth/')) return next();
+    // /api/dev/* stays unprotected for dev dashboard
+    if (req.path.startsWith('/dev/')) return next();
+    return verifyToken(req, res, next);
+});
 
 // ─── Request Timeout Middleware ───────────────────────────────────────────────
 // Prevents nginx 504 by letting Node respond with 503 before nginx gives up.
@@ -280,9 +301,7 @@ app.get('/api/stats', (req, res) => {
 // ╚═══════════════════════════════════════════════════════════╝
 app.get('/api/credits', (req, res) => {
     try {
-        const sv = require('./pipelines/sociaVault');
         const log = sv.getCreditLog();
-        const stats = sv.getCreditStats();
         res.json({ success: true, data: { stats, log } });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -1222,5 +1241,569 @@ app.post('/api/points/award', express.json(), (req, res) => {
     }
 });
 
+// ╔═══════════════════════════════════════════════════════════╗
+// ║  FB ACCOUNT MANAGER API                                   ║
+// ║  Quản lý pool tài khoản cho CrawBot                       ║
+// ╚═══════════════════════════════════════════════════════════╝
+try {
+    const accountManager = require('./agent/accountManager');
+
+    // GET /api/accounts — Xem trạng thái toàn bộ pool
+    app.get('/api/accounts', (req, res) => {
+        try {
+            const pool = accountManager.getPoolStatus();
+            res.json({ success: true, accounts: pool, total: pool.length });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // POST /api/accounts — Thêm tài khoản mới vào pool
+    app.post('/api/accounts', (req, res) => {
+        const { email, password, proxy_url, notes } = req.body || {};
+        if (!email || !password) {
+            return res.status(400).json({ success: false, error: 'email và password là bắt buộc' });
+        }
+        try {
+            const id = accountManager.addAccount({ email, password, proxyUrl: proxy_url || '', notes: notes || '' });
+            res.json({ success: true, id, message: `✅ Đã thêm tài khoản ${email}` });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // PATCH /api/accounts/:email/reset — Phục hồi tài khoản sau khi giải checkpoint thủ công
+    app.patch('/api/accounts/:email/reset', (req, res) => {
+        try {
+            accountManager.resetAccount(req.params.email);
+            res.json({ success: true, message: `✅ Reset ${req.params.email} → active, trust=70` });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // PATCH /api/accounts/:email/proxy — Gán proxy cho tài khoản
+    app.patch('/api/accounts/:email/proxy', (req, res) => {
+        const { proxy_url } = req.body || {};
+        try {
+            database.db.prepare(`UPDATE fb_accounts SET proxy_url=? WHERE email=?`).run(proxy_url || '', req.params.email);
+            res.json({ success: true, message: `✅ Proxy của ${req.params.email} đã được cập nhật` });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // DELETE /api/accounts/:email — Loại tài khoản khỏi pool (mark banned)
+    app.delete('/api/accounts/:email', (req, res) => {
+        try {
+            database.db.prepare(`UPDATE fb_accounts SET status='banned' WHERE email=?`).run(req.params.email);
+            res.json({ success: true, message: `🚫 ${req.params.email} đã bị loại khỏi pool` });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    console.log('[Server] ✅ Account Manager API routes loaded (/api/accounts)');
+} catch (e) {
+    console.warn('[Server] ⚠️ Account Manager API skipped:', e.message);
+}
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║  PERSONAL AGENT API                                       ║
+// ║  Agent nhập vai Sales với đúng văn phong                  ║
+// ╚═══════════════════════════════════════════════════════════╝
+try {
+    const personalAgent = require('./agent/personalAgent');
+    const styleExtractor = require('./agent/styleExtractor');
+
+    // GET /api/agents — Danh sách tất cả agents + status
+    app.get('/api/agents', (req, res) => {
+        try {
+            res.json({ success: true, agents: personalAgent.getAllAgents() });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // POST /api/agents/:name/reply — Agent tạo reply từ message khách
+    app.post('/api/agents/:name/reply', async (req, res) => {
+        const { message, lead_id, lead_summary, platform, sender_name } = req.body || {};
+        if (!message) return res.status(400).json({ success: false, error: 'message là bắt buộc' });
+        try {
+            const reply = await personalAgent.generateAgentReply(req.params.name, message, {
+                leadId: lead_id,
+                leadSummary: lead_summary,
+                platform,
+                senderName: sender_name,
+            });
+            res.json({ success: true, agent: req.params.name, reply });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // POST /api/agents/:name/log — Log tin nhắn vào chat_history
+    app.post('/api/agents/:name/log', (req, res) => {
+        const { lead_id, direction, message, is_teaching } = req.body || {};
+        if (!direction || !message) return res.status(400).json({ success: false, error: 'direction và message là bắt buộc' });
+        try {
+            database.logChatMessage(req.params.name, lead_id || 0, direction, message, is_teaching ? 1 : 0);
+            res.json({ success: true, message: '✅ Đã lưu chat history' });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // POST /api/agents/:name/teach — Đánh dấu câu chat là teaching sample
+    app.post('/api/agents/:name/teach', (req, res) => {
+        const { chat_id, message } = req.body || {};
+        try {
+            if (chat_id) {
+                personalAgent.markAsTeaching(chat_id);
+            } else if (message) {
+                // Thêm trực tiếp như teaching sample
+                database.logChatMessage(req.params.name, 0, 'sales', message, 1);
+            } else {
+                return res.status(400).json({ success: false, error: 'chat_id hoặc message là bắt buộc' });
+            }
+            res.json({ success: true, message: `🎓 Đã đánh dấu teaching sample cho ${req.params.name}` });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // PATCH /api/agents/:name/mode — Chuyển mode learning|active|paused
+    app.patch('/api/agents/:name/mode', (req, res) => {
+        const { mode } = req.body || {};
+        try {
+            personalAgent.setAgentMode(req.params.name, mode);
+            res.json({ success: true, agent: req.params.name, mode, message: `✅ ${req.params.name} Agent → ${mode}` });
+        } catch (err) {
+            res.status(400).json({ success: false, error: err.message });
+        }
+    });
+
+    // GET /api/agents/:name/style — Xem tone profile hiện tại của agent
+    app.get('/api/agents/:name/style', (req, res) => {
+        try {
+            const profile = styleExtractor.getStyleProfile(req.params.name);
+            const samples = styleExtractor.getWritingSamples(req.params.name);
+            const styleRow = database.getSalesStyle(req.params.name);
+            res.json({
+                success: true,
+                agent: req.params.name,
+                profile,
+                samples,
+                sample_count: styleRow?.sample_count || 0,
+                last_extracted: styleRow?.last_extracted || null,
+            });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // POST /api/agents/:name/extract-style — Trigger style extraction ngay lập tức
+    app.post('/api/agents/:name/extract-style', async (req, res) => {
+        try {
+            const result = await styleExtractor.extractStyleForAgent(req.params.name);
+            res.json({
+                success: true,
+                agent: req.params.name,
+                sample_count: result.sampleCount,
+                profile: result.profile,
+                message: `✅ Đã chiết xuất style cho ${req.params.name} (${result.sampleCount} mẫu)`,
+            });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // GET /api/agents/:name/history — Xem lịch sử chat
+    app.get('/api/agents/:name/history', (req, res) => {
+        try {
+            const limit = parseInt(req.query.limit) || 50;
+            const chats = database.getRecentChats(req.params.name, limit);
+            res.json({ success: true, agent: req.params.name, chats, total: chats.length });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    console.log('[Server] ✅ Personal Agent API routes loaded (/api/agents)');
+} catch (e) {
+    console.warn('[Server] ⚠️ Personal Agent API skipped:', e.message);
+}
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║  MESSENGER SCRAPER API                                    ║
+// ║  CrawBot tự học từ Messenger của Sales                    ║
+// ╚═══════════════════════════════════════════════════════════╝
+try {
+    const accountManager = require('./agent/accountManager');
+    const messengerScraper = require('./agent/messengerScraper');
+
+    // POST /api/agents/:name/learn-messenger
+    // Trigger học từ Messenger của một Sales cụ thể
+    app.post('/api/agents/:name/learn-messenger', async (req, res) => {
+        const salesName = req.params.name;
+        try {
+            // Không block HTTP request — chạy nền
+            res.json({
+                success: true,
+                message: `🤖 CrawBot đang học từ Messenger của ${salesName}... Kiểm tra logs để theo dõi tiến trình.`,
+            });
+            // Chạy nền sau khi response đã được gửi
+            setImmediate(async () => {
+                const result = await messengerScraper.scrapeMessengerForSales(salesName, { autoExtract: true });
+                console.log(`[Server] Messenger learning ${salesName}: ${JSON.stringify(result)}`);
+            });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // POST /api/agents/learn-all-messengers
+    // Trigger học từ Messenger của TẤT CẢ Sales (dùng thủ công hoặc cron)
+    app.post('/api/agents/learn-all-messengers', async (req, res) => {
+        try {
+            res.json({
+                success: true,
+                message: '🤖 CrawBot đang học từ Messenger của tất cả Sales... Có thể mất 10-30 phút.',
+            });
+            setImmediate(async () => {
+                await messengerScraper.scrapeAllSalesMessengers({ autoExtract: true });
+            });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // POST /api/accounts/:email/link-sales — Liên kết account FB với Sales
+    app.post('/api/accounts/:email/link-sales', (req, res) => {
+        const { sales_name } = req.body || {};
+        if (!sales_name) return res.status(400).json({ success: false, error: 'sales_name là bắt buộc' });
+        try {
+            accountManager.linkAccountToSales(req.params.email, sales_name);
+            res.json({
+                success: true,
+                message: `✅ Đã liên kết ${req.params.email} → ${sales_name}. CrawBot sẽ học từ Messenger của account này.`,
+            });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // ─── Nightly Cron: 2AM VN time (UTC+7 = 19:00 UTC) ─────────────────
+    if (process.env.NODE_ENV === 'production') {
+        const NIGHTLY_HOUR_UTC = 19; // 2AM VN = 7PM UTC
+        const NIGHTLY_MINUTE = 0;
+
+        setInterval(async () => {
+            const now = new Date();
+            if (now.getUTCHours() === NIGHTLY_HOUR_UTC && now.getUTCMinutes() === NIGHTLY_MINUTE) {
+                console.log('[CrawBot Cron] 🌙 2AM VN — Bắt đầu nightly Messenger learning...');
+                try {
+                    await messengerScraper.scrapeAllSalesMessengers({ autoExtract: true });
+                    console.log('[CrawBot Cron] ✅ Nightly learning hoàn tất');
+                } catch (err) {
+                    console.error('[CrawBot Cron] ❌ Nightly learning lỗi:', err.message);
+                }
+            }
+        }, 60 * 1000); // Check mỗi phút
+
+        console.log('[Server] ⏰ Nightly Messenger learning cron scheduled (2AM VN)');
+    }
+
+    console.log('[Server] ✅ Messenger Scraper API routes loaded (/api/agents/:name/learn-messenger)');
+} catch (e) {
+    console.warn('[Server] ⚠️ Messenger Scraper API skipped:', e.message);
+}
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║  FB SESSION LOGIN — Sales đăng nhập 1 lần để lưu session ║
+// ╚═══════════════════════════════════════════════════════════╝
+try {
+    const { chromium } = require('playwright-extra');
+    const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+    chromium.use(StealthPlugin());
+    const accountManager = require('./agent/accountManager');
+    const fs = require('fs');
+    const path = require('path');
+
+    // POST /api/agents/fb-login — Playwright login để lưu session cookie
+    app.post('/api/agents/fb-login', async (req, res) => {
+        const { salesName, email, password } = req.body || {};
+        if (!salesName || !email || !password) {
+            return res.status(400).json({ success: false, error: 'salesName, email và password là bắt buộc' });
+        }
+
+        console.log(`[FBLogin] 🔐 ${salesName} (${email}) đang đăng nhập...`);
+        let browser;
+        try {
+            browser = await chromium.launch({ headless: true });
+            const context = await browser.newContext({
+                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                viewport: { width: 1280, height: 800 },
+                locale: 'vi-VN',
+            });
+
+            const page = await context.newPage();
+
+            // Điều hướng đến trang login
+            await page.goto('https://www.facebook.com/login', {
+                waitUntil: 'domcontentloaded',
+                timeout: 30000,
+            });
+            await new Promise(r => setTimeout(r, 2000));
+
+            // Điền email & password
+            await page.fill('#email', email);
+            await new Promise(r => setTimeout(r, 800));
+            await page.fill('#pass', password);
+            await new Promise(r => setTimeout(r, 600));
+            await page.click('[name="login"]');
+            await new Promise(r => setTimeout(r, 5000));
+
+            const url = page.url();
+
+            // Kiểm tra kết quả đăng nhập
+            if (url.includes('checkpoint') || url.includes('two_step_verification')) {
+                return res.json({ success: false, error: '⚠️ Facebook yêu cầu xác thực 2 bước. Vui lòng tắt 2FA và thử lại, hoặc liên hệ Admin để xử lý thủ công.' });
+            }
+            if (url.includes('/login')) {
+                return res.json({ success: false, error: '❌ Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.' });
+            }
+
+            // Lưu session
+            const cookies = await context.cookies();
+            const sessionsDir = accountManager.SESSIONS_DIR;
+            fs.mkdirSync(sessionsDir, { recursive: true });
+            const sessionPath = path.join(sessionsDir, `${email.replace(/[^a-z0-9]/gi, '_')}.json`);
+            fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
+
+            // Thêm/update account trong fb_accounts và link với Sales
+            const existingAcc = database.db.prepare(`SELECT id FROM fb_accounts WHERE email = ?`).get(email);
+            if (!existingAcc) {
+                accountManager.addAccount({ email, password, proxyUrl: '', notes: `${salesName} personal account` });
+            } else {
+                // Update password nếu đã có
+                database.db.prepare(`UPDATE fb_accounts SET password = ?, session_path = ?, status = 'active' WHERE email = ?`)
+                    .run(password, sessionPath, email);
+            }
+            accountManager.linkAccountToSales(email, salesName);
+
+            console.log(`[FBLogin] ✅ ${salesName} (${email}): Session đã lưu → ${path.basename(sessionPath)}`);
+            res.json({
+                success: true,
+                message: `✅ ${salesName} đã đăng nhập thành công! Session được lưu. Bây giờ có thể bấm "Học từ Messenger".`,
+                sessionFile: path.basename(sessionPath),
+            });
+
+        } catch (err) {
+            console.error(`[FBLogin] ❌ ${salesName}: ${err.message}`);
+            res.status(500).json({ success: false, error: `Lỗi khi đăng nhập: ${err.message}` });
+        } finally {
+            if (browser) await browser.close().catch(() => { });
+        }
+    });
+
+    console.log('[Server] ✅ FB Login endpoint loaded (/api/agents/fb-login)');
+} catch (e) {
+    console.warn('[Server] ⚠️ FB Login endpoint skipped:', e.message);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CrawBot Import v2 — Async Worker + Dedup + Routing
+//
+// Flow:
+//  1. POST /api/import/crawbot  → accept array, dedup by URL, enqueue PENDING
+//  2. Return 200 immediately (bot never hangs)
+//  3. Background worker processes PENDING rows:
+//     a. Regex pre-filter (PROVIDER / WRONG ROUTE / NO KEYWORDS) → REJECTED
+//     b. AI classifier (Groq/Gemini) score → if >= threshold → QUALIFIED
+//     c. Auto-assign to Sales by content keywords
+//     d. Insert into leads table (actual dashboard data)
+// ─────────────────────────────────────────────────────────────────────────────
+try {
+    const { classifyPost } = require('./prompts/leadQualifier');
+
+    // ── Routing rules ──────────────────────────────────────────────────────
+    const ROUTING_RULES = [
+        { pattern: /pod|print.on.demand|in.áo|in.theo|xưởng.in/i, assignTo: 'Trang' },
+        { pattern: /trung.quốc|china|tq|taobao|1688|quảng.châu|cn.→|cn\s/i, assignTo: 'Moon' },
+        { pattern: /kho.mỹ|warehouse|3pl|texas|pennsylvania|pa.kho|kho.us/i, assignTo: 'Khoa' },
+        { pattern: /fulfillment|fulfill|dropship|drop.ship/i, assignTo: 'Trang' },
+        { pattern: /epacket|chile|colombia|mexico|saudi|uae|úc|australia/i, assignTo: 'Linh' },
+    ];
+    const ROUND_ROBIN_SALES = ['Trang', 'Moon', 'Khoa', 'Linh'];
+    let rrIdx = 0;
+
+    function routeLead(content) {
+        const text = content || '';
+        for (const rule of ROUTING_RULES) {
+            if (rule.pattern.test(text)) return rule.assignTo;
+        }
+        // Round-robin fallback
+        const sales = ROUND_ROBIN_SALES[rrIdx % ROUND_ROBIN_SALES.length];
+        rrIdx++;
+        return sales;
+    }
+
+    // ── Regex pre-filters (mirrors leadQualifier.js) ─────────────────────
+    const PROVIDER_RE = /(chúng tôi nhận|bên em nhận|bên em chuyên|dịch vụ vận chuyển|nhận gửi hàng|nhận ship|offering fulfillment|we ship|we offer|lh em|ib em|inbox em|liên hệ em|zalo:|chỉ từ \d+k)/i;
+    const WRONG_ROUTE_RE = /(giao hàng nhanh nội|ship cod toàn|vận chuyển nội địa|gửi.*về việt nam|order.*về vn|nhập hàng.*về vn|ship.*từ mỹ.*về)/i;
+    const MUST_HAVE_RE = /(ship|vận chuyển|fulfillment|fulfill|pod|dropship|gửi hàng|kho|warehouse|giá|tìm|cần|logistics|3pl|fba|ecommerce|seller|tracking|forwarder|express|freight|order|tìm đơn vị)/i;
+
+    function preFilter(content) {
+        if (PROVIDER_RE.test(content)) return { pass: false, reason: 'Provider/quảng cáo' };
+        if (WRONG_ROUTE_RE.test(content)) return { pass: false, reason: 'Sai tuyến (nội địa/nhập về VN)' };
+        if (!MUST_HAVE_RE.test(content)) return { pass: false, reason: 'Không có từ khóa kinh doanh' };
+        return { pass: true };
+    }
+
+    // ── Normalize incoming CrawBot post ────────────────────────────────────
+    function normalize(raw) {
+        return {
+            url: raw.url || raw.post_url || raw.link || '',
+            author: raw.author || raw.author_name || raw.name || '',
+            author_url: raw.author_url || raw.profile_url || raw.author_link || '',
+            content: raw.content || raw.text || raw.message || raw.body || '',
+            platform: raw.platform || raw.source || 'facebook',
+            group_name: raw.group || raw.group_name || raw.source_name || '',
+            scraped_at: raw.scraped_at || raw.date || raw.time || new Date().toISOString(),
+        };
+    }
+
+    // ── Worker: process PENDING raw_leads ──────────────────────────────────
+    let workerRunning = false;
+    async function runWorker() {
+        if (workerRunning) return;
+        workerRunning = true;
+        try {
+            const batch = database.db.prepare(
+                `SELECT * FROM raw_leads WHERE status = 'PENDING' LIMIT 20`
+            ).all();
+
+            for (const row of batch) {
+                // Mark as PROCESSING
+                database.db.prepare(`UPDATE raw_leads SET status='PROCESSING' WHERE id=?`).run(row.id);
+
+                // Pre-filter (free, instant)
+                const pf = preFilter(row.content);
+                if (!pf.pass) {
+                    database.db.prepare(
+                        `UPDATE raw_leads SET status='REJECTED', reject_reason=? WHERE id=?`
+                    ).run(pf.reason, row.id);
+                    continue;
+                }
+
+                // AI Classify
+                try {
+                    const post = {
+                        platform: row.platform,
+                        author_name: row.author,
+                        author_url: row.author_url,
+                        content: row.content,
+                        post_url: row.url,
+                        post_created_at: row.scraped_at,
+                        item_type: 'post',
+                        group_name: row.group_name,
+                    };
+                    const result = await classifyPost(post);
+                    const score = result?.score || 0;
+                    const threshold = config.LEAD_SCORE_THRESHOLD || 60;
+
+                    if (score >= threshold) {
+                        const assignedTo = routeLead(row.content);
+
+                        // Save to leads table
+                        database.db.prepare(`
+                            INSERT OR IGNORE INTO leads
+                              (platform, author_name, author_url, content, post_url, post_created_at,
+                               item_type, group_name, score, summary, status, tags, response_draft, assigned_sales)
+                            VALUES (?, ?, ?, ?, ?, ?, 'post', ?, ?, ?, 'new', ?, ?, ?)
+                        `).run(
+                            row.platform, row.author, row.author_url, row.content,
+                            row.url, row.scraped_at, row.group_name,
+                            score, result?.summary || '',
+                            JSON.stringify(result?.tags || []),
+                            result?.response_draft || '',
+                            assignedTo,
+                        );
+
+                        database.db.prepare(
+                            `UPDATE raw_leads SET status='QUALIFIED', score=?, assigned_to=? WHERE id=?`
+                        ).run(score, assignedTo, row.id);
+
+                        console.log(`[CrawBot Worker] 🔥 LEAD ${score}đ → ${assignedTo}: ${row.author}`);
+                    } else {
+                        database.db.prepare(
+                            `UPDATE raw_leads SET status='REJECTED', score=?, reject_reason=? WHERE id=?`
+                        ).run(score, `AI score ${score} < ${threshold}`, row.id);
+                    }
+                } catch (aiErr) {
+                    database.db.prepare(
+                        `UPDATE raw_leads SET status='PENDING', reject_reason=? WHERE id=?`
+                    ).run('AI error: ' + aiErr.message, row.id);
+                }
+            }
+        } finally {
+            workerRunning = false;
+            // If still PENDING rows, schedule another pass
+            const remaining = database.db.prepare(
+                `SELECT COUNT(*) as c FROM raw_leads WHERE status='PENDING'`
+            ).get()?.c || 0;
+            if (remaining > 0) setTimeout(runWorker, 2000);
+        }
+    }
+
+    // ── POST /api/import/crawbot — JSON webhook ────────────────────────────
+    app.post('/api/import/crawbot', (req, res) => {
+        const rawPosts = Array.isArray(req.body) ? req.body : req.body?.posts || [];
+        if (!rawPosts.length) {
+            return res.status(400).json({ ok: false, error: 'Empty posts array.' });
+        }
+        if (rawPosts.length > 500) {
+            return res.status(400).json({ ok: false, error: 'Max 500 posts per request.' });
+        }
+
+        let enqueued = 0, duplicates = 0, invalid = 0;
+        const insertStmt = database.db.prepare(`
+            INSERT OR IGNORE INTO raw_leads (url, author, author_url, content, platform, group_name, scraped_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        for (const raw of rawPosts) {
+            const p = normalize(raw);
+            if (!p.content || p.content.trim().length < 15) { invalid++; continue; }
+            if (!p.url) { invalid++; continue; }
+            const r = insertStmt.run(p.url, p.author, p.author_url, p.content, p.platform, p.group_name, p.scraped_at);
+            if (r.changes > 0) enqueued++;
+            else duplicates++;
+        }
+
+        // ✅ Return immediately — bot never hangs
+        res.json({ ok: true, enqueued, duplicates, invalid, total: rawPosts.length });
+
+        // Kick off background worker (non-blocking)
+        setImmediate(runWorker);
+    });
+
+    // ── GET /api/import/crawbot/status — queue stats ───────────────────────
+    app.get('/api/import/crawbot/status', (req, res) => {
+        const stats = database.db.prepare(`
+            SELECT status, COUNT(*) as count FROM raw_leads GROUP BY status
+        `).all();
+        const recentQualified = database.db.prepare(`
+            SELECT author, score, assigned_to, url FROM raw_leads
+            WHERE status='QUALIFIED' ORDER BY id DESC LIMIT 10
+        `).all();
+        res.json({ ok: true, queue: stats, recentQualified });
+    });
+
+    console.log('[Server] ✅ CrawBot v2 pipeline loaded (/api/import/crawbot)');
+} catch (e) {
+    console.warn('[Server] ⚠️ CrawBot import skipped:', e.message);
+}
 
 module.exports = { app, startServer };

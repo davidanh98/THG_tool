@@ -41,9 +41,33 @@ Quy tắc soạn tin nhắn:
 - CHỈ trả về nội dung tin nhắn, KHÔNG giải thích thêm`;
 
 /**
- * Generate AI Copilot reply using Gemini 1.5 Flash
+ * Generate AI Copilot reply — routes through PersonalAgent if agent is active.
+ * @param {string} customerMessage 
+ * @param {object} context - { senderName, platform, salesName, leadId, leadSummary }
  */
 async function generateCopilotReply(customerMessage, context = {}) {
+    // ── Personal Agent Route (khi agent đã bật active mode) ──
+    const salesName = context.salesName;
+    if (salesName) {
+        try {
+            const database = require('../data_store/database');
+            const agentRow = database.getAgentProfile(salesName);
+            if (agentRow && agentRow.mode === 'active') {
+                const personalAgent = require('../agent/personalAgent');
+                const reply = await personalAgent.generateAgentReply(salesName, customerMessage, {
+                    leadId: context.leadId,
+                    leadSummary: context.leadSummary,
+                    platform: context.platform,
+                    senderName: context.senderName,
+                });
+                if (reply) return reply;
+            }
+        } catch (e) {
+            console.warn('[Copilot] ⚠️ PersonalAgent unavailable, dùng generic:', e.message);
+        }
+    }
+
+    // ── Generic fallback (learning mode hoặc không có salesName) ──
     const prompt = `${COPILOT_SYSTEM}
 
 Khách hàng vừa nhắn tin vào Fanpage THG:
@@ -57,7 +81,7 @@ Soạn câu trả lời phù hợp:`;
     try {
         const result = await geminiModel.generateContent(prompt);
         const reply = result.response.text().trim();
-        console.log(`[Copilot] ✅ Gemini soạn reply: ${reply.substring(0, 80)}...`);
+        console.log(`[Copilot] ✅ Generic reply: ${reply.substring(0, 80)}...`);
         return reply;
     } catch (err) {
         console.error('[Copilot] ✗ Gemini error:', err.message);
