@@ -8,6 +8,8 @@ on:
       - 'public/**'
       - 'scripts/**'
       - 'package*.json'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
       - '.github/workflows/**'
 
 concurrency:
@@ -27,35 +29,31 @@ jobs:
           username: root
           password: ${{ secrets.VPS_PASSWORD }}
           port: 2018
-          command_timeout: 5m
+          command_timeout: 10m
           script: |
-            set -e
             cd /root/THG_tool
 
             echo "📥 Pulling latest code..."
             git fetch origin main
             git reset --hard origin/main
 
-            echo "📦 Installing dependencies..."
-            npm ci --production --silent
+            echo "🐳 Building & restarting Docker container..."
+            docker compose build --no-cache app
+            docker compose up -d --no-build
 
-            echo "🔄 Restarting app with PM2..."
-            if pm2 list | grep -q "thg-lead-gen"; then
-              pm2 reload thg-lead-gen --update-env
-            else
-              pm2 start src/index.js --name thg-lead-gen --max-memory-restart 800M
-              pm2 save
-            fi
-
-            echo "⏳ Waiting for app to start..."
-            sleep 5
-            HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/api/stats 2>/dev/null || echo "000")
-            if [ "$HTTP" = "200" ]; then
-              echo "✅ Deploy #$GITHUB_RUN_NUMBER successful! HTTP 200"
-            else
-              echo "⚠️  HTTP ${HTTP} — checking logs..."
-              pm2 logs thg-lead-gen --lines 20 --nostream
-            fi
+            echo "⏳ Waiting for container to be healthy..."
+            for i in $(seq 1 15); do
+              sleep 5
+              HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/api/stats 2>/dev/null || echo "000")
+              if [ "$HTTP" = "200" ]; then
+                echo "✅ Deploy #$GITHUB_RUN_NUMBER done! HTTP 200 in $((i*5))s"
+                docker ps --filter name=thg-lead-gen --format "table {{.Names}}\t{{.Status}}"
+                exit 0
+              fi
+              echo "  [$((i*5))s] HTTP ${HTTP}..."
+            done
+            echo "⚠️  Health check inconclusive after 75s"
+            docker logs thg-lead-gen --tail 30
 
       - name: Deploy summary
         if: always()
