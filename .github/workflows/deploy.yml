@@ -53,7 +53,6 @@ jobs:
           username: root
           password: ${{ secrets.VPS_PASSWORD }}
           port: 2018
-          # timeout: 120s (default) — enough for even cold deploys
           script: |
             set -e
             cd /root/THG_tool
@@ -63,7 +62,25 @@ jobs:
             git reset --hard origin/main --quiet
             echo "✓ Code: $(git rev-parse --short HEAD)"
 
-            # ── 2. Smart npm install (skip if lockfile unchanged) ─────────
+            # ── 2. Auto-apply nginx config (skip if unchanged) ────────────
+            NGINX_CONF="nginx/thg-lead-gen.conf"
+            NGINX_DEST="/etc/nginx/sites-available/thg-lead-gen"
+            NEW_NGINX_HASH=$(md5sum "$NGINX_CONF" | cut -d' ' -f1)
+            OLD_NGINX_HASH=$(cat /root/.thg_nginx_hash 2>/dev/null || echo "none")
+            if [ "$NEW_NGINX_HASH" != "$OLD_NGINX_HASH" ]; then
+              echo "✓ nginx config changed → applying..."
+              mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+              cp "$NGINX_CONF" "$NGINX_DEST"
+              ln -sf "$NGINX_DEST" /etc/nginx/sites-enabled/thg-lead-gen
+              rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+              nginx -t && systemctl reload nginx
+              echo "$NEW_NGINX_HASH" > /root/.thg_nginx_hash
+              echo "✓ nginx reloaded with new config"
+            else
+              echo "✓ nginx config unchanged → skipping"
+            fi
+
+            # ── 3. Smart npm install (skip if lockfile unchanged) ─────────
             NEW_HASH=$(md5sum package-lock.json | cut -d' ' -f1)
             OLD_HASH=$(cat /root/.thg_pkg_hash 2>/dev/null || echo "none")
             if [ "$NEW_HASH" != "$OLD_HASH" ]; then
