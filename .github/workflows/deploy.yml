@@ -1,4 +1,4 @@
-name: Deploy to VPS
+name: Docker Build & Deploy
 
 on:
   push:
@@ -8,43 +8,71 @@ on:
       - 'public/**'
       - 'scripts/**'
       - 'package*.json'
-      - 'ecosystem.config.js'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
       - 'nginx/**'
       - '.github/workflows/**'
 
-# Cancel older deploy if a newer commit arrives
+# Cancel older run when newer commit arrives
 concurrency:
   group: deploy-main
   cancel-in-progress: true
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/thg-lead-gen
+
 jobs:
-  # ─── CI: Syntax validation ────────────────────────────────────────────────────
-  ci:
-    name: 🔍 CI — Validate
+  # ─── Stage 1: Build & Push Docker image ──────────────────────────────────────
+  build:
+    name: 🐳 Build & Push Image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # needed to push to ghcr.io
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          node-version: '20'
-          cache: 'npm'
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}   # Auto-provided, no setup needed
 
-      - name: Install
-        run: npm ci --production
+      - name: Set up Docker Buildx (for layer caching)
+        uses: docker/setup-buildx-action@v3
 
-      - name: Syntax check
-        run: |
-          node --check src/server.js
-          node --check src/index.js
-          node --check src/data_store/database.js
-          echo "✅ Syntax OK"
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest
 
-  # ─── CD: Deploy to VPS ───────────────────────────────────────────────────────
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Layer cache: reuses unchanged layers across builds (huge speedup)
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── Stage 2: Deploy to VPS ──────────────────────────────────────────────────
   deploy:
-    name: 🚀 Deploy
+    name: 🚀 Deploy to VPS
     runs-on: ubuntu-latest
-    needs: ci
+    needs: build
+
     steps:
       - name: SSH Deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -53,81 +81,60 @@ jobs:
           username: root
           password: ${{ secrets.VPS_PASSWORD }}
           port: 2018
-          command_timeout: 5m
+          command_timeout: 3m
           script: |
-            set -e
             cd /root/THG_tool
 
-            # ── 1. Pull latest code ───────────────────────────────────────
-            git fetch origin main --quiet
-            git reset --hard origin/main --quiet
-            echo "✓ Code: $(git rev-parse --short HEAD)"
+            # ── Pull the new image ────────────────────────────────────────
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin 2>/dev/null || true
+            DOCKER_IMAGE="ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image_tag }}"
+            echo "🐳 Pulling $DOCKER_IMAGE..."
+            docker pull "$DOCKER_IMAGE"
 
-            # ── 2. Auto-apply nginx config if changed ─────────────────────
+            # ── Apply nginx config if changed ─────────────────────────────
+            git fetch origin main --quiet && git reset --hard origin/main --quiet
             NGINX_CONF="nginx/thg-lead-gen.conf"
             NGINX_DEST="/etc/nginx/sites-available/thg-lead-gen"
             if [ -f "$NGINX_CONF" ]; then
-              NEW_NGINX=$(md5sum "$NGINX_CONF" | cut -d' ' -f1)
-              OLD_NGINX=$(cat /root/.thg_nginx_hash 2>/dev/null || echo "none")
-              if [ "$NEW_NGINX" != "$OLD_NGINX" ]; then
+              NEW_HASH=$(md5sum "$NGINX_CONF" | cut -d' ' -f1)
+              OLD_HASH=$(cat /root/.thg_nginx_hash 2>/dev/null || echo "none")
+              if [ "$NEW_HASH" != "$OLD_HASH" ]; then
                 mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
                 cp "$NGINX_CONF" "$NGINX_DEST"
                 ln -sf "$NGINX_DEST" /etc/nginx/sites-enabled/thg-lead-gen
                 rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
                 nginx -t && systemctl reload nginx
-                echo "$NEW_NGINX" > /root/.thg_nginx_hash
-                echo "✓ nginx config updated and reloaded"
-              else
-                echo "✓ nginx config unchanged"
+                echo "$NEW_HASH" > /root/.thg_nginx_hash
+                echo "✓ nginx updated"
               fi
             fi
 
-            # ── 3. Install deps only if package-lock.json changed ─────────
-            NEW_PKG=$(md5sum package-lock.json | cut -d' ' -f1)
-            OLD_PKG=$(cat /root/.thg_pkg_hash 2>/dev/null || echo "none")
-            if [ "$NEW_PKG" != "$OLD_PKG" ]; then
-              npm ci --production --silent
-              echo "$NEW_PKG" > /root/.thg_pkg_hash
-              echo "✓ Dependencies updated"
-            else
-              echo "✓ Dependencies unchanged"
-            fi
+            # ── Zero-downtime container swap ──────────────────────────────
+            DOCKER_IMAGE="$DOCKER_IMAGE" docker compose up -d --no-build
+            docker image prune -f   # Clean old images
 
-            # ── 4. Inject .env config ─────────────────────────────────────
-            sed -i '/^ENABLED_PLATFORMS=/d;/^MAX_POSTS_PER_SCAN=/d;/^SV_DAILY_LIMIT=/d;/^SCRAPE_MODE=/d;/^FB_EMAIL=/d;/^FB_PASSWORD=/d' .env 2>/dev/null || true
-            printf 'ENABLED_PLATFORMS=facebook\nMAX_POSTS_PER_SCAN=200\nSV_DAILY_LIMIT=1100\nSCRAPE_MODE=self-hosted\nFB_EMAIL=manyhope0502@gmail.com\nFB_PASSWORD=anhdeptrai7788\n' >> .env
-
-            # ── 5. Reset groups cache ─────────────────────────────────────
-            rm -f data/groups.db data/groups.db-shm data/groups.db-wal
-
-            # ── 6. Reload PM2 ─────────────────────────────────────────────
-            pm2 reload ecosystem.config.js --update-env 2>/dev/null \
-              || pm2 restart ecosystem.config.js --update-env 2>/dev/null \
-              || (pm2 delete all 2>/dev/null; pm2 start ecosystem.config.js)
-            pm2 save --force || true
-
-            # ── 7. Smart health check — poll every 3s, stop when ready ───
-            PORT=$(grep '^PORT=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || echo 3000)
-            echo "⏳ Waiting for app on :${PORT}..."
-            for i in $(seq 1 12); do
+            # ── Smart health check ────────────────────────────────────────
+            echo "⏳ Waiting for container..."
+            for i in $(seq 1 10); do
               sleep 3
-              HTTP=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/api/stats" 2>/dev/null || echo "000")
+              HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/api/stats 2>/dev/null || echo "000")
               if [ "$HTTP" = "200" ]; then
-                echo "✅ App ready in $((i*3))s (HTTP 200)"
-                break
+                echo "✅ Healthy in $((i*3))s — Deploy #${{ github.run_number }} done!"
+                docker ps --filter name=thg-lead-gen
+                exit 0
               fi
               echo "  [$((i*3))s] HTTP ${HTTP}..."
             done
-
-            echo "✅ Deploy #${{ github.run_number }} complete!"
+            echo "⚠️  Health check inconclusive — container may still be starting"
+            docker logs thg-lead-gen --tail 20
 
       - name: Deploy summary
         if: always()
         run: |
           SHA=$(echo '${{ github.sha }}' | cut -c1-7)
-          echo "## 🚀 Deploy #${{ github.run_number }} — ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐳 Deploy #${{ github.run_number }} — ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "| | |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Commit** | \`${SHA}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image** | \`ghcr.io/${{ env.IMAGE_NAME }}:${SHA}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **By** | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Message** | ${{ github.event.head_commit.message }} |" >> $GITHUB_STEP_SUMMARY

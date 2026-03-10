@@ -1,0 +1,42 @@
+version: '3.9'
+
+services:
+  app:
+    image: ${DOCKER_IMAGE:-thg-lead-gen:latest}
+    container_name: thg-lead-gen
+    restart: unless-stopped
+
+    # Data persistence — SQLite DB and logs survive container restarts/updates
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./.env:/app/.env:ro   # Read-only .env mount
+
+    # Resource limits — prevent container from eating whole VPS
+    deploy:
+      resources:
+        limits:
+          memory: 900M
+          cpus: '1.5'
+        reservations:
+          memory: 256M
+
+    ports:
+      - "127.0.0.1:3000:3000"   # Only expose to localhost (nginx proxies externally)
+
+    environment:
+      - NODE_ENV=production
+
+    # Health check for docker compose
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/stats"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
