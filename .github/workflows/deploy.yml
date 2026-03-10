@@ -106,19 +106,18 @@ jobs:
               || (pm2 delete all 2>/dev/null; pm2 start ecosystem.config.js)
             pm2 save --force || true
 
-            # ── 7. Health check (non-fatal — app may take 30s to start) ───
-            echo "⏳ Waiting 30s for app to start..."
-            sleep 30
+            # ── 7. Smart health check — poll every 3s, stop when ready ───
             PORT=$(grep '^PORT=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || echo 3000)
-            HTTP=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/api/stats" 2>/dev/null || echo "000")
-            if [ "$HTTP" = "200" ]; then
-              echo "✅ App healthy (HTTP 200)"
-            else
-              echo "⚠️  App returned HTTP ${HTTP} — showing PM2 status:"
-              pm2 list
-              pm2 logs thg-lead-gen --lines 15 --nostream || true
-              # Non-fatal: don't exit 1 — deploy succeeded even if health check inconclusive
-            fi
+            echo "⏳ Waiting for app on :${PORT}..."
+            for i in $(seq 1 12); do
+              sleep 3
+              HTTP=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/api/stats" 2>/dev/null || echo "000")
+              if [ "$HTTP" = "200" ]; then
+                echo "✅ App ready in $((i*3))s (HTTP 200)"
+                break
+              fi
+              echo "  [$((i*3))s] HTTP ${HTTP}..."
+            done
 
             echo "✅ Deploy #${{ github.run_number }} complete!"
 
