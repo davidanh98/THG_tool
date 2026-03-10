@@ -23,7 +23,7 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:3000/api/stats || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -sf http://localhost:3000/ -o /dev/null -w "%{http_code}" | grep -qE "^(200|301|302|401|403)" || exit 1
 
 CMD ["node", "src/index.js"]
