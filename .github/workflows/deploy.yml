@@ -1,4 +1,4 @@
-name: Docker Build & Deploy
+name: Deploy to VPS
 
 on:
   push:
@@ -8,68 +8,16 @@ on:
       - 'public/**'
       - 'scripts/**'
       - 'package*.json'
-      - 'Dockerfile'
-      - 'docker-compose.yml'
-      - 'nginx/**'
       - '.github/workflows/**'
 
-# Cancel older run when newer commit arrives
 concurrency:
   group: deploy-main
   cancel-in-progress: true
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/thg-lead-gen
-
 jobs:
-  # ─── Stage 1: Build & Push Docker image ──────────────────────────────────────
-  build:
-    name: 🐳 Build & Push Image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write   # needed to push to ghcr.io
-
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}   # Auto-provided, no setup needed
-
-      - name: Set up Docker Buildx (for layer caching)
-        uses: docker/setup-buildx-action@v3
-
-      - name: Extract image metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=,format=short
-            type=raw,value=latest
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          no-cache: true    # Force clean build — remove after first green run
-
-  # ─── Stage 2: Deploy to VPS ──────────────────────────────────────────────────
   deploy:
     name: 🚀 Deploy to VPS
     runs-on: ubuntu-latest
-    needs: build
 
     steps:
       - name: SSH Deploy
@@ -79,60 +27,43 @@ jobs:
           username: root
           password: ${{ secrets.VPS_PASSWORD }}
           port: 2018
-          command_timeout: 3m
+          command_timeout: 5m
           script: |
+            set -e
             cd /root/THG_tool
 
-            # ── Pull the new image ────────────────────────────────────────
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin 2>/dev/null || true
-            DOCKER_IMAGE="ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image_tag }}"
-            echo "🐳 Pulling $DOCKER_IMAGE..."
-            docker pull "$DOCKER_IMAGE"
+            echo "📥 Pulling latest code..."
+            git fetch origin main
+            git reset --hard origin/main
 
-            # ── Apply nginx config if changed ─────────────────────────────
-            git fetch origin main --quiet && git reset --hard origin/main --quiet
-            NGINX_CONF="nginx/thg-lead-gen.conf"
-            NGINX_DEST="/etc/nginx/sites-available/thg-lead-gen"
-            if [ -f "$NGINX_CONF" ]; then
-              NEW_HASH=$(md5sum "$NGINX_CONF" | cut -d' ' -f1)
-              OLD_HASH=$(cat /root/.thg_nginx_hash 2>/dev/null || echo "none")
-              if [ "$NEW_HASH" != "$OLD_HASH" ]; then
-                mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
-                cp "$NGINX_CONF" "$NGINX_DEST"
-                ln -sf "$NGINX_DEST" /etc/nginx/sites-enabled/thg-lead-gen
-                rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-                nginx -t && systemctl reload nginx
-                echo "$NEW_HASH" > /root/.thg_nginx_hash
-                echo "✓ nginx updated"
-              fi
+            echo "📦 Installing dependencies..."
+            npm ci --production --silent
+
+            echo "🔄 Restarting app with PM2..."
+            if pm2 list | grep -q "thg-lead-gen"; then
+              pm2 reload thg-lead-gen --update-env
+            else
+              pm2 start src/index.js --name thg-lead-gen --max-memory-restart 800M
+              pm2 save
             fi
 
-            # ── Zero-downtime container swap ──────────────────────────────
-            DOCKER_IMAGE="$DOCKER_IMAGE" docker compose up -d --no-build
-            docker image prune -f   # Clean old images
-
-            # ── Smart health check ────────────────────────────────────────
-            echo "⏳ Waiting for container..."
-            for i in $(seq 1 10); do
-              sleep 3
-              HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/api/stats 2>/dev/null || echo "000")
-              if [ "$HTTP" = "200" ]; then
-                echo "✅ Healthy in $((i*3))s — Deploy #${{ github.run_number }} done!"
-                docker ps --filter name=thg-lead-gen
-                exit 0
-              fi
-              echo "  [$((i*3))s] HTTP ${HTTP}..."
-            done
-            echo "⚠️  Health check inconclusive — container may still be starting"
-            docker logs thg-lead-gen --tail 20
+            echo "⏳ Waiting for app to start..."
+            sleep 5
+            HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/api/stats 2>/dev/null || echo "000")
+            if [ "$HTTP" = "200" ]; then
+              echo "✅ Deploy #$GITHUB_RUN_NUMBER successful! HTTP 200"
+            else
+              echo "⚠️  HTTP ${HTTP} — checking logs..."
+              pm2 logs thg-lead-gen --lines 20 --nostream
+            fi
 
       - name: Deploy summary
         if: always()
         run: |
           SHA=$(echo '${{ github.sha }}' | cut -c1-7)
-          echo "## 🐳 Deploy #${{ github.run_number }} — ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Deploy #${{ github.run_number }} — ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "| | |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Image** | \`ghcr.io/${{ env.IMAGE_NAME }}:${SHA}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | \`${SHA}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **By** | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Message** | ${{ github.event.head_commit.message }} |" >> $GITHUB_STEP_SUMMARY
