@@ -11,159 +11,127 @@ on:
       - 'ecosystem.config.js'
       - '.github/workflows/**'
 
-# Cancel older deploy when a new commit arrives
+# Cancel older deploy if a newer commit arrives
 concurrency:
   group: deploy-main
   cancel-in-progress: true
 
 jobs:
-  # ─── CI: Validate before deploying ───────────────────────────────────────────
+  # ─── CI: Validate code ────────────────────────────────────────────────────
   ci:
-    name: 🔍 CI Check
+    name: 🔍 CI — Validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'npm'    # Caches ~/.npm — skips network download when lockfile unchanged
 
       - name: Install
         run: npm ci --production
 
-      - name: Syntax check
+      - name: Validate
         run: |
-          node --check src/server.js
-          node --check src/index.js
-          node --check src/data_store/database.js
-          echo "✅ Syntax OK"
+          node --check src/server.js && \
+          node --check src/index.js && \
+          node --check src/data_store/database.js && \
+          node -e "require('./src/data_store/database'); require('./src/config');" && \
+          echo "✅ All checks passed"
 
-      - name: Smoke test
-        run: |
-          node -e "require('./src/data_store/database'); require('./src/config'); console.log('✅ Modules OK');"
-
-  # ─── CD: Deploy to Production ─────────────────────────────────────────────
+  # ─── CD: Deploy to VPS ───────────────────────────────────────────────────
   deploy:
-    name: 🚀 Deploy Production
+    name: 🚀 Deploy
     runs-on: ubuntu-latest
     needs: ci
-    # environment: production   # ← Uncomment after creating 'production' env in repo Settings
     steps:
-      - name: Generate deploy info
-        id: info
-        run: |
-          echo "sha_short=$(echo '${{ github.sha }}' | cut -c1-7)" >> $GITHUB_OUTPUT
-          echo "actor=${{ github.actor }}" >> $GITHUB_OUTPUT
-          echo "run_num=${{ github.run_number }}" >> $GITHUB_OUTPUT
-          echo "Deploy #${{ github.run_number }} | ${{ github.actor }} | $(echo '${{ github.sha }}' | cut -c1-7)"
-
-      - name: 📲 Notify Telegram — Deploy started
-        if: ${{ env.TELEGRAM_BOT_TOKEN != '' }}
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d parse_mode="HTML" \
-            -d text="🚀 <b>Deploy #${{ github.run_number }} Started</b>
-          👤 <b>By:</b> ${{ github.actor }}
-          🌿 <b>Branch:</b> main
-          📝 <b>Commit:</b> <code>$(echo '${{ github.sha }}' | cut -c1-7)</code>
-          💬 <b>Message:</b> ${{ github.event.head_commit.message }}
-          🔗 <a href='https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'>View Run</a>"
-
-      - name: 🚀 SSH Deploy to VPS
-        id: ssh_deploy
+      - name: SSH Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: root
           password: ${{ secrets.VPS_PASSWORD }}
           port: 2018
+          # timeout: 120s (default) — enough for even cold deploys
           script: |
             set -e
             cd /root/THG_tool
 
-            # Save current commit for rollback
-            PREV_SHA=$(git rev-parse HEAD)
-            echo "🔖 Saving rollback point: ${PREV_SHA:0:7}"
-            echo $PREV_SHA > /root/.thg_last_good_deploy
+            # ── 1. Pull code ──────────────────────────────────────────────
+            git fetch origin main --quiet
+            git reset --hard origin/main --quiet
+            echo "✓ Code: $(git rev-parse --short HEAD)"
 
-            echo "━━━ 📥 Pull: ${{ github.sha }}"
-            git fetch origin main
-            git reset --hard origin/main
+            # ── 2. Smart npm install (skip if lockfile unchanged) ─────────
+            NEW_HASH=$(md5sum package-lock.json | cut -d' ' -f1)
+            OLD_HASH=$(cat /root/.thg_pkg_hash 2>/dev/null || echo "none")
+            if [ "$NEW_HASH" != "$OLD_HASH" ]; then
+              echo "✓ Dependencies changed → npm ci"
+              npm ci --production --silent
+              echo "$NEW_HASH" > /root/.thg_pkg_hash
+            else
+              echo "✓ Dependencies unchanged → skipping npm install"
+            fi
 
-            echo "━━━ 📦 Install deps"
-            npm ci --production 2>/dev/null || npm install --production
-
-            echo "━━━ ⚙️  Inject .env config"
+            # ── 3. Inject .env sprint config ──────────────────────────────
             sed -i '/^ENABLED_PLATFORMS=/d;/^MAX_POSTS_PER_SCAN=/d;/^SV_DAILY_LIMIT=/d;/^SCRAPE_MODE=/d;/^FB_EMAIL=/d;/^FB_PASSWORD=/d' .env 2>/dev/null || true
             printf 'ENABLED_PLATFORMS=facebook\nMAX_POSTS_PER_SCAN=200\nSV_DAILY_LIMIT=1100\nSCRAPE_MODE=self-hosted\nFB_EMAIL=manyhope0502@gmail.com\nFB_PASSWORD=anhdeptrai7788\n' >> .env
 
-            echo "━━━ 🗑️  Reset groups cache"
+            # ── 4. Reset groups cache ─────────────────────────────────────
             rm -f data/groups.db data/groups.db-shm data/groups.db-wal
 
-            echo "━━━ 🔄 Reload PM2 (zero-downtime)"
+            # ── 5. Zero-downtime reload ───────────────────────────────────
             pm2 reload ecosystem.config.js --update-env 2>/dev/null \
               || pm2 restart ecosystem.config.js --update-env 2>/dev/null \
               || (pm2 delete all 2>/dev/null || true && pm2 start ecosystem.config.js)
-            pm2 save
+            pm2 save --force
 
-            echo "━━━ 🏥 Health check (3 attempts)"
-            PORT=$(grep '^PORT=' .env 2>/dev/null | cut -d= -f2 || echo 3000)
-            for i in 1 2 3; do
-              sleep 5
-              STATUS=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/api/stats" 2>/dev/null || echo "000")
-              if [ "$STATUS" = "200" ]; then
-                echo "✅ Healthy (HTTP 200) on port ${PORT}"
+            # ── 6. Health check ───────────────────────────────────────────
+            PORT=$(grep '^PORT=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || echo 3000)
+            echo "Health check → http://localhost:${PORT}/api/stats"
+            for i in 1 2 3 4 5; do
+              sleep 3
+              HTTP=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/api/stats" 2>/dev/null || echo "000")
+              if [ "$HTTP" = "200" ]; then
+                echo "✅ Deploy #${{ github.run_number }} healthy (HTTP 200)"
+                pm2 list
                 exit 0
               fi
-              echo "⏳ Attempt ${i}/3 — HTTP ${STATUS}"
+              echo "  ⏳ Attempt ${i}/5 — HTTP ${HTTP}"
             done
 
-            # Health check failed — auto rollback
-            echo "🔴 Health check failed — rolling back to ${PREV_SHA:0:7}..."
-            git reset --hard $PREV_SHA
-            npm ci --production 2>/dev/null || true
-            pm2 reload ecosystem.config.js --update-env 2>/dev/null || pm2 restart ecosystem.config.js 2>/dev/null || true
-            echo "⚠️  ROLLBACK COMPLETE — reverted to ${PREV_SHA:0:7}"
+            # Auto-rollback if health check fails
+            echo "🔴 Health check failed — rolling back..."
+            PREV=$(cat /root/.thg_last_good_sha 2>/dev/null || echo "")
+            if [ -n "$PREV" ]; then
+              git reset --hard "$PREV"
+              npm ci --production --silent 2>/dev/null || true
+              pm2 reload ecosystem.config.js --update-env 2>/dev/null || true
+              echo "⚠️  Rolled back to $PREV"
+            fi
+            pm2 logs thg-lead-gen --lines 30 --nostream
             exit 1
 
-      - name: 📊 GitHub Deploy Summary
+      - name: Save good SHA
+        if: success()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 2018
+          script: echo "${{ github.sha }}" > /root/.thg_last_good_sha
+
+      - name: Deploy summary
         if: always()
         run: |
-          if [ "${{ steps.ssh_deploy.outcome }}" = "success" ]; then
-            ICON="✅"; STATUS="Success"
-          else
-            ICON="❌"; STATUS="Failed (auto-rollback triggered)"
-          fi
-          echo "## ${ICON} Deploy #${{ github.run_number }} — ${STATUS}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          SHA=$(echo '${{ github.sha }}' | cut -c1-7)
+          OUTCOME="${{ job.status }}"
+          ICON=$([ "$OUTCOME" = "success" ] && echo "✅" || echo "❌")
+          echo "## ${ICON} Deploy #${{ github.run_number }} — ${OUTCOME}" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | \`$(echo '${{ github.sha }}' | cut -c1-7)\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Author | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Branch | main |" >> $GITHUB_STEP_SUMMARY
-          echo "| Message | ${{ github.event.head_commit.message }} |" >> $GITHUB_STEP_SUMMARY
-
-      - name: 📲 Notify Telegram — Deploy result
-        if: ${{ always() && env.TELEGRAM_BOT_TOKEN != '' }}
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          if [ "${{ steps.ssh_deploy.outcome }}" = "success" ]; then
-            MSG="✅ <b>Deploy #${{ github.run_number }} SUCCESS</b>
-          👤 ${{ github.actor }} | <code>$(echo '${{ github.sha }}' | cut -c1-7)</code>
-          🌐 App is live and healthy!"
-          else
-            MSG="🔴 <b>Deploy #${{ github.run_number }} FAILED</b>
-          👤 ${{ github.actor }} | <code>$(echo '${{ github.sha }}' | cut -c1-7)</code>
-          ⚠️ Auto-rollback triggered. Check logs:
-          🔗 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          fi
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d parse_mode="HTML" \
-            -d text="$MSG"
+          echo "| **Commit** | \`${SHA}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **By** | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Message** | ${{ github.event.head_commit.message }} |" >> $GITHUB_STEP_SUMMARY
