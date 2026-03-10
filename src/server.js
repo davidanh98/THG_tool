@@ -70,6 +70,31 @@ const scanLimiter = rateLimit({
 
 app.use('/api/', apiLimiter);
 
+// ─── Request Timeout Middleware ───────────────────────────────────────────────
+// Prevents nginx 504 by letting Node respond with 503 before nginx gives up.
+// Long-running endpoints (AI, scan) get 120s. Everything else gets 30s.
+const LONG_ROUTES = ['/api/agents/generate-reply', '/api/scan', '/api/leads/classify'];
+app.use((req, res, next) => {
+    const isLong = LONG_ROUTES.some(r => req.path.startsWith(r));
+    const timeoutMs = isLong ? 120_000 : 30_000;
+
+    const timer = setTimeout(() => {
+        if (!res.headersSent) {
+            logger.warn('Server', `⏱ Request timeout: ${req.method} ${req.path} (${timeoutMs / 1000}s)`);
+            res.status(503).json({
+                success: false,
+                error: 'Request timed out — server is busy. Please retry.',
+                retryAfter: 5,
+            });
+        }
+    }, timeoutMs);
+
+    res.on('finish', () => clearTimeout(timer));
+    res.on('close', () => clearTimeout(timer));
+    next();
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ╔═══════════════════════════════════════════════════════════╗
 // ║  HEALTH CHECK                                             ║
 // ╚═══════════════════════════════════════════════════════════╝
