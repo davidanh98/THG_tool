@@ -1,18 +1,21 @@
-version: '3.9'
-
 services:
   app:
+    # CI/CD injects DOCKER_IMAGE=ghcr.io/... for fast pull deploys.
+    # If not set (e.g. first run / local), builds from Dockerfile.
     image: ${DOCKER_IMAGE:-thg-lead-gen:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: thg-lead-gen
     restart: unless-stopped
 
-    # Data persistence — SQLite DB and logs survive container restarts/updates
+    # Data persistence — SQLite DB and logs survive restarts/updates
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-      - ./.env:/app/.env:ro   # Read-only .env mount
+      - ./.env:/app/.env:ro
 
-    # Resource limits — prevent container from eating whole VPS
+    # Resource limits
     deploy:
       resources:
         limits:
@@ -27,7 +30,6 @@ services:
     environment:
       - NODE_ENV=production
 
-    # Health check for docker compose
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/stats"]
       interval: 15s
