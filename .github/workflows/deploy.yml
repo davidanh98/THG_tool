@@ -63,9 +63,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Layer cache: reuses unchanged layers across builds (huge speedup)
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          no-cache: true    # Force clean build — remove after first green run
 
   # ─── Stage 2: Deploy to VPS ──────────────────────────────────────────────────
   deploy:
