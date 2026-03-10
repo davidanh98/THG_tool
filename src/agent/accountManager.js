@@ -16,9 +16,9 @@ const fs = require('fs');
 const db = require('../data_store/database');
 
 // ─── Activity Time Window ─────────────────────────────────────────────────
-// Chỉ cào trong giờ hoạt động (giờ VN = UTC+7)
-const ACTIVE_HOUR_START = 8;   // 8h sáng
-const ACTIVE_HOUR_END = 23;  // 23h tối
+// Quét giờ seller Việt Kiều Mỹ active (23h VN → 13h VN hôm sau = 8am-10pm ET)
+const ACTIVE_HOUR_START = 23;  // 23h VN = 8am ET
+const ACTIVE_HOUR_END = 13;  // 13h VN = 10pm ET hôm trước
 const SESSIONS_DIR = path.join(__dirname, '..', '..', 'data', 'fb_sessions');
 
 // ─── DB Migration: tạo bảng fb_accounts nếu chưa có ────────────────────
@@ -76,7 +76,8 @@ function linkAccountToSales(email, salesName) {
 function isInActiveWindow() {
     // VN time = UTC + 7
     const vnHour = (new Date().getUTCHours() + 7) % 24;
-    return vnHour >= ACTIVE_HOUR_START && vnHour <= ACTIVE_HOUR_END;
+    // Active: 23h-23h59 (buổi tối VN) HOẶC 0h-13h59 (sáng VN = sáng ET)
+    return vnHour >= ACTIVE_HOUR_START || vnHour <= ACTIVE_HOUR_END;
 }
 
 /**

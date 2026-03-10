@@ -30,7 +30,7 @@ module.exports = {
   // Scan every 30 min 8:00-22:00 (28 scans/day)
   // All credits → Facebook only
   // ════════════════════════════════════════════════════
-  CRON_UNIFIED_SCAN: '0,30 8-22 * * *',   // Mỗi 30 phút từ 8h-22h (28 scans/day)
+  CRON_UNIFIED_SCAN: '0,30 0-13,23 * * *',  // 23h-13h VN (7am-8pm ET) — giờ seller Việt Kiều Mỹ active
   MAX_POSTS_PER_SCAN: parseInt(process.env.MAX_POSTS_PER_SCAN || '200'),  // AGGRESSIVE: 200 max
 
   // Campaign: 200 leads by Mar 10 → 28 scans × ~40 credits = ~1120/day
