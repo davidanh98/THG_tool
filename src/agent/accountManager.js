@@ -42,15 +42,38 @@ function ensureAccountsTable() {
         );
     `);
 
-    // Đảm bảo account mặc định từ .env được đưa vào bảng nếu chưa có
-    const defaultEmail = process.env.FB_EMAIL || '';
-    const defaultPassword = process.env.FB_PASSWORD || '';
-    if (defaultEmail) {
-        const sessionPath = path.join(SESSIONS_DIR, `${defaultEmail.replace(/[^a-z0-9]/gi, '_')}.json`);
+    // Seed tài khoản từ .env — hỗ trợ nhiều account:
+    // FB_ACCOUNT_1_EMAIL, FB_ACCOUNT_1_PASSWORD (mới)
+    // FB_EMAIL, FB_PASSWORD (cũ — compat)
+    const accountsToSeed = [];
+
+    // Multi-account format: FB_ACCOUNT_1_EMAIL, FB_ACCOUNT_2_EMAIL, ...
+    let i = 1;
+    while (process.env[`FB_ACCOUNT_${i}_EMAIL`]) {
+        accountsToSeed.push({
+            id: `account_${i}`,
+            email: process.env[`FB_ACCOUNT_${i}_EMAIL`],
+            password: process.env[`FB_ACCOUNT_${i}_PASSWORD`] || '',
+        });
+        i++;
+    }
+
+    // Legacy single-account format (backwards compat)
+    if (accountsToSeed.length === 0 && process.env.FB_EMAIL) {
+        accountsToSeed.push({
+            id: 'default',
+            email: process.env.FB_EMAIL,
+            password: process.env.FB_PASSWORD || '',
+        });
+    }
+
+    for (const acct of accountsToSeed) {
+        const sessionPath = path.join(SESSIONS_DIR, `${acct.email.replace(/[^a-z0-9]/gi, '_')}.json`);
         db.db.prepare(`
             INSERT OR IGNORE INTO fb_accounts (id, email, password, proxy_url, session_path)
             VALUES (?, ?, ?, ?, ?)
-        `).run('default', defaultEmail, defaultPassword, '', sessionPath);
+        `).run(acct.id, acct.email, acct.password, '', sessionPath);
+        console.log(`[AccountManager] 📋 Seeded: ${acct.email}`);
     }
     fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 }
