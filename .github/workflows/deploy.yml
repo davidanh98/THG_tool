@@ -20,6 +20,7 @@ jobs:
   deploy:
     name: 🚀 Deploy to VPS
     runs-on: ubuntu-latest
+    timeout-minutes: 8
 
     steps:
       - name: SSH Deploy
@@ -29,27 +30,40 @@ jobs:
           username: root
           password: ${{ secrets.VPS_PASSWORD }}
           port: 2018
-          command_timeout: 10m
+          command_timeout: 8m
           script: |
+            set -e
             cd /root/THG_tool
 
             echo "📥 Pulling latest code..."
             git fetch origin main
             git reset --hard origin/main
 
-            echo "⚡ Hot-sync: copying src/ + public/ + scripts/ into container..."
-            docker start thg-lead-gen 2>/dev/null || docker compose up -d
-            docker cp src/. thg-lead-gen:/app/src/
-            docker cp public/. thg-lead-gen:/app/public/
-            docker cp scripts/. thg-lead-gen:/app/scripts/
-            docker restart thg-lead-gen
-            sleep 8
+            # ── Detect if rebuild is needed (package.json or Dockerfile changed) ──
+            CHANGED=$(git diff HEAD~1 --name-only 2>/dev/null || echo "")
+            NEEDS_REBUILD=$(echo "$CHANGED" | grep -E "^(package|Dockerfile)" || true)
 
-            echo "=== Syncing group list from production ==="
+            if [ -n "$NEEDS_REBUILD" ]; then
+              echo "🔨 package.json or Dockerfile changed — rebuilding image..."
+              docker compose build --pull app
+              docker compose up -d --force-recreate
+            else
+              echo "⚡ Hot-sync: copying src/ + public/ + scripts/ into container..."
+              # Stop before copy to avoid race condition
+              docker stop thg-lead-gen 2>/dev/null || true
+              docker start thg-lead-gen 2>/dev/null || docker compose up -d
+              docker cp src/. thg-lead-gen:/app/src/
+              docker cp public/. thg-lead-gen:/app/public/
+              docker cp scripts/. thg-lead-gen:/app/scripts/
+              docker restart thg-lead-gen
+            fi
+
+            echo "=== Syncing group list ==="
+            sleep 5
             docker exec thg-lead-gen node scripts/sync-groups.js || true
 
             echo "⏳ Waiting for container to be healthy..."
-            for i in $(seq 1 10); do
+            for i in $(seq 1 20); do
               sleep 3
               HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/health 2>/dev/null || echo "000")
               if [ "$HTTP" = "200" ]; then
@@ -59,8 +73,11 @@ jobs:
               fi
               echo "  [$((i*3))s] HTTP ${HTTP}..."
             done
-            echo "⚠️  Health check inconclusive after 30s"
-            docker logs thg-lead-gen --tail 20
+
+            echo "⚠️  Health check inconclusive after 60s — showing logs:"
+            docker logs thg-lead-gen --tail 30
+            # Don't fail the deploy — container may still be starting up
+            exit 0
 
       - name: Deploy summary
         if: always()

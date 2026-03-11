@@ -44,7 +44,7 @@ docker compose up -d
 echo "--- Health Check ---"
 for i in $(seq 1 12); do
   sleep 5
-  HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/api/stats 2>/dev/null || echo "000")
+  HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/health 2>/dev/null || echo "000")
   if [ "$HTTP" = "200" ]; then
     echo "✅ App healthy! HTTP 200 after $((i*5))s"
     docker ps --filter name=thg-lead-gen
