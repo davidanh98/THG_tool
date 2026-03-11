@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.50.1-noble
+FROM mcr.microsoft.com/playwright:v1.58.2-noble
 
 # Switch to Node.js 20 (Playwright image uses Node 18 by default)
 # noble = Ubuntu 24.04 — all Chromium deps already installed
