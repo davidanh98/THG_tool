@@ -10,6 +10,7 @@ on:
       - 'package*.json'
       - 'Dockerfile'
       - 'docker-compose.yml'
+      - 'ecosystem.config.js'
       - '.github/workflows/**'
 
 concurrency:
@@ -20,7 +21,7 @@ jobs:
   deploy:
     name: 🚀 Deploy to VPS
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
 
     steps:
       - name: SSH Deploy
@@ -30,7 +31,7 @@ jobs:
           username: root
           password: ${{ secrets.VPS_PASSWORD }}
           port: 2018
-          command_timeout: 8m
+          command_timeout: 10m
           script: |
             set -e
             cd /root/THG_tool
@@ -44,39 +45,50 @@ jobs:
             NEEDS_REBUILD=$(echo "$CHANGED" | grep -E "^(package|Dockerfile)" || true)
 
             if [ -n "$NEEDS_REBUILD" ]; then
-              echo "🔨 package.json or Dockerfile changed — rebuilding image..."
-              docker compose build --pull app
+              echo "🔨 package.json or Dockerfile changed — full rebuild..."
+              docker compose build --pull
               docker compose up -d --force-recreate
             else
-              echo "⚡ Hot-sync: copying files into RUNNING container (zero-downtime)..."
-              # Container keeps running during copy — no stop needed!
-              docker cp src/. thg-lead-gen:/app/src/
-              docker cp public/. thg-lead-gen:/app/public/
-              docker cp scripts/. thg-lead-gen:/app/scripts/
+              echo "⚡ Hot-sync: copying files into RUNNING containers..."
 
-              echo "🔄 Restarting container with new code..."
-              docker restart thg-lead-gen
+              # Copy source into all 3 containers (they share the same image)
+              for CONTAINER in thg-api thg-scraper thg-ai-worker; do
+                if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
+                  echo "  📦 Syncing ${CONTAINER}..."
+                  docker cp src/. ${CONTAINER}:/app/src/
+                  docker cp public/. ${CONTAINER}:/app/public/
+                  docker cp scripts/. ${CONTAINER}:/app/scripts/
+                  docker cp ecosystem.config.js ${CONTAINER}:/app/ecosystem.config.js
+                else
+                  echo "  ⚠️ ${CONTAINER} not running — will recreate"
+                fi
+              done
+
+              echo "🔄 Restarting all services..."
+              docker compose up -d --force-recreate
             fi
 
             echo "=== Syncing group list ==="
             sleep 5
-            docker exec thg-lead-gen node scripts/sync-groups.js 2>/dev/null || true
+            docker exec thg-api node scripts/sync-groups.js 2>/dev/null || true
 
-            echo "⏳ Waiting for container to be healthy..."
+            echo "⏳ Waiting for API to be healthy..."
             for i in $(seq 1 20); do
               sleep 3
               HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/health 2>/dev/null || echo "000")
               if [ "$HTTP" = "200" ]; then
                 echo "✅ Deploy #$GITHUB_RUN_NUMBER done! HTTP 200 in $((i*3))s"
-                docker ps --filter name=thg-lead-gen --format "table {{.Names}}\t{{.Status}}"
+                echo ""
+                echo "=== Running Services ==="
+                docker compose ps
                 exit 0
               fi
               echo "  [$((i*3))s] HTTP ${HTTP}..."
             done
 
-            # ── ROLLBACK: if health check fails, force restart container ──
-            echo "⚠️ Health check failed after 60s — attempting auto-recovery..."
-            docker restart thg-lead-gen
+            # ── ROLLBACK: if health check fails ──
+            echo "⚠️ Health check failed after 60s — attempting recovery..."
+            docker compose restart api
             sleep 15
             HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/health 2>/dev/null || echo "000")
             if [ "$HTTP" = "200" ]; then
@@ -85,9 +97,7 @@ jobs:
             fi
 
             echo "❌ Recovery failed — showing logs:"
-            docker logs thg-lead-gen --tail 40
-            # Exit 0 to not mark the whole workflow as failed
-            # Container is still running, just not healthy yet
+            docker compose logs --tail 30 api
             exit 0
 
       - name: Deploy summary
@@ -98,5 +108,6 @@ jobs:
           echo "| | |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${SHA}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Architecture** | 3-Tier (API + Scraper + AI Worker) |" >> $GITHUB_STEP_SUMMARY
           echo "| **By** | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Message** | ${{ github.event.head_commit.message }} |" >> $GITHUB_STEP_SUMMARY
