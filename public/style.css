@@ -121,8 +121,6 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
-  /* Footer removed — nav fills full height minus header only */
-  max-height: calc(100vh - 120px);
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
