@@ -4,19 +4,22 @@ on:
   push:
     branches: [main]
 
-env:
-  # Hardcode lowercase — Docker yêu cầu tất cả phải lowercase
-  IMAGE_TAG: ghcr.io/davidanh98/thg_tool:latest
-
 jobs:
-  # GIAI ĐOẠN 1: Build Image trên GitHub Runner
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
+
+      # Ép tên repo về chữ thường
+      - name: Prepare Image Tag
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_TAG=ghcr.io/${REPO_LOWER}:latest" >> $GITHUB_ENV
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -29,7 +32,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and Push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
@@ -37,10 +40,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # GIAI ĐOẠN 2: VPS chỉ Pull & Run
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: SSH Deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -53,24 +57,21 @@ jobs:
           script: |
             cd /root/THG_tool
 
-            # Pull latest compose + source
             git fetch origin main
             git reset --hard origin/main
 
-            # Login GHCR
+            # Hardcode lowercase image tag
+            IMAGE_TAG="ghcr.io/davidanh98/thg_tool:latest"
+
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # Pull pre-built image
-            docker pull ${{ env.IMAGE_TAG }}
+            docker pull $IMAGE_TAG
 
-            # Set image for docker compose
-            export DOCKER_IMAGE="${{ env.IMAGE_TAG }}"
+            export DOCKER_IMAGE="$IMAGE_TAG"
             docker compose up -d --remove-orphans
 
-            # Cleanup old images
             docker image prune -f
 
-            # Health check
             echo "⏳ Waiting for API..."
             for i in 1 2 3 4 5 6 7 8 9 10; do
               sleep 3
