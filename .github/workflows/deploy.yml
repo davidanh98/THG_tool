@@ -41,6 +41,15 @@ jobs:
             docker compose build --no-cache app
             docker compose up -d --no-build
 
+            echo "=== Installing Playwright Chromium ==="
+            docker exec thg-lead-gen sh -c "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 npx playwright install chromium" || true
+
+            echo "=== Syncing group list from production ==="
+            docker exec thg-lead-gen node scripts/sync-groups.js || true
+
+            echo "=== Commit container to preserve Chromium ==="
+            docker commit thg-lead-gen thg-lead-gen:latest || true
+
             echo "⏳ Waiting for container to be healthy..."
             for i in $(seq 1 15); do
               sleep 5
