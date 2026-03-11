@@ -57,33 +57,92 @@ jobs:
           username: root
           password: ${{ secrets.VPS_PASSWORD }}
           port: 2018
-          command_timeout: 5m
+          command_timeout: 15m
           script: |
+            set -e
             cd /root/THG_tool
 
+            # ══════ PRE-FLIGHT: Fix DNS + Disable IPv6 ══════
+            echo "🔧 [PRE-FLIGHT] Optimizing network..."
+            sysctl -w net.ipv6.conf.all.disable_ipv6=1 > /dev/null 2>&1 || true
+            sysctl -w net.ipv6.conf.default.disable_ipv6=1 > /dev/null 2>&1 || true
+            echo -e "nameserver 8.8.8.8\nnameserver 1.1.1.1" > /etc/resolv.conf
+
+            # ══════ PRE-FLIGHT: Network Check ══════
+            echo "🔍 [PRE-FLIGHT] Testing connection to GHCR..."
+            CHECK_RESULT=$(curl -o /dev/null -s -w "%{http_code}|%{time_total}" --connect-timeout 10 https://ghcr.io/v2/ || echo "FAIL")
+
+            if [ "$CHECK_RESULT" = "FAIL" ]; then
+              echo "❌ [FATAL] VPS cannot reach GHCR.io — aborting deploy"
+              exit 1
+            fi
+
+            HTTP_CODE=$(echo $CHECK_RESULT | cut -d'|' -f1)
+            LATENCY=$(echo $CHECK_RESULT | cut -d'|' -f2)
+            echo "🌐 GHCR Status: HTTP $HTTP_CODE | Latency: ${LATENCY}s"
+
+            # ══════ STEP 1: Git Pull ══════
+            echo "📥 Pulling latest code..."
             git fetch origin main
             git reset --hard origin/main
 
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # ══════ STEP 2: Docker Login (3 retries) ══════
+            LOGIN_OK=false
+            for i in 1 2 3; do
+              echo "🔑 Login attempt $i/3..."
+              if echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin 2>/dev/null; then
+                LOGIN_OK=true
+                echo "✅ Login successful!"
+                break
+              fi
+              echo "⚠️ Login failed, retrying in 15s..."
+              sleep 15
+            done
 
-            # Pull cả 2 image (slim rất nhanh, heavy chỉ tải changed layers)
-            docker compose pull
+            if [ "$LOGIN_OK" = "false" ]; then
+              echo "❌ [FATAL] Cannot login to GHCR after 3 attempts"
+              exit 1
+            fi
+
+            # ══════ STEP 3: Pull Images (5 retries each) ══════
+            PULL_OK=false
+            for i in 1 2 3 4 5; do
+              echo "📥 Pull attempt $i/5..."
+              if docker compose pull 2>&1; then
+                PULL_OK=true
+                echo "✅ All images pulled!"
+                break
+              fi
+              echo "⚠️ Pull failed, retrying in 20s..."
+              sleep 20
+            done
+
+            if [ "$PULL_OK" = "false" ]; then
+              echo "❌ [FATAL] Cannot pull images after 5 attempts"
+              exit 1
+            fi
+
+            # ══════ STEP 4: Stop old → Start new (no false positive) ══════
+            echo "🚀 Recreating containers with new images..."
+            docker compose down --timeout 10
             docker compose up -d --remove-orphans
 
-            docker image prune -f
-
-            echo "⏳ Waiting for API..."
+            # ══════ STEP 5: Health Check (real, after fresh start) ══════
+            echo "⏳ Waiting for NEW API container..."
+            sleep 5
             for i in 1 2 3 4 5 6 7 8 9 10; do
               sleep 3
               HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/health 2>/dev/null || echo "000")
               if [ "$HTTP" = "200" ]; then
-                echo "✅ Deploy done! HTTP 200 in $((i*3))s"
+                echo "✅ Deploy done! HTTP 200 in $((i*3+5))s"
                 docker compose ps
+                docker image prune -f
                 exit 0
               fi
-              echo "  [$((i*3))s] HTTP ${HTTP}..."
+              echo "  [$((i*3+5))s] HTTP ${HTTP}..."
             done
 
-            echo "⚠️ API not ready — logs:"
-            docker compose logs --tail 20 api
+            echo "⚠️ API not ready after 35s — logs:"
+            docker compose logs --tail 30 api
+            docker image prune -f
             exit 0
