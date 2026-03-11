@@ -1,6 +1,10 @@
 services:
   api:
-    image: ghcr.io/davidanh98/thg-api-slim:latest
+    image: thg-api-slim:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner-slim
     container_name: thg-api
     restart: unless-stopped
     command: ["node", "src/index.js"]
@@ -28,7 +32,11 @@ services:
         max-file: "3"
 
   ai-worker:
-    image: ghcr.io/davidanh98/thg-api-slim:latest
+    image: thg-api-slim:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner-slim
     container_name: thg-ai-worker
     restart: unless-stopped
     command: ["node", "src/workers/aiWorker.js"]
@@ -45,7 +53,11 @@ services:
         max-file: "3"
 
   scraper:
-    image: ghcr.io/davidanh98/thg-scraper-heavy:latest
+    image: thg-scraper-heavy:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner-heavy
     container_name: thg-scraper
     restart: unless-stopped
     command: ["node", "src/workers/scraperWorker.js"]
