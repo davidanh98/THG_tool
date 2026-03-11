@@ -1068,13 +1068,15 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
         return [];
     }
 
-    console.log(`[FBScraper] 🚀 Parallel scraping ${groups.length} groups (batch=5)...`);
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 3; // Reduced from 5 — prevents OOM crash (3 tabs × ~150MB = 450MB safe)
+    console.log(`[FBScraper] 🚀 Parallel scraping ${groups.length} groups (batch=${BATCH_SIZE})...`);
     const allPosts = [];
 
     for (let i = 0; i < groups.length; i += BATCH_SIZE) {
         const batch = groups.slice(i, i + BATCH_SIZE);
-        console.log(`[FBScraper] 📦 Batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(groups.length / BATCH_SIZE)}: ${batch.map(g => g.name).join(', ')}`);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(groups.length / BATCH_SIZE);
+        console.log(`[FBScraper] 📦 Batch ${batchNum}/${totalBatches}: ${batch.map(g => g.name).join(', ')}`);
 
         const results = await Promise.allSettled(
             batch.map(g => getGroupPosts(g.url, g.name, options))
@@ -1086,12 +1088,19 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
             }
         }
 
-        // Brief pause between batches to avoid rate limiting
+        // Close browser between batches to free RAM (prevents OOM crash)
         if (i + BATCH_SIZE < groups.length) {
-            await delay(1500);
+            await closeBrowser();
+            // Random delay 2-4s between batches (human-like + avoids FB rate-limit)
+            const batchDelay = 2000 + Math.random() * 2000;
+            const mem = process.memoryUsage();
+            console.log(`[FBScraper] 💾 Memory: RSS=${Math.round(mem.rss / 1024 / 1024)}MB, Heap=${Math.round(mem.heapUsed / 1024 / 1024)}MB — pausing ${Math.round(batchDelay / 1000)}s`);
+            await delay(batchDelay);
         }
     }
 
+    // Final cleanup
+    await closeBrowser();
     console.log(`[FBScraper] ✅ Total scraped: ${allPosts.length} posts from ${groups.length} groups`);
     return allPosts;
 }
