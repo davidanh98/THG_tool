@@ -8,6 +8,8 @@ services:
       dockerfile: Dockerfile
     container_name: thg-lead-gen
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
     # Data persistence — SQLite DB and logs survive restarts/updates
     volumes:

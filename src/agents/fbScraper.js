@@ -287,6 +287,10 @@ async function getAuthContext(account = null) {
             }
             console.log(`[FBScraper] 🔒 Using dedicated proxy for ${accEmail}`);
         } catch { }
+    } else if (process.env.TUNNEL_PROXY) {
+        // SSH tunnel proxy (home IP — zero cost residential proxy)
+        launchOptions.proxy = { server: process.env.TUNNEL_PROXY };
+        console.log(`[FBScraper] 🏠 Using tunnel proxy: ${process.env.TUNNEL_PROXY}`);
     } else if (pool.loaded && pool.hasProxies()) {
         // Fallback: shared proxy pool (less safe)
         const best = pool.getBestProxy();
