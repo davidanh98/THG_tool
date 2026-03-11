@@ -415,14 +415,6 @@ function extractGroupId(url) {
  * Uses AccountManager for multi-account rotation.
  */
 async function getGroupPosts(groupUrl, groupName, options = {}) {
-    // ── Time window check: only scrape during active hours ──
-    // manualTrigger bypasses both the local check and accountManager time window
-    const bypass = options.manualTrigger === true || process.env.BYPASS_TIME_WINDOW === 'true';
-    if (!bypass && !accountManager.isInActiveWindow()) {
-        console.log(`[CrawBot] 🌙 Ngoài giờ hoạt động (8h-23h VN) — bỏ qua ${groupName}`);
-        return [];
-    }
-
     // ── Get next available account ──
     const account = accountManager.getNextAccount(options);
     if (!account) {
