@@ -1,6 +1,6 @@
 services:
   api: &base_service
-    image: ${DOCKER_IMAGE:-ghcr.io/davidanh98/thg-lead-gen:latest}
+    image: ${DOCKER_IMAGE:-ghcr.io/davidanh98/thg_tool:latest}
     restart: unless-stopped
     volumes:
       - ./data:/app/data

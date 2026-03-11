@@ -4,8 +4,12 @@ on:
   push:
     branches: [main]
 
+env:
+  # Hardcode lowercase — Docker yêu cầu tất cả phải lowercase
+  IMAGE_TAG: ghcr.io/davidanh98/thg_tool:latest
+
 jobs:
-  # GIAI ĐOẠN 1: Build Image trên GitHub (Cực nhanh nhờ hạ tầng GitHub)
+  # GIAI ĐOẠN 1: Build Image trên GitHub Runner
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
@@ -29,16 +33,16 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository }}:latest
+          tags: ${{ env.IMAGE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # GIAI ĐOẠN 2: Pull & Run trên VPS (Chỉ mất vài giây)
+  # GIAI ĐOẠN 2: VPS chỉ Pull & Run
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH
+      - name: SSH Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -49,26 +53,24 @@ jobs:
           script: |
             cd /root/THG_tool
 
-            # Pull latest compose file
+            # Pull latest compose + source
             git fetch origin main
             git reset --hard origin/main
 
-            # Login vào registry từ VPS
+            # Login GHCR
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # Set image name (lowercase)
-            export DOCKER_IMAGE=ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]'):latest
+            # Pull pre-built image
+            docker pull ${{ env.IMAGE_TAG }}
 
-            # Chỉ tải về những layer thay đổi (Rất nhanh)
-            docker compose pull
-
-            # Khởi động lại các container với image mới
+            # Set image for docker compose
+            export DOCKER_IMAGE="${{ env.IMAGE_TAG }}"
             docker compose up -d --remove-orphans
 
-            # Dọn dẹp các image cũ
+            # Cleanup old images
             docker image prune -f
 
-            # Quick health check
+            # Health check
             echo "⏳ Waiting for API..."
             for i in 1 2 3 4 5 6 7 8 9 10; do
               sleep 3
@@ -81,6 +83,6 @@ jobs:
               echo "  [$((i*3))s] HTTP ${HTTP}..."
             done
 
-            echo "⚠️ API not ready after 30s — showing logs:"
+            echo "⚠️ API not ready — logs:"
             docker compose logs --tail 20 api-server
             exit 0
