@@ -1,22 +1,31 @@
-# Sử dụng phiên bản ổn định, noble (Ubuntu 24.04) đã cài sẵn Chromium
-FROM mcr.microsoft.com/playwright:v1.48.0-noble
-
+# --- STAGE 1: The Fast Builder ---
+FROM node:20-slim AS builder
 WORKDIR /app
 
-# Chỉ copy package.json để cài dependencies trước (Layer này sẽ được cache)
-COPY package*.json ./
-RUN npm ci --production --silent
+# Cài đặt pnpm toàn cục
+RUN npm install -g pnpm
 
-# Copy mã nguồn sau
+# Chỉ copy file lock để tận dụng cache
+COPY pnpm-lock.yaml package.json ./
+
+# Cấu hình pnpm hoisted mode (tránh symlink gãy khi COPY giữa stages)
+RUN pnpm config set node-linker hoisted && \
+    pnpm install --frozen-lockfile --prod
+
+# --- STAGE 2: Slim Runner (API & AI Worker — ~150MB) ---
+FROM node:20-slim AS runner-slim
+WORKDIR /app
+COPY --from=builder /app/node_modules ./node_modules
 COPY . .
-
-# Không tải thêm browser vì image base đã có sẵn
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ENV NODE_ENV=production
-
-# Tạo thư mục dữ liệu nếu chưa có
 RUN mkdir -p data logs
-
 EXPOSE 3000
 
-CMD ["node", "src/index.js"]
+# --- STAGE 3: Heavy Runner (Scraper — Playwright + Chromium) ---
+FROM mcr.microsoft.com/playwright:v1.48.0-noble AS runner-heavy
+WORKDIR /app
+COPY --from=builder /app/node_modules ./node_modules
+COPY . .
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV NODE_ENV=production
+RUN mkdir -p data logs

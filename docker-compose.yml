@@ -1,53 +1,62 @@
 services:
-  api: &base_service
-    image: ${DOCKER_IMAGE:-ghcr.io/davidanh98/thg_tool:latest}
+  api:
+    image: ghcr.io/davidanh98/thg-api-slim:latest
+    container_name: thg-api
     restart: unless-stopped
-    volumes:
+    command: ["node", "src/index.js"]
+    volumes: &vols
       - ./data:/app/data
       - ./logs:/app/logs
       - ./.env:/app/.env:ro
     environment:
       - NODE_ENV=production
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "20m"
-        max-file: "3"
-
-  api-server:
-    <<: *base_service
-    container_name: thg-api
-    command: ["node", "src/index.js"]
     ports:
       - "127.0.0.1:3000:3000"
     deploy:
       resources:
-        limits:
-          memory: 300M
-          cpus: '0.3'
+        limits: { memory: 300M, cpus: '0.3' }
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3000/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
-
-  scraper:
-    <<: *base_service
-    container_name: thg-scraper
-    command: ["node", "src/workers/scraperWorker.js"]
-    deploy:
-      resources:
-        limits:
-          memory: 900M
-          cpus: '0.8'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   ai-worker:
-    <<: *base_service
+    image: ghcr.io/davidanh98/thg-api-slim:latest
     container_name: thg-ai-worker
+    restart: unless-stopped
     command: ["node", "src/workers/aiWorker.js"]
+    volumes: *vols
+    environment:
+      - NODE_ENV=production
     deploy:
       resources:
-        limits:
-          memory: 300M
-          cpus: '0.3'
+        limits: { memory: 300M, cpus: '0.3' }
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  scraper:
+    image: ghcr.io/davidanh98/thg-scraper-heavy:latest
+    container_name: thg-scraper
+    restart: unless-stopped
+    command: ["node", "src/workers/scraperWorker.js"]
+    volumes: *vols
+    environment:
+      - NODE_ENV=production
+    deploy:
+      resources:
+        limits: { memory: 900M, cpus: '0.8' }
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "3"
