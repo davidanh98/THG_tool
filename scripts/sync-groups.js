@@ -5,7 +5,7 @@
  */
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 
-const http = require('http');
+const https = require('https');
 const path = require('path');
 const fs = require('fs');
 
@@ -18,7 +18,7 @@ function httpPost(hostname, path, data, token) {
         const body = JSON.stringify(data);
         const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
         if (token) headers['Authorization'] = `Bearer ${token}`;
-        const req = http.request({ hostname, path, method: 'POST', headers }, (res) => {
+        const req = https.request({ hostname, path, method: 'POST', headers }, (res) => {
             let out = '';
             res.on('data', d => out += d);
             res.on('end', () => resolve(JSON.parse(out)));
@@ -33,7 +33,7 @@ function httpGet(hostname, path, token) {
     return new Promise((resolve, reject) => {
         const headers = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
-        const req = http.request({ hostname, path, method: 'GET', headers }, (res) => {
+        const req = https.request({ hostname, path, method: 'GET', headers }, (res) => {
             let out = '';
             res.on('data', d => out += d);
             res.on('end', () => { try { resolve(JSON.parse(out)); } catch { resolve(out); } });
@@ -44,7 +44,7 @@ function httpGet(hostname, path, token) {
 }
 
 async function main() {
-    console.log(`\n🔗 Connecting to production: http://${PROD_HOST}`);
+    console.log(`\n🔗 Connecting to production: https://${PROD_HOST}`);
 
     // Step 1: Login
     const loginRes = await httpPost(PROD_HOST, '/api/auth/login', { email: PROD_EMAIL, password: PROD_PASSWORD });
