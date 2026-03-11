@@ -9,7 +9,7 @@ $VPS_USER = "root"
 $VPS_PASS = "m0XIjj55m0"
 
 Write-Host "🚀 THG VPS Setup Script" -ForegroundColor Cyan
-Write-Host "Target: $VPS_USER@$VPS_HOST:$VPS_PORT`n" -ForegroundColor Gray
+Write-Host "Target: ${VPS_USER}@${VPS_HOST}:${VPS_PORT}`n" -ForegroundColor Gray
 
 # One-liner script to run on VPS
 $REMOTE_SCRIPT = @'
@@ -57,38 +57,34 @@ echo "━━━ ✅ VPS Setup Complete ━━━"
 pm2 list
 '@
 
-# Install plink if needed, or use ssh with sshpass
-$USE_SSHPASS = $false
-if (Get-Command sshpass -ErrorAction SilentlyContinue) {
-    $USE_SSHPASS = $true
-    Write-Host "✓ Using sshpass for non-interactive SSH" -ForegroundColor Green
-}
+# Use PowerShell SSH if available (sshpass not required on Windows)
 
 # Use PowerShell SSH if available
 if (Get-Command ssh -ErrorAction SilentlyContinue) {
-    Write-Host "🔑 Connecting via SSH..." -ForegroundColor Yellow
-    Write-Host "   NOTE: You may be prompted for password: $VPS_PASS`n" -ForegroundColor Gray
+  Write-Host "🔑 Connecting via SSH..." -ForegroundColor Yellow
+  Write-Host "   NOTE: You may be prompted for password: $VPS_PASS`n" -ForegroundColor Gray
     
-    # Write remote script to temp file
-    $tmpScript = [System.IO.Path]::GetTempFileName() + ".sh"
-    $REMOTE_SCRIPT | Out-File -FilePath $tmpScript -Encoding UTF8 -NoNewline
+  # Write remote script to temp file
+  $tmpScript = [System.IO.Path]::GetTempFileName() + ".sh"
+  $REMOTE_SCRIPT | Out-File -FilePath $tmpScript -Encoding UTF8 -NoNewline
     
-    Write-Host "📋 Commands that will run on VPS:" -ForegroundColor Cyan
-    Write-Host $REMOTE_SCRIPT -ForegroundColor DarkGray
-    Write-Host ""
+  Write-Host "📋 Commands that will run on VPS:" -ForegroundColor Cyan
+  Write-Host $REMOTE_SCRIPT -ForegroundColor DarkGray
+  Write-Host ""
     
-    # Run via SSH
-    $result = ssh -o StrictHostKeyChecking=no -p $VPS_PORT "${VPS_USER}@${VPS_HOST}" $REMOTE_SCRIPT 2>&1
+  # Run via SSH
+  $result = ssh -o StrictHostKeyChecking=no -p $VPS_PORT "${VPS_USER}@${VPS_HOST}" $REMOTE_SCRIPT 2>&1
     
-    Write-Host $result
-    Remove-Item $tmpScript -Force -ErrorAction SilentlyContinue
-} else {
-    Write-Host "❌ SSH not found in PATH. Please run these commands manually:" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "1. Open Command Prompt and SSH:" -ForegroundColor Yellow
-    Write-Host "   ssh -p $VPS_PORT ${VPS_USER}@${VPS_HOST}" -ForegroundColor White
-    Write-Host "   Password: $VPS_PASS" -ForegroundColor White
-    Write-Host ""
-    Write-Host "2. Once connected, run:" -ForegroundColor Yellow
-    Write-Host $REMOTE_SCRIPT -ForegroundColor White
+  Write-Host $result
+  Remove-Item $tmpScript -Force -ErrorAction SilentlyContinue
+}
+else {
+  Write-Host "❌ SSH not found in PATH. Please run these commands manually:" -ForegroundColor Red
+  Write-Host ""
+  Write-Host "1. Open Command Prompt and SSH:" -ForegroundColor Yellow
+  Write-Host "   ssh -p $VPS_PORT ${VPS_USER}@${VPS_HOST}" -ForegroundColor White
+  Write-Host "   Password: $VPS_PASS" -ForegroundColor White
+  Write-Host ""
+  Write-Host "2. Once connected, run:" -ForegroundColor Yellow
+  Write-Host $REMOTE_SCRIPT -ForegroundColor White
 }
