@@ -28,6 +28,11 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
 # --- STAGE 2: Slim Runner (API & AI Worker — ~150MB) ---
 FROM node:20-slim AS runner-slim
 WORKDIR /app
+
+# Install curl for Docker health checks
+RUN apt-get update && apt-get install -y curl --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/node_modules ./node_modules
 COPY . .
 ENV NODE_ENV=production

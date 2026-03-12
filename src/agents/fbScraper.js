@@ -111,13 +111,18 @@ function loadSession(sessionPath) {
 
 /**
  * Login to Facebook via Playwright
+ * @param {Page} page - Playwright page
+ * @param {string} email - FB email (passed from getAuthContext)
+ * @param {string} password - FB password (passed from getAuthContext)
  */
-async function loginToFacebook(page) {
-    if (!FB_EMAIL || !FB_PASSWORD) {
+async function loginToFacebook(page, email = '', password = '') {
+    const loginEmail = email || FB_EMAIL;
+    const loginPassword = password || FB_PASSWORD;
+    if (!loginEmail || !loginPassword) {
         throw new Error('FB_EMAIL and FB_PASSWORD required for self-hosted mode');
     }
 
-    console.log(`[FBScraper] 🔐 Logging in as ${FB_EMAIL}...`);
+    console.log(`[FBScraper] 🔐 Logging in as ${loginEmail}...`);
 
     await page.goto(`${FB_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await delay(3000);
@@ -126,7 +131,7 @@ async function loginToFacebook(page) {
     const emailInput = await page.$('input[name="email"], input#email');
     if (emailInput) {
         await emailInput.click();
-        await emailInput.fill(FB_EMAIL);
+        await emailInput.fill(loginEmail);
     } else {
         console.error('[FBScraper] ❌ Email input not found');
         return false;
@@ -137,7 +142,7 @@ async function loginToFacebook(page) {
     const passInput = await page.$('input[name="pass"], input#pass');
     if (passInput) {
         await passInput.click();
-        await passInput.fill(FB_PASSWORD);
+        await passInput.fill(loginPassword);
     } else {
         console.error('[FBScraper] ❌ Password input not found');
         return false;
@@ -293,8 +298,25 @@ async function getAuthContext(account = null) {
         } catch { }
     } else if (process.env.TUNNEL_PROXY) {
         // SSH tunnel proxy (home IP — zero cost residential proxy)
-        launchOptions.proxy = { server: process.env.TUNNEL_PROXY };
-        console.log(`[FBScraper] 🏠 Using tunnel proxy: ${process.env.TUNNEL_PROXY}`);
+        // Verify proxy is reachable before using (prevents crash on VPS where tunnel doesn't exist)
+        try {
+            const proxyUrl = new URL(process.env.TUNNEL_PROXY);
+            const net = require('net');
+            const proxyOk = await new Promise((resolve) => {
+                const sock = net.connect({ host: proxyUrl.hostname, port: parseInt(proxyUrl.port) || 8888, timeout: 3000 });
+                sock.on('connect', () => { sock.destroy(); resolve(true); });
+                sock.on('error', () => { sock.destroy(); resolve(false); });
+                sock.on('timeout', () => { sock.destroy(); resolve(false); });
+            });
+            if (proxyOk) {
+                launchOptions.proxy = { server: process.env.TUNNEL_PROXY };
+                console.log(`[FBScraper] 🏠 Using tunnel proxy: ${process.env.TUNNEL_PROXY}`);
+            } else {
+                console.warn(`[FBScraper] ⚠️ Tunnel proxy ${process.env.TUNNEL_PROXY} unreachable — skipping (direct connect)`);
+            }
+        } catch (e) {
+            console.warn(`[FBScraper] ⚠️ Invalid TUNNEL_PROXY: ${e.message} — skipping`);
+        }
     } else if (pool.loaded && pool.hasProxies()) {
         // Fallback: shared proxy pool (less safe)
         const best = pool.getBestProxy();
@@ -365,19 +387,10 @@ async function getAuthContext(account = null) {
         await page.close();
     }
 
-    // ── Login ──
-    // Temporarily override env vars so loginToFacebook uses the right account
-    const prevEmail = process.env.FB_EMAIL;
-    const prevPassword = process.env.FB_PASSWORD;
-    process.env.FB_EMAIL = accEmail;
-    process.env.FB_PASSWORD = accPassword;
-
+    // ── Login ── (pass credentials directly, no env mutation needed)
     const loginPage = await activeContext.newPage();
-    const success = await loginToFacebook(loginPage);
+    const success = await loginToFacebook(loginPage, accEmail, accPassword);
     await loginPage.close();
-
-    process.env.FB_EMAIL = prevEmail;
-    process.env.FB_PASSWORD = prevPassword;
 
     if (success) {
         // Save account-specific session
@@ -452,7 +465,15 @@ async function _getGroupPostsInner(groupUrl, groupName, account = null) {
     let page = null;
     try {
         const context = await getAuthContext(account);
-        page = await context.newPage();
+        try {
+            page = await context.newPage();
+        } catch (pageErr) {
+            // Stealth plugin can throw async errors on page creation if browser was just recycled
+            console.warn(`[FBScraper] ⚠️ newPage failed (stealth plugin): ${pageErr.message} — retrying once`);
+            await closeBrowser();
+            const ctx2 = await getAuthContext(account);
+            page = await ctx2.newPage();
+        }
 
         console.log(`[FBScraper] 📥 ${groupName}`);
         await page.goto(`${FB_URL}/groups/${groupId}?sorting_setting=CHRONOLOGICAL`, {

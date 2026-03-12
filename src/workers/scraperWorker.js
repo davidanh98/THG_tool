@@ -13,6 +13,23 @@
  *   node src/workers/scraperWorker.js
  *   PM2: thg-scraper (see ecosystem.config.js)
  */
+// ═══ Global Unhandled Rejection Handler ═══
+// Playwright-extra stealth plugin fires async onPageCreated events
+// that can throw AFTER the browser/context is closed (race condition).
+// Without this handler, the process crashes with:
+//   cdpSession.send: Target page, context or browser has been closed
+process.on('unhandledRejection', (reason) => {
+    const msg = String(reason?.message || reason || '');
+    // Known benign errors from stealth plugin — suppress
+    if (msg.includes('Target page, context or browser has been closed') ||
+        msg.includes('cdpSession.send') ||
+        msg.includes('page.addInitScript')) {
+        console.warn(`[ScraperWorker] ⚠️ Suppressed stealth-plugin error: ${msg.substring(0, 120)}`);
+        return;
+    }
+    console.error('[ScraperWorker] ❌ Unhandled rejection:', reason);
+});
+
 const config = require('../config');
 const database = require('../data_store/database');
 const { runFullScan } = require('../pipelines/scraperEngine');
