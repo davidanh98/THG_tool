@@ -1582,16 +1582,78 @@ async function _scrapeWithContext(browser, account, groups) {
                             postedAt = new Date(now - ageHours * 3600 * 1000).toISOString();
                         }
 
-                        // Get author
-                        const authorEl = a.querySelector('h3 a, h2 a, strong a');
-                        const author = authorEl ? authorEl.innerText : '';
+                        // === EXTRACT AUTHOR NAME (multi-strategy) ===
+                        let author = '';
+                        let authorUrl = '';
+
+                        // Strategy 1: Profile image alt text (most reliable on modern FB)
+                        const profileImg = a.querySelector('image, img[src*="scontent"], svg image');
+                        if (profileImg) {
+                            const alt = profileImg.getAttribute('alt') || profileImg.closest('[aria-label]')?.getAttribute('aria-label') || '';
+                            if (alt && alt.length > 1 && alt.length < 80 && !alt.match(/photo|hình|ảnh|image|like|comment/i)) {
+                                author = alt.replace(/'s profile.*|'s photo.*/i, '').trim();
+                            }
+                        }
+
+                        // Strategy 2: Header links to user profile (FB uses /user/ or profile.php)
+                        if (!author) {
+                            const headerLinks = a.querySelectorAll('a[href*="/user/"], a[href*="profile.php"], a[href*="facebook.com/"][role="link"]');
+                            for (const hl of headerLinks) {
+                                const name = hl.innerText?.trim();
+                                const href = hl.href || '';
+                                if (name && name.length > 1 && name.length < 60
+                                    && !name.match(/^(\d+[mhdw]|just now|yesterday|hôm qua|like|comment|share|chia sẻ)$/i)
+                                    && !href.includes('/posts/') && !href.includes('/permalink/') && !href.includes('story_fbid')) {
+                                    author = name;
+                                    authorUrl = href.split('?')[0];
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Strategy 3: Classic FB (h2/h3/strong links)
+                        if (!author) {
+                            const classicEl = a.querySelector('h2 a, h3 a, h4 a, strong a[role="link"]');
+                            if (classicEl) {
+                                author = classicEl.innerText?.trim() || '';
+                                authorUrl = authorUrl || (classicEl.href || '').split('?')[0];
+                            }
+                        }
+
+                        // Strategy 4: First <a> with user profile URL pattern
+                        if (!author) {
+                            const allLinks = a.querySelectorAll('a[href]');
+                            for (const al of allLinks) {
+                                const href = al.href || '';
+                                if ((href.includes('facebook.com/') && !href.includes('/posts/') && !href.includes('/groups/')
+                                    && !href.includes('/permalink/') && !href.includes('story_fbid') && !href.includes('#')
+                                    && !href.includes('/photos/') && !href.includes('/videos/'))) {
+                                    const name = al.innerText?.trim();
+                                    if (name && name.length > 1 && name.length < 60 && !name.match(/^\d+$/)) {
+                                        author = name;
+                                        authorUrl = href.split('?')[0];
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Strategy 5: First strong/span text in header area (last resort)
+                        if (!author) {
+                            const headerStrong = a.querySelector('strong');
+                            if (headerStrong) {
+                                const name = headerStrong.innerText?.trim();
+                                if (name && name.length > 1 && name.length < 60) author = name;
+                            }
+                        }
 
                         res.push({
                             platform: 'facebook',
                             group_name: gName,
                             group_url: gUrl,
                             post_url: postUrl,
-                            author: author,
+                            author: author || 'Unknown',
+                            author_url: authorUrl,
                             content: txt.substring(0, 2000),
                             posted_at: postedAt,
                             time_raw: timeStr,
