@@ -1255,15 +1255,10 @@ async function autoJoinGroups(groups = null, account = null) {
 // ═══════════════════════════════════════════════════════
 
 /**
- * Sequential Facebook group scraper with per-account splitting.
- * - Splits groups evenly across available accounts
- * - Scrapes ONE group at a time (prevents OOM)
- * - Reuses same browser across all groups for one account
- * 
- * @param {number} maxPosts - max posts per group (default 20)
- * @param {Object} options 
- * @param {Array} externalGroups - groups from prod_groups.json
- * @returns {Array} all posts from all groups
+ * Parallel-account Facebook group scraper.
+ * - 2 accounts run IN PARALLEL (each with own browser)
+ * - Groups within each account are sequential (1 at a time)
+ * - 3GB container supports 2 Chromium instances (~500MB each)
  */
 async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups = null) {
     const cfg = require('../config');
@@ -1287,76 +1282,186 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
     }
 
     // Split groups evenly across accounts (round-robin)
-    const accountGroups = {};
+    const accountGroupMap = {};
     for (const acc of allAccounts) {
-        accountGroups[acc.email] = { account: acc, groups: [] };
+        accountGroupMap[acc.email] = { account: acc, groups: [] };
     }
     groups.forEach((group, i) => {
         const acc = allAccounts[i % allAccounts.length];
-        accountGroups[acc.email].groups.push(group);
+        accountGroupMap[acc.email].groups.push(group);
     });
 
-    console.log(`[FBScraper] 🚀 Sequential scraping ${groups.length} groups across ${allAccounts.length} accounts`);
-    for (const { account, groups: accGroups } of Object.values(accountGroups)) {
+    console.log(`[FBScraper] 🚀 Parallel scraping ${groups.length} groups across ${allAccounts.length} accounts`);
+    for (const { account, groups: accGroups } of Object.values(accountGroupMap)) {
         console.log(`[FBScraper]   📧 ${account.email}: ${accGroups.length} groups`);
     }
 
+    // Run all accounts IN PARALLEL — each with its own browser
+    const accountTasks = Object.values(accountGroupMap).map(({ account, groups: accGroups }) =>
+        _scrapeAccountGroups(account, accGroups)
+    );
+
+    const results = await Promise.allSettled(accountTasks);
     const allPosts = [];
-    let totalScraped = 0;
+    for (const r of results) {
+        if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+            allPosts.push(...r.value);
+        }
+    }
 
-    // Process each account's groups sequentially
-    for (const { account, groups: accGroups } of Object.values(accountGroups)) {
-        console.log(`\n[FBScraper] ═══ Starting ${account.email} (${accGroups.length} groups) ═══`);
+    console.log(`[FBScraper] ✅ Done: ${allPosts.length} posts from ${groups.length} groups`);
+    return allPosts;
+}
 
-        for (let i = 0; i < accGroups.length; i++) {
-            const group = accGroups[i];
-            console.log(`[FBScraper] [${i + 1}/${accGroups.length}] ${group.name}`);
+/**
+ * Scrape all groups for ONE account with its own isolated browser.
+ * Each account gets a dedicated Chromium instance — no global state conflicts.
+ */
+async function _scrapeAccountGroups(account, groups) {
+    const accEmail = account.email;
+    const tag = `[${accEmail.split('@')[0]}]`;
+    console.log(`\n${tag} ═══ Starting (${groups.length} groups) ═══`);
 
+    const fp = generateFingerprint({ region: 'US', accountId: accEmail });
+    let browser = null;
+    let context = null;
+    const posts = [];
+
+    try {
+        browser = await chromium.launch({
+            headless: true,
+            executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+            args: ['--no-sandbox', '--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage'],
+        });
+
+        context = await browser.newContext({
+            userAgent: fp.userAgent,
+            viewport: fp.viewport,
+            locale: 'en-US',
+            timezoneId: 'America/New_York',
+        });
+
+        // Block heavy resources
+        await context.route('**/*', (route) => {
+            const type = route.request().resourceType();
+            if (['image', 'font', 'stylesheet', 'media'].includes(type)) return route.abort();
+            return route.continue();
+        });
+
+        // Load cookies (session file → JSON cookie file → .env)
+        const accUsername = accEmail.split('@')[0];
+        const cookieJsonPath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
+        const sessionDir = path.join(__dirname, '..', '..', 'data', 'fb_sessions');
+        const sessionPath = path.join(sessionDir, `${accEmail.replace(/[@.]/g, '_')}.json`);
+        let loaded = false;
+
+        if (fs.existsSync(sessionPath)) {
             try {
-                const timeout = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('⏰ Group timeout (2min)')), 120000)
-                );
-                const posts = await Promise.race([
-                    timeout,
-                    _getGroupPostsInner(group.url, group.name, account)
-                ]);
-
-                if (Array.isArray(posts) && posts.length > 0) {
-                    allPosts.push(...posts);
-                    totalScraped += posts.length;
-                    console.log(`[FBScraper] ✅ ${group.name}: ${posts.length} posts (total: ${totalScraped})`);
-                } else {
-                    console.log(`[FBScraper] ⚠️ ${group.name}: 0 posts`);
-                }
-                accountManager.reportSuccess(account.id, posts?.length || 0);
-            } catch (err) {
-                console.warn(`[FBScraper] ❌ ${group.name}: ${err.message}`);
-                // If browser crashed, close and let next iteration recreate
-                if (err.message.includes('closed') || err.message.includes('crashed')) {
-                    await closeBrowser();
-                }
-            }
-
-            // Brief delay between groups (human-like)
-            if (i < accGroups.length - 1) {
-                await delay(1500 + Math.random() * 1500);
-            }
-
-            // Memory check every 5 groups
-            if (i > 0 && i % 5 === 0) {
-                const mem = process.memoryUsage();
-                console.log(`[FBScraper] 💾 Memory: RSS=${Math.round(mem.rss / 1024 / 1024)}MB`);
+                const saved = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
+                if (saved.length > 0) { await context.addCookies(saved); loaded = true; console.log(`${tag} 📂 Session (${saved.length} cookies)`); }
+            } catch { }
+        }
+        if (!loaded && fs.existsSync(cookieJsonPath)) {
+            try {
+                const raw = JSON.parse(fs.readFileSync(cookieJsonPath, 'utf8'));
+                const pwc = raw.filter(c => c.name && c.value && c.domain).map(c => ({
+                    name: c.name, value: c.value, domain: c.domain, path: c.path || '/',
+                    httpOnly: !!c.httpOnly, secure: c.secure !== false,
+                    sameSite: c.sameSite === 'no_restriction' ? 'None' : c.sameSite === 'lax' ? 'Lax' : c.sameSite === 'strict' ? 'Strict' : 'None',
+                    ...(c.expirationDate ? { expires: c.expirationDate } : {}),
+                }));
+                await context.addCookies(pwc); loaded = true;
+                console.log(`${tag} 🍪 Cookies from ${path.basename(cookieJsonPath)} (${pwc.length})`);
+            } catch (e) { console.warn(`${tag} ⚠️ Cookie error: ${e.message}`); }
+        }
+        if (!loaded) {
+            const env = process.env.FB_COOKIES || '';
+            if (env.includes('c_user=')) {
+                const pwc = env.split(';').map(s => s.trim()).filter(Boolean).map(pair => {
+                    const [n, ...r] = pair.split('=');
+                    return { name: n.trim(), value: r.join('=').trim(), domain: '.facebook.com', path: '/', httpOnly: true, secure: true, sameSite: 'None' };
+                });
+                await context.addCookies(pwc);
+                console.log(`${tag} 🍪 Cookies from .env (${pwc.length})`);
             }
         }
 
-        // Close browser when switching accounts
-        console.log(`[FBScraper] 🔄 Closing browser for ${account.email}`);
-        await closeBrowser();
+        // Validate session
+        const testPage = await context.newPage();
+        await testPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 25000 });
         await delay(2000);
-    }
+        const hasNav = await testPage.$('div[role="navigation"], div[aria-label="Facebook"]');
+        const testUrl = testPage.url();
+        if (!hasNav || testUrl.includes('/login') || testUrl.includes('checkpoint')) {
+            console.warn(`${tag} ❌ Session invalid — skipping`);
+            await testPage.close(); await browser.close(); return [];
+        }
+        console.log(`${tag} ✅ Session valid!`);
+        try { const c = await context.cookies(); fs.mkdirSync(sessionDir, { recursive: true }); fs.writeFileSync(sessionPath, JSON.stringify(c, null, 2)); } catch { }
+        await testPage.close();
 
-    console.log(`[FBScraper] ✅ Done: ${totalScraped} posts from ${groups.length} groups`);
-    return allPosts;
+        // Scrape each group sequentially
+        for (let i = 0; i < groups.length; i++) {
+            const group = groups[i];
+            const groupId = extractGroupId(group.url);
+            if (!groupId) continue;
+
+            try {
+                const page = await context.newPage();
+                console.log(`${tag} [${i + 1}/${groups.length}] 📥 ${group.name}`);
+                await page.goto(`https://www.facebook.com/groups/${groupId}?sorting_setting=CHRONOLOGICAL`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await delay(2500);
+
+                const url = page.url();
+                if (url.includes('checkpoint') || url.includes('/login')) {
+                    console.warn(`${tag} 🚨 ${group.name}: checkpoint — stopping`);
+                    accountManager.reportCheckpoint(account.id);
+                    await page.close(); break;
+                }
+
+                try { await page.waitForSelector('div[role="feed"], div[role="article"]', { timeout: 10000 }); }
+                catch { console.log(`${tag} ⚠️ ${group.name}: no feed`); await page.close(); continue; }
+
+                // Scroll to load posts
+                for (let s = 0; s < 20; s++) {
+                    await page.evaluate(() => window.scrollBy(0, 4000));
+                    await delay(300);
+                    const cnt = await page.evaluate(() => { const f = document.querySelector('div[role="feed"]'); return f ? f.children.length : 0; });
+                    if (cnt >= 60) break;
+                }
+
+                // Extract posts
+                const gPosts = await page.evaluate((gName, gUrl) => {
+                    const arts = document.querySelectorAll('div[role="article"]');
+                    const res = [];
+                    arts.forEach(a => {
+                        const txt = a.innerText || '';
+                        if (txt.length < 30) return;
+                        const links = Array.from(a.querySelectorAll('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid"]'));
+                        const timeEl = a.querySelector('a[href*="/posts/"] span, abbr, span[id]');
+                        res.push({ platform: 'facebook', group_name: gName, group_url: gUrl, post_url: links[0]?.href || '', content: txt.substring(0, 2000), posted_at: timeEl?.textContent || '', scraped_at: new Date().toISOString() });
+                    });
+                    return res;
+                }, group.name, group.url);
+
+                posts.push(...gPosts);
+                console.log(`${tag} ✅ ${group.name}: ${gPosts.length} posts (total: ${posts.length})`);
+                accountManager.reportSuccess(account.id, gPosts.length);
+                await page.close();
+            } catch (err) {
+                console.warn(`${tag} ❌ ${group.name}: ${err.message.substring(0, 80)}`);
+            }
+
+            if (i < groups.length - 1) await delay(1500 + Math.random() * 1500);
+            if (i > 0 && i % 5 === 0) { const m = process.memoryUsage(); console.log(`${tag} 💾 RSS=${Math.round(m.rss / 1024 / 1024)}MB`); }
+        }
+    } catch (err) {
+        console.error(`${tag} 💥 Fatal: ${err.message}`);
+    } finally {
+        try { if (browser) await browser.close(); } catch { }
+        console.log(`${tag} 🏁 Done: ${posts.length} posts`);
+    }
+    return posts;
 }
 
 // ═══════════════════════════════════════════════════════
