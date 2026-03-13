@@ -1416,14 +1416,15 @@ async function _scrapeWithContext(browser, account, groups) {
         try { const c = await context.cookies(); fs.mkdirSync(sessionDir, { recursive: true }); fs.writeFileSync(sessionPath, JSON.stringify(c, null, 2)); } catch { }
         await testPage.close();
 
-        // Scrape each group sequentially
+        // Scrape each group using REUSABLE page (no newPage/close per group)
+        const page = await context.newPage();
+
         for (let i = 0; i < groups.length; i++) {
             const group = groups[i];
             const groupId = extractGroupId(group.url);
             if (!groupId) continue;
 
             try {
-                const page = await context.newPage();
                 console.log(`${tag} [${i + 1}/${groups.length}] 📥 ${group.name}`);
                 await page.goto(`https://www.facebook.com/groups/${groupId}?sorting_setting=CHRONOLOGICAL`, { waitUntil: 'domcontentloaded', timeout: 30000 });
                 await delay(2500);
@@ -1432,7 +1433,7 @@ async function _scrapeWithContext(browser, account, groups) {
                 if (url.includes('checkpoint') || url.includes('/login')) {
                     console.warn(`${tag} 🚨 ${group.name}: checkpoint — stopping`);
                     accountManager.reportCheckpoint(account.id);
-                    await page.close(); break;
+                    break;
                 }
 
                 let hasFeed = false;
@@ -1450,7 +1451,7 @@ async function _scrapeWithContext(browser, account, groups) {
                                 const afterText = await page.evaluate(() => document.body?.innerText?.substring(0, 300) || '');
                                 if (afterText.includes('Pending') || afterText.includes('pending') || afterText.includes('Chờ')) {
                                     console.log(`${tag} ⏳ ${group.name}: pending approval — skip`);
-                                    await page.close(); continue;
+                                    continue;
                                 }
                                 console.log(`${tag} ✅ ${group.name}: Joined! Reloading...`);
                                 await page.goto(`https://www.facebook.com/groups/${groupId}?sorting_setting=CHRONOLOGICAL`, { waitUntil: 'domcontentloaded', timeout: 25000 });
@@ -1463,12 +1464,12 @@ async function _scrapeWithContext(browser, account, groups) {
                         console.log(`${tag} ⚠️ ${group.name}: no feed visible`);
                     }
                 }
-                if (!hasFeed) { await page.close(); continue; }
+                if (!hasFeed) continue;
 
-                // Scroll to load posts
+                // Scroll to load posts (mouse.wheel more natural than evaluate scroll)
                 let noGrowth = 0, prevCnt = 0;
                 for (let s = 0; s < 30; s++) {
-                    await page.evaluate(() => window.scrollBy(0, 3000));
+                    await page.mouse.wheel(0, 2000);
                     await delay(800);
                     const cnt = await page.evaluate(() => { const f = document.querySelector('div[role="feed"]'); return f ? f.children.length : 0; });
                     if (cnt >= 40) break;
@@ -1476,31 +1477,79 @@ async function _scrapeWithContext(browser, account, groups) {
                     prevCnt = cnt;
                 }
 
-                // Extract posts
+                // Click "See More / Xem thêm" to expand truncated posts
+                try {
+                    const seeMoreBtns = await page.$$('div[role="button"]:has-text("See more"), div[role="button"]:has-text("Xem thêm")');
+                    for (const btn of seeMoreBtns.slice(0, 20)) {
+                        await btn.click().catch(() => { });
+                    }
+                    if (seeMoreBtns.length > 0) await delay(500);
+                } catch { }
+
+                // Extract posts with comments and URL dedup
                 const gPosts = await page.evaluate(({ gName, gUrl }) => {
                     const arts = document.querySelectorAll('div[role="article"]');
                     const res = [];
+                    const seenUrls = new Set();
+
                     arts.forEach(a => {
-                        const txt = a.innerText || '';
+                        // Get post content (dir="auto" contains FB text)
+                        const contentNode = a.querySelector('div[dir="auto"]');
+                        const txt = contentNode ? contentNode.innerText : (a.innerText || '');
                         if (txt.length < 30) return;
+
+                        // Get author
+                        const authorNode = a.querySelector('h2 span a, h3 span a, strong a');
+                        const author = authorNode ? authorNode.innerText : '';
+
+                        // Get clean permalink (remove tracking params)
                         const links = Array.from(a.querySelectorAll('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid"]'));
+                        const rawUrl = links[0]?.href || '';
+                        const postUrl = rawUrl.split('?')[0]; // Clean URL
+
+                        // Dedup by URL
+                        if (postUrl && seenUrls.has(postUrl)) return;
+                        if (postUrl) seenUrls.add(postUrl);
+
+                        // Get timestamp
                         const timeEl = a.querySelector('a[href*="/posts/"] span, abbr, span[id]');
-                        res.push({ platform: 'facebook', group_name: gName, group_url: gUrl, post_url: links[0]?.href || '', content: txt.substring(0, 2000), posted_at: timeEl?.textContent || '', scraped_at: new Date().toISOString() });
+
+                        // Extract top 5 comments (lead gold mine)
+                        const commentEls = a.querySelectorAll('div[role="article"] div[role="article"]');
+                        const comments = Array.from(commentEls).slice(0, 5).map(c => {
+                            const cAuthor = c.querySelector('a span')?.innerText || '';
+                            const cText = c.querySelector('div[dir="auto"]')?.innerText || '';
+                            return cText.length > 5 ? { author: cAuthor, text: cText.substring(0, 500) } : null;
+                        }).filter(Boolean);
+
+                        res.push({
+                            platform: 'facebook',
+                            group_name: gName,
+                            group_url: gUrl,
+                            post_url: postUrl,
+                            author: author,
+                            content: txt.substring(0, 2000),
+                            comments: comments,
+                            posted_at: timeEl?.textContent || '',
+                            scraped_at: new Date().toISOString()
+                        });
                     });
                     return res;
                 }, { gName: group.name, gUrl: group.url });
 
                 posts.push(...gPosts);
-                console.log(`${tag} ✅ ${group.name}: ${gPosts.length} posts (total: ${posts.length})`);
+                const cmtCount = gPosts.reduce((sum, p) => sum + (p.comments?.length || 0), 0);
+                console.log(`${tag} ✅ ${group.name}: ${gPosts.length} posts, ${cmtCount} comments (total: ${posts.length})`);
                 accountManager.reportSuccess(account.id, gPosts.length);
-                await page.close();
             } catch (err) {
                 console.warn(`${tag} ❌ ${group.name}: ${err.message.substring(0, 80)}`);
             }
 
-            if (i < groups.length - 1) await delay(1500 + Math.random() * 1500);
+            // Delay between groups (5-10s as recommended for safety)
+            if (i < groups.length - 1) await delay(5000 + Math.random() * 5000);
             if (i > 0 && i % 5 === 0) { const m = process.memoryUsage(); console.log(`${tag} 💾 RSS=${Math.round(m.rss / 1024 / 1024)}MB`); }
         }
+        await page.close();
     } catch (err) {
         console.error(`${tag} 💥 Fatal: ${err.message}`);
     } finally {
