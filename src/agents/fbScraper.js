@@ -1,4 +1,4 @@
-/**
+﻿/**
  * THG Lead Gen — Self-Hosted Facebook Scraper (Playwright Login)
  * 
  * Architecture: Playwright Stealth → www.facebook.com → Auto Login → Scrape Feed
@@ -1255,10 +1255,9 @@ async function autoJoinGroups(groups = null, account = null) {
 // ═══════════════════════════════════════════════════════
 
 /**
- * Parallel-account Facebook group scraper.
- * - 2 accounts run IN PARALLEL (each with own browser)
- * - Groups within each account are sequential (1 at a time)
- * - 3GB container supports 2 Chromium instances (~500MB each)
+ * Single-browser multi-context Facebook scraper.
+ * 1 Chromium + N incognito contexts (each with own cookies).
+ * Saves ~30-40% RAM vs N separate browsers.
  */
 async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups = null) {
     const cfg = require('../config');
@@ -1271,7 +1270,6 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
         return [];
     }
 
-    // Get all available accounts
     const allAccounts = accountManager.getActiveAccounts ?
         accountManager.getActiveAccounts() :
         [accountManager.getNextAccount(options)].filter(Boolean);
@@ -1281,36 +1279,53 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
         return [];
     }
 
-    // Split groups evenly across accounts (round-robin)
+    // Split groups round-robin
     const accountGroupMap = {};
-    for (const acc of allAccounts) {
-        accountGroupMap[acc.email] = { account: acc, groups: [] };
-    }
+    for (const acc of allAccounts) accountGroupMap[acc.email] = { account: acc, groups: [] };
     groups.forEach((group, i) => {
         const acc = allAccounts[i % allAccounts.length];
         accountGroupMap[acc.email].groups.push(group);
     });
 
-    console.log(`[FBScraper] 🚀 Parallel scraping ${groups.length} groups across ${allAccounts.length} accounts`);
-    for (const { account, groups: accGroups } of Object.values(accountGroupMap)) {
-        console.log(`[FBScraper]   📧 ${account.email}: ${accGroups.length} groups`);
+    console.log(`[FBScraper] 🚀 Single-browser ${allAccounts.length}-context scraping ${groups.length} groups`);
+    for (const { account, groups: g } of Object.values(accountGroupMap)) {
+        console.log(`[FBScraper]   📧 ${account.email}: ${g.length} groups`);
     }
 
-    // Run accounts with max 2 browsers in parallel (3 causes OOM)
-    const MAX_PARALLEL = 2;
-    const entries = Object.values(accountGroupMap);
+    // Launch ONE browser with memory-saving args
+    let browser = null;
     const allPosts = [];
 
-    for (let i = 0; i < entries.length; i += MAX_PARALLEL) {
-        const batch = entries.slice(i, i + MAX_PARALLEL);
-        console.log(`[FBScraper] 🔄 Browser batch ${Math.floor(i / MAX_PARALLEL) + 1}: ${batch.map(b => b.account.email.split('@')[0]).join(' + ')}`);
-        const batchTasks = batch.map(({ account, groups: accGroups }) =>
-            _scrapeAccountGroups(account, accGroups)
+    try {
+        browser = await chromium.launch({
+            headless: true,
+            executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+            args: [
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-extensions',
+                '--disable-component-update',
+                '--no-first-run',
+                '--js-flags=--max-old-space-size=400',
+            ],
+        });
+        console.log('[FBScraper] 🌐 Single browser launched');
+
+        // Run ALL accounts as contexts in the SAME browser
+        const entries = Object.values(accountGroupMap);
+        const tasks = entries.map(({ account, groups: accGroups }) =>
+            _scrapeWithContext(browser, account, accGroups)
         );
-        const results = await Promise.allSettled(batchTasks);
+        const results = await Promise.allSettled(tasks);
         for (const r of results) {
             if (r.status === 'fulfilled' && Array.isArray(r.value)) allPosts.push(...r.value);
         }
+    } catch (err) {
+        console.error(`[FBScraper] 💥 Browser launch failed: ${err.message}`);
+    } finally {
+        try { if (browser) await browser.close(); } catch { }
     }
 
     console.log(`[FBScraper] ✅ Done: ${allPosts.length} posts from ${groups.length} groups`);
@@ -1318,26 +1333,19 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
 }
 
 /**
- * Scrape all groups for ONE account with its own isolated browser.
- * Each account gets a dedicated Chromium instance — no global state conflicts.
+ * Scrape groups for ONE account using a context in the shared browser.
+ * Context = incognito session with own cookies, sharing browser engine.
  */
-async function _scrapeAccountGroups(account, groups) {
+async function _scrapeWithContext(browser, account, groups) {
     const accEmail = account.email;
     const tag = `[${accEmail.split('@')[0]}]`;
     console.log(`\n${tag} ═══ Starting (${groups.length} groups) ═══`);
 
     const fp = generateFingerprint({ region: 'US', accountId: accEmail });
-    let browser = null;
     let context = null;
     const posts = [];
 
     try {
-        browser = await chromium.launch({
-            headless: true,
-            executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
-            args: ['--no-sandbox', '--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage'],
-        });
-
         context = await browser.newContext({
             userAgent: fp.userAgent,
             viewport: fp.viewport,
@@ -1345,18 +1353,23 @@ async function _scrapeAccountGroups(account, groups) {
             timezoneId: 'America/New_York',
         });
 
-        // Note: resource blocking removed — was causing browser crashes
-        // (unhandled promise rejections in route handler kill context)
-        // 3GB container has enough RAM for full page loads
+        // Block heavy resources with proper await (saves ~500MB per context)
+        await context.route('**/*', async (route) => {
+            const type = route.request().resourceType();
+            if (['image', 'media', 'font', 'stylesheet'].includes(type)) {
+                await route.abort();
+            } else {
+                await route.continue();
+            }
+        });
 
-        // Load cookies: JSON cookie file FIRST (fresh), session file as fallback
+        // Load cookies: JSON file FIRST, session fallback
         const accUsername = accEmail.split('@')[0];
         const cookieJsonPath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
         const sessionDir = path.join(__dirname, '..', '..', 'data', 'fb_sessions');
         const sessionPath = path.join(sessionDir, `${accEmail.replace(/[@.]/g, '_')}.json`);
         let loaded = false;
 
-        // Priority 1: JSON cookie file (from Cookie Editor export — always fresh)
         if (fs.existsSync(cookieJsonPath)) {
             try {
                 const raw = JSON.parse(fs.readFileSync(cookieJsonPath, 'utf8'));
@@ -1368,11 +1381,9 @@ async function _scrapeAccountGroups(account, groups) {
                 }));
                 await context.addCookies(pwc); loaded = true;
                 console.log(`${tag} 🍪 Cookies from ${path.basename(cookieJsonPath)} (${pwc.length})`);
-                // Delete stale session file since we have fresh cookies
                 try { if (fs.existsSync(sessionPath)) fs.unlinkSync(sessionPath); } catch { }
             } catch (e) { console.warn(`${tag} ⚠️ Cookie error: ${e.message}`); }
         }
-        // Priority 2: Saved session (fallback only if no JSON file)
         if (!loaded && fs.existsSync(sessionPath)) {
             try {
                 const saved = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
@@ -1399,7 +1410,7 @@ async function _scrapeAccountGroups(account, groups) {
         const testUrl = testPage.url();
         if (!hasNav || testUrl.includes('/login') || testUrl.includes('checkpoint')) {
             console.warn(`${tag} ❌ Session invalid — skipping`);
-            await testPage.close(); await browser.close(); return [];
+            await testPage.close(); await context.close(); return [];
         }
         console.log(`${tag} ✅ Session valid!`);
         try { const c = await context.cookies(); fs.mkdirSync(sessionDir, { recursive: true }); fs.writeFileSync(sessionPath, JSON.stringify(c, null, 2)); } catch { }
@@ -1427,10 +1438,8 @@ async function _scrapeAccountGroups(account, groups) {
                 let hasFeed = false;
                 try { await page.waitForSelector('div[role="feed"], div[role="article"]', { timeout: 10000 }); hasFeed = true; }
                 catch {
-                    // Check if this is a "Join Group" page
                     const pageText = await page.evaluate(() => document.body?.innerText?.substring(0, 500) || '');
                     const isJoinPage = pageText.toLowerCase().includes('join group') || pageText.includes('Tham gia nh');
-
                     if (isJoinPage) {
                         console.log(`${tag} 🚪 ${group.name}: NOT A MEMBER — joining inline...`);
                         try {
@@ -1443,7 +1452,6 @@ async function _scrapeAccountGroups(account, groups) {
                                     console.log(`${tag} ⏳ ${group.name}: pending approval — skip`);
                                     await page.close(); continue;
                                 }
-                                // Joined! Reload and try scraping
                                 console.log(`${tag} ✅ ${group.name}: Joined! Reloading...`);
                                 await page.goto(`https://www.facebook.com/groups/${groupId}?sorting_setting=CHRONOLOGICAL`, { waitUntil: 'domcontentloaded', timeout: 25000 });
                                 await delay(3000);
@@ -1457,9 +1465,8 @@ async function _scrapeAccountGroups(account, groups) {
                 }
                 if (!hasFeed) { await page.close(); continue; }
 
-                // Scroll to load posts (FB needs ~800ms to lazy-load)
-                let noGrowth = 0;
-                let prevCnt = 0;
+                // Scroll to load posts
+                let noGrowth = 0, prevCnt = 0;
                 for (let s = 0; s < 30; s++) {
                     await page.evaluate(() => window.scrollBy(0, 3000));
                     await delay(800);
@@ -1497,7 +1504,7 @@ async function _scrapeAccountGroups(account, groups) {
     } catch (err) {
         console.error(`${tag} 💥 Fatal: ${err.message}`);
     } finally {
-        try { if (browser) await browser.close(); } catch { }
+        try { if (context) await context.close(); } catch { }
         console.log(`${tag} 🏁 Done: ${posts.length} posts`);
     }
     return posts;
