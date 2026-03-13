@@ -338,6 +338,7 @@ async function getAuthContext(account = null) {
 
     // Proxy connectivity test — verify Facebook is reachable through proxy
     if (launchOptions.proxy) {
+        let proxyWorks = false;
         try {
             const testPage = await activeContext.newPage();
             await testPage.goto('https://www.facebook.com/', {
@@ -345,34 +346,36 @@ async function getAuthContext(account = null) {
                 timeout: 15000,
             });
             await testPage.close();
+            proxyWorks = true;
             console.log(`[FBScraper] ✅ Proxy works for Facebook`);
         } catch (proxyErr) {
-            if (proxyErr.message.includes('TUNNEL_CONNECTION_FAILED') ||
-                proxyErr.message.includes('ERR_PROXY') ||
-                proxyErr.message.includes('ERR_CONNECTION') ||
-                proxyErr.message.includes('TIMED_OUT')) {
-                console.warn(`[FBScraper] ⚠️ Proxy blocked by Facebook — falling back to direct connect`);
-                // Close proxy browser, relaunch without proxy
-                try { await activeBrowser.close(); } catch { }
-                delete launchOptions.proxy;
-                activeBrowser = await chromium.launch(launchOptions);
-                activeContext = await activeBrowser.newContext({
-                    userAgent: fp.userAgent,
-                    viewport: fp.viewport,
-                    locale: 'en-US',
-                    timezoneId: 'America/New_York',
-                });
-                await activeContext.route('**/*', (route) => {
-                    const type = route.request().resourceType();
-                    if (['image', 'font', 'stylesheet', 'media'].includes(type)) {
-                        return route.abort();
-                    }
-                    return route.continue();
-                });
-                console.log(`[FBScraper] ⚡ Relaunched browser with direct connect for ${accEmail}`);
-            } else {
-                console.warn(`[FBScraper] ⚠️ Proxy test error: ${proxyErr.message}`);
-            }
+            console.warn(`[FBScraper] ⚠️ Proxy failed: ${proxyErr.message.substring(0, 80)}`);
+        }
+
+        if (!proxyWorks) {
+            console.warn(`[FBScraper] 🔄 Falling back to direct connect...`);
+            // Kill the broken browser completely
+            try { await activeBrowser.close(); } catch { }
+            activeBrowser = null;
+            activeContext = null;
+
+            // Relaunch clean browser without proxy
+            delete launchOptions.proxy;
+            activeBrowser = await chromium.launch(launchOptions);
+            activeContext = await activeBrowser.newContext({
+                userAgent: fp.userAgent,
+                viewport: fp.viewport,
+                locale: 'en-US',
+                timezoneId: 'America/New_York',
+            });
+            await activeContext.route('**/*', (route) => {
+                const type = route.request().resourceType();
+                if (['image', 'font', 'stylesheet', 'media'].includes(type)) {
+                    return route.abort();
+                }
+                return route.continue();
+            });
+            console.log(`[FBScraper] ⚡ Relaunched with direct connect for ${accEmail}`);
         }
     }
 
