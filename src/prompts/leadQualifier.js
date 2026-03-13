@@ -183,7 +183,10 @@ let consecutiveErrors = 0;
 function parseResult(result) {
     const role = result.author_role || 'unknown';
     const isProvider = role === 'logistics_agency' || role === 'spammer';
-    const isPotential = result.is_potential === true && !isProvider;
+
+    // service_match = "None" means post has NO relevance to THG services → NOT a lead
+    const serviceNone = !result.service_match || result.service_match === 'None' || result.service_match === 'none';
+    const isPotential = result.is_potential === true && !isProvider && !serviceNone;
 
     let score = Math.min(100, Math.max(0, result.score || 0));
 
@@ -193,11 +196,16 @@ function parseResult(result) {
     }
     if (!isPotential) score = 0;
 
+    // Log false positive catch
+    if (result.is_potential === true && serviceNone) {
+        console.log(`[Classifier] 🛡️ Blocked: is_potential=true but service_match=None — forced to score 0`);
+    }
+
     return {
         isLead: isPotential,
         role: isPotential ? 'buyer' : (isProvider ? 'provider' : 'irrelevant'),
         score,
-        category: result.service_match === 'None' ? 'NotRelevant' : (result.service_match || 'General'),
+        category: serviceNone ? 'NotRelevant' : (result.service_match || 'General'),
         summary: result.reasoning || '',
         urgency: isPotential ? (result.urgency || 'low') : 'low',
         buyerSignals: isPotential ? (result.reasoning || '') : '',

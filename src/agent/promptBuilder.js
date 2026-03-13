@@ -70,7 +70,15 @@ score 0-39 = Không phải buyer HOẶC không liên quan
 
 ⚠️ QUY TẮC BẮT BUỘC VỀ SCORE:
 - Nếu is_potential = true → score PHẢI >= 60. Không có ngoại lệ.
-- Nếu is_potential = false → score PHẢI = 0. Không có ngoại lệ.`;
+- Nếu is_potential = false → score PHẢI = 0. Không có ngoại lệ.
+
+🔴 QUY TẮC CHỐNG FALSE POSITIVE (CỰC KỲ QUAN TRỌNG):
+- Bài hỏi về sản phẩm Amazon KHÔNG LIÊN QUAN đến shipping/logistics/fulfillment → is_potential = false, score = 0
+- Bài hỏi về nhập hàng Macy's, Target, Costco hoặc mua hàng nội địa Mỹ → is_potential = false, score = 0  
+- Bài hỏi về listing, SEO, PPC, quảng cáo → is_potential = false, score = 0
+- Bài về tìm việc, tuyển dụng, HR → is_potential = false, score = 0
+- Bài chia sẻ kiến thức, hướng dẫn, tip → is_potential = false, score = 0
+- CHỈ is_potential = true khi bài viết RÕ RÀNG cần dịch vụ: vận chuyển, fulfillment, kho bãi, POD, dropship, hoặc tìm nguồn hàng TQ để ship đi Mỹ/EU`;
 
     // 5. Few-shot examples
     const examples = `
@@ -102,7 +110,16 @@ score 0-39 = Không phải buyer HOẶC không liên quan
 - "cần ship hàng từ Quảng Châu về Việt Nam, ai nhận?" → is_potential:false, score:0 (TQ→VN = sai tuyến)
 - "ai biết chỗ nào order taobao về VN uy tín?" → is_potential:false, score:0 (TQ→VN = sai tuyến)
 - "cần giao hàng nhanh nội thành HCM" → is_potential:false, score:0 (nội địa VN = sai tuyến)
-- "nhập hàng 1688 về kho Hà Nội, giá bao nhiêu?" → is_potential:false, score:0 (TQ→VN = sai tuyến)`;
+- "nhập hàng 1688 về kho Hà Nội, giá bao nhiêu?" → is_potential:false, score:0 (TQ→VN = sai tuyến)
+
+❌ KHÔNG LIÊN QUAN (is_potential: false, score: 0 — FALSE POSITIVE CẦN TRÁNH):
+- "Cho hỏi liệt kê sản phẩm trên Amazon mà không có giá" → KHÔNG liên quan logistics. Buyer đang hỏi Amazon listing/SEO, KHÔNG cần ship/fulfill → score: 0
+- "Ai biết cách nhận chấp thuận cho hàng hóa nguy hiểm?" → Hỏi về compliance/regulation, KHÔNG cần dịch vụ logistics → score: 0
+- "Đang tìm nhập hàng từ Macy's/Target/Costco" → Mua hàng nội địa Mỹ, KHÔNG phải tuyến THG (VN/CN→US) → score: 0
+- "Cho hỏi về lời khuyên liệt kê sản phẩm Amazon" → Hỏi listing/SEO tip, KHÔNG cần ship/fulfill → score: 0
+- "Tìm inf LTD Hong Kong chính chủ" → Tìm công ty/giấy phép, KHÔNG cần logistics → score: 0
+- "Ai biết chỗ bán buôn quần áo giá rẻ?" → Tìm nguồn hàng nội địa, KHÔNG đề cập ship quốc tế → score: 0
+- "Giúp mình review sản phẩm trên Amazon" → Hỏi review/marketing, KHÔNG liên quan logistics → score: 0`;
 
     // Combine all parts
     return [base, kbContext, feedbackSection, rules, examples,
@@ -141,9 +158,11 @@ function buildUserPrompt(post) {
         ? `\nParent post context: ${post.parent_excerpt}`
         : '';
 
+    const groupCtx = post.group_name || post.source_group ? `\nGroup: ${post.group_name || post.source_group}` : '';
+
     return `Phân tích ${typeLabel} sau:
 
-Platform: ${post.platform}
+Platform: ${post.platform}${groupCtx}
 Type: ${post.item_type || 'post'}${parentCtx}
 Nội dung: ${(post.content || '').substring(0, 1500)}
 
@@ -154,10 +173,10 @@ Trả về JSON (object đơn, không phải array):
   "is_potential": boolean,
   "score": number (NẾU is_potential=true thì PHẢI >= 60, NẾU false thì = 0),
   "service_match": "THG Fulfillment" | "THG Express" | "THG Warehouse" | "Both" | "None",
-  "reasoning": "Giải thích ngắn gọn",
+  "reasoning": "Giải thích ngắn gọn tại sao IS hoặc IS NOT lead",
   "urgency": "low" | "medium" | "high",
   "profit_estimate": "Ước tính doanh số nếu là buyer (vd: ~$500, ~$2,000). Để trống nếu không phải buyer.",
-  "gap_opportunity": "Nếu khách đang phàn nàn/bức xúc đối thủ, mô tả cơ hội (vd: Khách bức xúc bên A mất hàng → chào Bảo hiểm 100%). Để trống nếu không có."
+  "gap_opportunity": "Nếu khách đang phàn nàn/bức xúc đối thủ, mô tả cơ hội. Để trống nếu không có."
 }`;
 }
 
@@ -170,7 +189,8 @@ function buildBatchPrompt(posts) {
         const parentCtx = p.parent_excerpt
             ? `\nParent: ${p.parent_excerpt.substring(0, 200)}`
             : '';
-        return `[${typeLabel} ${i + 1}] Platform: ${p.platform}${parentCtx}\nContent: ${(p.content || '').substring(0, 600)}`;
+        const groupCtx = p.group_name || p.source_group ? ` | Group: ${p.group_name || p.source_group}` : '';
+        return `[${typeLabel} ${i + 1}] Platform: ${p.platform}${groupCtx}${parentCtx}\nContent: ${(p.content || '').substring(0, 600)}`;
     }).join('\n\n---\n\n');
 
     return `Phân tích ${posts.length} bài đăng/comment dưới đây. 

@@ -1666,12 +1666,15 @@ async function _scrapeWithContext(browser, account, groups) {
                             group_name: gName,
                             group_url: gUrl,
                             post_url: postUrl,
-                            author: author || 'Unknown',
+                            author_name: author || 'Unknown',
                             author_url: authorUrl,
+                            author_avatar: '',
                             content: txt.substring(0, 2000),
-                            posted_at: postedAt,
+                            post_created_at: postedAt,
                             time_raw: timeStr,
-                            scraped_at: new Date().toISOString()
+                            scraped_at: new Date().toISOString(),
+                            source_group: gName,
+                            item_type: 'post'
                         });
                     });
                     return res;
