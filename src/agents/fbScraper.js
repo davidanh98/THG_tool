@@ -1461,7 +1461,7 @@ async function _scrapeAccountGroups(account, groups) {
                 }
 
                 // Extract posts
-                const gPosts = await page.evaluate((gName, gUrl) => {
+                const gPosts = await page.evaluate(({ gName, gUrl }) => {
                     const arts = document.querySelectorAll('div[role="article"]');
                     const res = [];
                     arts.forEach(a => {
@@ -1472,7 +1472,7 @@ async function _scrapeAccountGroups(account, groups) {
                         res.push({ platform: 'facebook', group_name: gName, group_url: gUrl, post_url: links[0]?.href || '', content: txt.substring(0, 2000), posted_at: timeEl?.textContent || '', scraped_at: new Date().toISOString() });
                     });
                     return res;
-                }, group.name, group.url);
+                }, { gName: group.name, gUrl: group.url });
 
                 posts.push(...gPosts);
                 console.log(`${tag} ✅ ${group.name}: ${gPosts.length} posts (total: ${posts.length})`);
