@@ -1296,18 +1296,20 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
         console.log(`[FBScraper]   📧 ${account.email}: ${accGroups.length} groups`);
     }
 
-    // Run accounts in parallel with 5s stagger (avoid OOM from simultaneous browser launches)
+    // Run accounts with max 2 browsers in parallel (3 causes OOM)
+    const MAX_PARALLEL = 2;
     const entries = Object.values(accountGroupMap);
-    const accountTasks = entries.map(({ account, groups: accGroups }, idx) =>
-        new Promise(resolve => setTimeout(resolve, idx * 5000))
-            .then(() => _scrapeAccountGroups(account, accGroups))
-    );
-
-    const results = await Promise.allSettled(accountTasks);
     const allPosts = [];
-    for (const r of results) {
-        if (r.status === 'fulfilled' && Array.isArray(r.value)) {
-            allPosts.push(...r.value);
+
+    for (let i = 0; i < entries.length; i += MAX_PARALLEL) {
+        const batch = entries.slice(i, i + MAX_PARALLEL);
+        console.log(`[FBScraper] 🔄 Browser batch ${Math.floor(i / MAX_PARALLEL) + 1}: ${batch.map(b => b.account.email.split('@')[0]).join(' + ')}`);
+        const batchTasks = batch.map(({ account, groups: accGroups }) =>
+            _scrapeAccountGroups(account, accGroups)
+        );
+        const results = await Promise.allSettled(batchTasks);
+        for (const r of results) {
+            if (r.status === 'fulfilled' && Array.isArray(r.value)) allPosts.push(...r.value);
         }
     }
 
