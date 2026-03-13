@@ -1521,23 +1521,58 @@ async function _scrapeWithContext(browser, account, groups) {
                         // "just now", "vừa xong"
                         if (s.includes('just now') || s.includes('vừa xong') || s === 'now') return 0;
                         // "Xm" or "X min" or "X phút"
-                        let m = s.match(/(\d+)\s*(m|min|mins|minute|minutes|phút)/);
+                        let m = s.match(/(\d+)\s*(m\b|min|mins|minute|minutes|phút)/);
                         if (m) return parseInt(m[1]) / 60;
                         // "Xh" or "X hours" or "X giờ"
-                        m = s.match(/(\d+)\s*(h|hr|hrs|hour|hours|giờ)/);
+                        m = s.match(/(\d+)\s*(h\b|hr|hrs|hour|hours|giờ)/);
                         if (m) return parseInt(m[1]);
                         // "Xd" or "X days" or "X ngày"
-                        m = s.match(/(\d+)\s*(d|day|days|ngày)/);
+                        m = s.match(/(\d+)\s*(d\b|day|days|ngày)/);
                         if (m) return parseInt(m[1]) * 24;
                         // "Xw" or "X weeks" or "X tuần"
-                        m = s.match(/(\d+)\s*(w|wk|wks|week|weeks|tuần)/);
+                        m = s.match(/(\d+)\s*(w\b|wk|wks|week|weeks|tuần)/);
                         if (m) return parseInt(m[1]) * 24 * 7;
+                        // "X tháng" or "X months" — always > 3 days
+                        m = s.match(/(\d+)\s*(tháng|month|months|mo\b)/);
+                        if (m) return parseInt(m[1]) * 24 * 30;
+                        // "X năm" or "X years" — always very old
+                        m = s.match(/(\d+)\s*(năm|year|years|yr|yrs)/);
+                        if (m) return parseInt(m[1]) * 24 * 365;
                         // "yesterday" / "hôm qua"
                         if (s.includes('yesterday') || s.includes('hôm qua')) return 24;
-                        // Specific date patterns: "March 10", "10 tháng 3", "Mar 10 at 2:30 PM"
-                        // These are usually > 7 days old on FB
-                        if (s.match(/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i)) return 24 * 14;
-                        if (s.match(/tháng/)) return 24 * 14;
+
+                        // Full date: "28 tháng 2, 2023" or "10 tháng 3"
+                        m = s.match(/(\d{1,2})\s*tháng\s*(\d{1,2})(?:,?\s*(\d{4}))?/);
+                        if (m) {
+                            const day = parseInt(m[1]), month = parseInt(m[2]) - 1;
+                            const year = m[3] ? parseInt(m[3]) : new Date().getFullYear();
+                            const postDate = new Date(year, month, day);
+                            const ageMs = Date.now() - postDate.getTime();
+                            return ageMs > 0 ? ageMs / (1000 * 3600) : 0;
+                        }
+                        // Full date EN: "March 10, 2023", "Feb 28, 2023", "Mar 10 at 2:30 PM"
+                        const monthNames = {
+                            jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+                            january: 0, february: 1, march: 2, april: 3, june: 5, july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
+                        };
+                        m = s.match(/^(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:,?\s*(\d{4}))?/i);
+                        if (m) {
+                            const month = monthNames[m[1].toLowerCase().substring(0, 3)];
+                            const day = parseInt(m[2]);
+                            const year = m[3] ? parseInt(m[3]) : new Date().getFullYear();
+                            const postDate = new Date(year, month, day);
+                            const ageMs = Date.now() - postDate.getTime();
+                            return ageMs > 0 ? ageMs / (1000 * 3600) : 0;
+                        }
+
+                        // If contains year number like "2023", "2024", "2025" → parse as old
+                        m = s.match(/\b(20[12]\d)\b/);
+                        if (m) {
+                            const year = parseInt(m[1]);
+                            // If year < current year → definitely old
+                            if (year < new Date().getFullYear()) return 24 * 365;
+                        }
+
                         return null;
                     }
 
@@ -1550,9 +1585,19 @@ async function _scrapeWithContext(browser, account, groups) {
                         const txt = a.innerText || '';
                         if (txt.length < 50) return;
 
-                        // Get permalink
-                        const links = Array.from(a.querySelectorAll('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid"]'));
-                        const rawUrl = links[0]?.href || '';
+                        // Get permalink (multiple patterns)
+                        const links = Array.from(a.querySelectorAll('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid"], a[href*="/groups/"][href*="/posts/"]'));
+                        let rawUrl = links[0]?.href || '';
+                        // Fallback: any link that looks like a FB post URL
+                        if (!rawUrl) {
+                            const allA = a.querySelectorAll('a[href]');
+                            for (const al of allA) {
+                                const h = al.href || '';
+                                if (h.includes('facebook.com') && (h.includes('/posts/') || h.includes('story_fbid') || h.includes('/permalink/'))) {
+                                    rawUrl = h; break;
+                                }
+                            }
+                        }
                         const postUrl = rawUrl.split('?')[0];
                         if (postUrl && seenUrls.has(postUrl)) return;
                         if (postUrl) seenUrls.add(postUrl);
@@ -1572,12 +1617,19 @@ async function _scrapeWithContext(browser, account, groups) {
                             const abbr = a.querySelector('abbr');
                             if (abbr) timeStr = abbr.textContent?.trim() || abbr.getAttribute('title') || '';
                         }
-                        // Strategy 3: span near timestamp area
+                        // Strategy 3: span near timestamp area (expanded patterns)
                         if (!timeStr) {
                             const spans = a.querySelectorAll('span');
                             for (const sp of spans) {
                                 const t = sp.textContent?.trim();
-                                if (t && t.match(/^\d+[mhdw]$|^just now$|^yesterday$|^hôm qua$|^\d+\s*(phút|giờ|ngày|tuần)/i)) {
+                                if (t && t.match(/^\d+[mhdw]$|^just now$|^yesterday$|^hôm qua$|^\d+\s*(phút|giờ|ngày|tuần|năm|tháng|year|month|week|day|hour|min)/i)) {
+                                    timeStr = t; break;
+                                }
+                                // Also catch full date strings in spans
+                                if (t && t.match(/^\d{1,2}\s*tháng\s*\d{1,2}/i)) {
+                                    timeStr = t; break;
+                                }
+                                if (t && t.match(/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i)) {
                                     timeStr = t; break;
                                 }
                             }
@@ -1588,7 +1640,9 @@ async function _scrapeWithContext(browser, account, groups) {
                         const ageDays = ageHours !== null ? ageHours / 24 : null;
 
                         // FILTER: skip posts older than maxAgeDays
+                        // Also skip posts with NO parseable timestamp (assume old/pinned)
                         if (ageDays !== null && ageDays > maxAgeDays) return;
+                        if (ageDays === null && timeStr) return; // Had text but couldn't parse → likely old
 
                         // Convert to ISO date
                         let postedAt = '';
