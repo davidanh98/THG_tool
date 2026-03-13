@@ -1353,10 +1353,10 @@ async function _scrapeWithContext(browser, account, groups) {
             timezoneId: 'America/New_York',
         });
 
-        // Block heavy resources with proper await (saves ~500MB per context)
+        // Block heavy resources (NOT stylesheet — FB needs CSS to render feed!)
         await context.route('**/*', async (route) => {
             const type = route.request().resourceType();
-            if (['image', 'media', 'font', 'stylesheet'].includes(type)) {
+            if (['image', 'media', 'font'].includes(type)) {
                 await route.abort();
             } else {
                 await route.continue();
