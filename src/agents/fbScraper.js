@@ -1255,14 +1255,18 @@ async function autoJoinGroups(groups = null, account = null) {
 // ═══════════════════════════════════════════════════════
 
 /**
- * Scrape all configured Facebook Groups in parallel batches of 5.
- * Replaces sequential scraping for 4-5x speed improvement.
- * @param {number} maxPosts - max posts per group
+ * Sequential Facebook group scraper with per-account splitting.
+ * - Splits groups evenly across available accounts
+ * - Scrapes ONE group at a time (prevents OOM)
+ * - Reuses same browser across all groups for one account
+ * 
+ * @param {number} maxPosts - max posts per group (default 20)
+ * @param {Object} options 
+ * @param {Array} externalGroups - groups from prod_groups.json
  * @returns {Array} all posts from all groups
  */
 async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups = null) {
     const cfg = require('../config');
-    // Use externally-provided groups (49 from prod) or fall back to config (19)
     const groups = (externalGroups && externalGroups.length > 0)
         ? externalGroups
         : (cfg.FB_TARGET_GROUPS || []);
@@ -1272,40 +1276,86 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
         return [];
     }
 
-    const BATCH_SIZE = 3; // Reduced from 5 — prevents OOM crash (3 tabs × ~150MB = 450MB safe)
-    console.log(`[FBScraper] 🚀 Parallel scraping ${groups.length} groups (batch=${BATCH_SIZE})...`);
+    // Get all available accounts
+    const allAccounts = accountManager.getActiveAccounts ?
+        accountManager.getActiveAccounts() :
+        [accountManager.getNextAccount(options)].filter(Boolean);
+
+    if (allAccounts.length === 0) {
+        console.log('[FBScraper] ❌ No accounts available');
+        return [];
+    }
+
+    // Split groups evenly across accounts (round-robin)
+    const accountGroups = {};
+    for (const acc of allAccounts) {
+        accountGroups[acc.email] = { account: acc, groups: [] };
+    }
+    groups.forEach((group, i) => {
+        const acc = allAccounts[i % allAccounts.length];
+        accountGroups[acc.email].groups.push(group);
+    });
+
+    console.log(`[FBScraper] 🚀 Sequential scraping ${groups.length} groups across ${allAccounts.length} accounts`);
+    for (const { account, groups: accGroups } of Object.values(accountGroups)) {
+        console.log(`[FBScraper]   📧 ${account.email}: ${accGroups.length} groups`);
+    }
+
     const allPosts = [];
+    let totalScraped = 0;
 
-    for (let i = 0; i < groups.length; i += BATCH_SIZE) {
-        const batch = groups.slice(i, i + BATCH_SIZE);
-        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-        const totalBatches = Math.ceil(groups.length / BATCH_SIZE);
-        console.log(`[FBScraper] 📦 Batch ${batchNum}/${totalBatches}: ${batch.map(g => g.name).join(', ')}`);
+    // Process each account's groups sequentially
+    for (const { account, groups: accGroups } of Object.values(accountGroups)) {
+        console.log(`\n[FBScraper] ═══ Starting ${account.email} (${accGroups.length} groups) ═══`);
 
-        const results = await Promise.allSettled(
-            batch.map(g => getGroupPosts(g.url, g.name, options))
-        );
+        for (let i = 0; i < accGroups.length; i++) {
+            const group = accGroups[i];
+            console.log(`[FBScraper] [${i + 1}/${accGroups.length}] ${group.name}`);
 
-        for (const r of results) {
-            if (r.status === 'fulfilled' && Array.isArray(r.value)) {
-                allPosts.push(...r.value);
+            try {
+                const timeout = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('⏰ Group timeout (2min)')), 120000)
+                );
+                const posts = await Promise.race([
+                    timeout,
+                    _getGroupPostsInner(group.url, group.name, account)
+                ]);
+
+                if (Array.isArray(posts) && posts.length > 0) {
+                    allPosts.push(...posts);
+                    totalScraped += posts.length;
+                    console.log(`[FBScraper] ✅ ${group.name}: ${posts.length} posts (total: ${totalScraped})`);
+                } else {
+                    console.log(`[FBScraper] ⚠️ ${group.name}: 0 posts`);
+                }
+                accountManager.reportSuccess(account.id, posts?.length || 0);
+            } catch (err) {
+                console.warn(`[FBScraper] ❌ ${group.name}: ${err.message}`);
+                // If browser crashed, close and let next iteration recreate
+                if (err.message.includes('closed') || err.message.includes('crashed')) {
+                    await closeBrowser();
+                }
+            }
+
+            // Brief delay between groups (human-like)
+            if (i < accGroups.length - 1) {
+                await delay(1500 + Math.random() * 1500);
+            }
+
+            // Memory check every 5 groups
+            if (i > 0 && i % 5 === 0) {
+                const mem = process.memoryUsage();
+                console.log(`[FBScraper] 💾 Memory: RSS=${Math.round(mem.rss / 1024 / 1024)}MB`);
             }
         }
 
-        // Close browser between batches to free RAM (prevents OOM crash)
-        if (i + BATCH_SIZE < groups.length) {
-            await closeBrowser();
-            // Random delay 2-4s between batches (human-like + avoids FB rate-limit)
-            const batchDelay = 2000 + Math.random() * 2000;
-            const mem = process.memoryUsage();
-            console.log(`[FBScraper] 💾 Memory: RSS=${Math.round(mem.rss / 1024 / 1024)}MB, Heap=${Math.round(mem.heapUsed / 1024 / 1024)}MB — pausing ${Math.round(batchDelay / 1000)}s`);
-            await delay(batchDelay);
-        }
+        // Close browser when switching accounts
+        console.log(`[FBScraper] 🔄 Closing browser for ${account.email}`);
+        await closeBrowser();
+        await delay(2000);
     }
 
-    // Final cleanup
-    await closeBrowser();
-    console.log(`[FBScraper] ✅ Total scraped: ${allPosts.length} posts from ${groups.length} groups`);
+    console.log(`[FBScraper] ✅ Done: ${totalScraped} posts from ${groups.length} groups`);
     return allPosts;
 }
 

@@ -261,8 +261,36 @@ function shouldRest(accountId) {
     return false;
 }
 
+/**
+ * Get ALL active accounts (for splitting groups across accounts)
+ * @returns {object[]} array of active account rows
+ */
+function getActiveAccounts() {
+    const accounts = db.db.prepare(`
+        SELECT * FROM fb_accounts
+        WHERE status = 'active'
+          AND trust_score > 20
+        ORDER BY trust_score DESC
+    `).all();
+
+    // Also recover resting accounts that have rested enough
+    const resting = db.db.prepare(`
+        SELECT * FROM fb_accounts
+        WHERE status = 'resting'
+          AND datetime(last_used) < datetime('now', '-4 hours')
+    `).all();
+
+    for (const acc of resting) {
+        db.db.prepare(`UPDATE fb_accounts SET status='active', trust_score=MIN(trust_score+30, 100) WHERE id=?`).run(acc.id);
+        accounts.push({ ...acc, status: 'active' });
+    }
+
+    return accounts;
+}
+
 module.exports = {
     getNextAccount,
+    getActiveAccounts,
     getAccountBySalesName,
     linkAccountToSales,
     reportCheckpoint,
