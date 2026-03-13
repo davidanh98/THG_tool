@@ -336,6 +336,46 @@ async function getAuthContext(account = null) {
         return route.continue();
     });
 
+    // Proxy connectivity test — verify Facebook is reachable through proxy
+    if (launchOptions.proxy) {
+        try {
+            const testPage = await activeContext.newPage();
+            await testPage.goto('https://www.facebook.com/', {
+                waitUntil: 'domcontentloaded',
+                timeout: 15000,
+            });
+            await testPage.close();
+            console.log(`[FBScraper] ✅ Proxy works for Facebook`);
+        } catch (proxyErr) {
+            if (proxyErr.message.includes('TUNNEL_CONNECTION_FAILED') ||
+                proxyErr.message.includes('ERR_PROXY') ||
+                proxyErr.message.includes('ERR_CONNECTION') ||
+                proxyErr.message.includes('TIMED_OUT')) {
+                console.warn(`[FBScraper] ⚠️ Proxy blocked by Facebook — falling back to direct connect`);
+                // Close proxy browser, relaunch without proxy
+                try { await activeBrowser.close(); } catch { }
+                delete launchOptions.proxy;
+                activeBrowser = await chromium.launch(launchOptions);
+                activeContext = await activeBrowser.newContext({
+                    userAgent: fp.userAgent,
+                    viewport: fp.viewport,
+                    locale: 'en-US',
+                    timezoneId: 'America/New_York',
+                });
+                await activeContext.route('**/*', (route) => {
+                    const type = route.request().resourceType();
+                    if (['image', 'font', 'stylesheet', 'media'].includes(type)) {
+                        return route.abort();
+                    }
+                    return route.continue();
+                });
+                console.log(`[FBScraper] ⚡ Relaunched browser with direct connect for ${accEmail}`);
+            } else {
+                console.warn(`[FBScraper] ⚠️ Proxy test error: ${proxyErr.message}`);
+            }
+        }
+    }
+
     // Try loading saved session first (account-specific)
     const savedCookies = loadSession(sessionPath);
     if (savedCookies && savedCookies.length > 0) {
