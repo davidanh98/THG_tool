@@ -352,6 +352,18 @@ async function main() {
     console.log(`[ScraperWorker] 🔧 Scrape Mode: ${scrapeMode.toUpperCase()}`);
     if (scrapeMode === 'self-hosted') {
         try {
+            // 1. Load Webshare.io proxies (paid/free tier)
+            try {
+                const { loadWebshareIntoPool, autoAssignProxiesToAccounts } = require('../proxy/webshareFetcher');
+                const count = await loadWebshareIntoPool();
+                if (count > 0) {
+                    await autoAssignProxiesToAccounts();
+                }
+            } catch (wsErr) {
+                console.warn(`[ScraperWorker] ⚠️ Webshare init: ${wsErr.message}`);
+            }
+
+            // 2. Fallback: free ProxyScrape proxies
             const fbScraper = require('../agents/fbScraper');
             await fbScraper.loadFreeProxies();
             console.log('[ScraperWorker] ✅ Self-hosted scraper ready (FREE)');

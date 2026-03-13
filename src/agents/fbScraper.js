@@ -284,6 +284,7 @@ async function getAuthContext(account = null) {
     };
 
     // Per-account proxy (1 account : 1 proxy — prevents Chain-ban)
+    // Assigned automatically by Webshare auto-assign on startup
     if (accProxy) {
         try {
             const pUrl = new URL(accProxy);
@@ -296,29 +297,8 @@ async function getAuthContext(account = null) {
             }
             console.log(`[FBScraper] 🔒 Using dedicated proxy for ${accEmail}`);
         } catch { }
-    } else if (process.env.TUNNEL_PROXY) {
-        // SSH tunnel proxy (home IP — zero cost residential proxy)
-        // Verify proxy is reachable before using (prevents crash on VPS where tunnel doesn't exist)
-        try {
-            const proxyUrl = new URL(process.env.TUNNEL_PROXY);
-            const net = require('net');
-            const proxyOk = await new Promise((resolve) => {
-                const sock = net.connect({ host: proxyUrl.hostname, port: parseInt(proxyUrl.port) || 8888, timeout: 3000 });
-                sock.on('connect', () => { sock.destroy(); resolve(true); });
-                sock.on('error', () => { sock.destroy(); resolve(false); });
-                sock.on('timeout', () => { sock.destroy(); resolve(false); });
-            });
-            if (proxyOk) {
-                launchOptions.proxy = { server: process.env.TUNNEL_PROXY };
-                console.log(`[FBScraper] 🏠 Using tunnel proxy: ${process.env.TUNNEL_PROXY}`);
-            } else {
-                console.warn(`[FBScraper] ⚠️ Tunnel proxy ${process.env.TUNNEL_PROXY} unreachable — skipping (direct connect)`);
-            }
-        } catch (e) {
-            console.warn(`[FBScraper] ⚠️ Invalid TUNNEL_PROXY: ${e.message} — skipping`);
-        }
     } else if (pool.loaded && pool.hasProxies()) {
-        // Fallback: shared proxy pool (less safe)
+        // Fallback: shared proxy pool (round-robin)
         const best = pool.getBestProxy();
         if (best) {
             try {
@@ -330,8 +310,11 @@ async function getAuthContext(account = null) {
                     launchOptions.proxy.username = decodeURIComponent(pUrl.username);
                     launchOptions.proxy.password = decodeURIComponent(pUrl.password);
                 }
+                console.log(`[FBScraper] 🌐 Using pool proxy for ${accEmail}`);
             } catch { }
         }
+    } else {
+        console.log(`[FBScraper] ⚡ Direct connect (no proxy) for ${accEmail}`);
     }
 
     const fp = generateFingerprint({ region: 'US' });

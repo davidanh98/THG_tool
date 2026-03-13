@@ -64,6 +64,8 @@ services:
     volumes: *vols
     environment:
       - NODE_ENV=production
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     deploy:
       resources:
         limits: { memory: 900M, cpus: '0.8' }
