@@ -1494,18 +1494,47 @@ async function _scrapeWithContext(browser, account, groups) {
                     if (seeMoreBtns.length > 0) await delay(500);
                 } catch { }
 
-                // Extract posts — use innerText for reliable content extraction
-                const gPosts = await page.evaluate(({ gName, gUrl }) => {
+                // Extract posts with real timestamps from FB DOM
+                const MAX_AGE_DAYS = 3;
+                const gPosts = await page.evaluate(({ gName, gUrl, maxAgeDays }) => {
                     const feed = document.querySelector('div[role="feed"]');
                     if (!feed) return [];
+
+                    // Parse FB relative time string → age in hours
+                    function parseRelativeTime(timeStr) {
+                        if (!timeStr) return null;
+                        const s = timeStr.trim().toLowerCase();
+                        // "just now", "vừa xong"
+                        if (s.includes('just now') || s.includes('vừa xong') || s === 'now') return 0;
+                        // "Xm" or "X min" or "X phút"
+                        let m = s.match(/(\d+)\s*(m|min|mins|minute|minutes|phút)/);
+                        if (m) return parseInt(m[1]) / 60;
+                        // "Xh" or "X hours" or "X giờ"
+                        m = s.match(/(\d+)\s*(h|hr|hrs|hour|hours|giờ)/);
+                        if (m) return parseInt(m[1]);
+                        // "Xd" or "X days" or "X ngày"
+                        m = s.match(/(\d+)\s*(d|day|days|ngày)/);
+                        if (m) return parseInt(m[1]) * 24;
+                        // "Xw" or "X weeks" or "X tuần"
+                        m = s.match(/(\d+)\s*(w|wk|wks|week|weeks|tuần)/);
+                        if (m) return parseInt(m[1]) * 24 * 7;
+                        // "yesterday" / "hôm qua"
+                        if (s.includes('yesterday') || s.includes('hôm qua')) return 24;
+                        // Specific date patterns: "March 10", "10 tháng 3", "Mar 10 at 2:30 PM"
+                        // These are usually > 7 days old on FB
+                        if (s.match(/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i)) return 24 * 14;
+                        if (s.match(/tháng/)) return 24 * 14;
+                        return null;
+                    }
 
                     const articles = feed.querySelectorAll(':scope > div');
                     const res = [];
                     const seenUrls = new Set();
+                    const now = Date.now();
 
                     articles.forEach(a => {
                         const txt = a.innerText || '';
-                        if (txt.length < 50) return; // Skip tiny/empty posts
+                        if (txt.length < 50) return;
 
                         // Get permalink
                         const links = Array.from(a.querySelectorAll('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid"]'));
@@ -1514,12 +1543,48 @@ async function _scrapeWithContext(browser, account, groups) {
                         if (postUrl && seenUrls.has(postUrl)) return;
                         if (postUrl) seenUrls.add(postUrl);
 
-                        // Get author (first strong/h3 link)
+                        // === EXTRACT REAL TIMESTAMP ===
+                        // Strategy 1: aria-label on permalink link (most reliable)
+                        let timeStr = '';
+                        for (const link of links) {
+                            const ariaTime = link.getAttribute('aria-label');
+                            if (ariaTime && ariaTime.match(/\d/)) { timeStr = ariaTime; break; }
+                            // Text inside the link (e.g. "2h", "1d")
+                            const linkText = link.innerText?.trim();
+                            if (linkText && linkText.match(/^\d+[mhdw]$|^just now$|^yesterday$/i)) { timeStr = linkText; break; }
+                        }
+                        // Strategy 2: abbr element (classic FB)
+                        if (!timeStr) {
+                            const abbr = a.querySelector('abbr');
+                            if (abbr) timeStr = abbr.textContent?.trim() || abbr.getAttribute('title') || '';
+                        }
+                        // Strategy 3: span near timestamp area
+                        if (!timeStr) {
+                            const spans = a.querySelectorAll('span');
+                            for (const sp of spans) {
+                                const t = sp.textContent?.trim();
+                                if (t && t.match(/^\d+[mhdw]$|^just now$|^yesterday$|^hôm qua$|^\d+\s*(phút|giờ|ngày|tuần)/i)) {
+                                    timeStr = t; break;
+                                }
+                            }
+                        }
+
+                        // Parse to age in hours
+                        const ageHours = parseRelativeTime(timeStr);
+                        const ageDays = ageHours !== null ? ageHours / 24 : null;
+
+                        // FILTER: skip posts older than maxAgeDays
+                        if (ageDays !== null && ageDays > maxAgeDays) return;
+
+                        // Convert to ISO date
+                        let postedAt = '';
+                        if (ageHours !== null) {
+                            postedAt = new Date(now - ageHours * 3600 * 1000).toISOString();
+                        }
+
+                        // Get author
                         const authorEl = a.querySelector('h3 a, h2 a, strong a');
                         const author = authorEl ? authorEl.innerText : '';
-
-                        // Get time element
-                        const timeEl = a.querySelector('abbr, a[href*="/posts/"] span, span[id]');
 
                         res.push({
                             platform: 'facebook',
@@ -1528,12 +1593,13 @@ async function _scrapeWithContext(browser, account, groups) {
                             post_url: postUrl,
                             author: author,
                             content: txt.substring(0, 2000),
-                            posted_at: timeEl?.textContent || '',
+                            posted_at: postedAt,
+                            time_raw: timeStr,
                             scraped_at: new Date().toISOString()
                         });
                     });
                     return res;
-                }, { gName: group.name, gUrl: group.url });
+                }, { gName: group.name, gUrl: group.url, maxAgeDays: MAX_AGE_DAYS });
 
                 posts.push(...gPosts);
                 console.log(`${tag} ✅ ${group.name}: ${gPosts.length} posts (total: ${posts.length})`);
