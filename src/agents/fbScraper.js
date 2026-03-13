@@ -1080,8 +1080,14 @@ async function autoJoinGroups(groups = null, account = null) {
     const fs = require('fs');
     const PROD_GROUPS_FILE = path.join(__dirname, '..', '..', 'data', 'prod_groups.json');
 
-    // Load groups: prod_groups.json > passed groups > config fallback
+    // Load groups: groups.db (all active) > prod_groups.json fallback > config fallback
     let targetGroups = groups;
+    if (!targetGroups || targetGroups.length === 0) {
+        try {
+            const groupDiscovery = require('../agent/groupDiscovery');
+            targetGroups = groupDiscovery.getScanRotationList(200);
+        } catch { }
+    }
     if (!targetGroups || targetGroups.length === 0) {
         try {
             if (fs.existsSync(PROD_GROUPS_FILE)) {

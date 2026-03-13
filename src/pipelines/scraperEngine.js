@@ -38,17 +38,28 @@ const fs = require('fs');
 async function scrapeFacebook(_keywords, maxPosts = 30, options = {}) {
     console.log('[Scraper:FB] 📘 Scraping Facebook via Playwright (self-hosted)...');
     try {
-        // Load groups: prod_groups.json (49 groups) > config fallback (19 groups)
+        // Load groups: groups.db (all active) > prod_groups.json fallback > config fallback
         let groups = config.FB_TARGET_GROUPS;
-        if (fs.existsSync(PROD_GROUPS_FILE)) {
+        try {
+            const groupDiscovery = require('../agent/groupDiscovery');
+            const dbGroups = groupDiscovery.getScanRotationList(200);
+            if (dbGroups.length > 0) {
+                groups = dbGroups;
+                console.log(`[Scraper:FB] 📋 Loaded ${groups.length} groups từ Group Discovery DB`);
+            }
+        } catch (e) {
+            console.warn('[Scraper:FB] ⚠️ GroupDB failed, trying prod_groups.json fallback');
+        }
+        // Fallback to prod_groups.json if DB had no results
+        if (groups === config.FB_TARGET_GROUPS && fs.existsSync(PROD_GROUPS_FILE)) {
             try {
                 const prodGroups = JSON.parse(fs.readFileSync(PROD_GROUPS_FILE, 'utf8'));
                 if (prodGroups.length > 0) {
                     groups = prodGroups;
-                    console.log(`[Scraper:FB] 📋 Loaded ${groups.length} groups từ production`);
+                    console.log(`[Scraper:FB] 📋 Loaded ${groups.length} groups từ prod_groups.json (fallback)`);
                 }
             } catch (e) {
-                console.warn('[Scraper:FB] ⚠️ Failed to load prod_groups.json, using config fallback');
+                console.warn('[Scraper:FB] ⚠️ Failed to load prod_groups.json');
             }
         }
 
