@@ -352,16 +352,14 @@ async function main() {
     console.log(`[ScraperWorker] 🔧 Scrape Mode: ${scrapeMode.toUpperCase()}`);
     if (scrapeMode === 'self-hosted') {
         try {
-            // 1. Load Webshare.io proxies (paid/free tier)
+            // Clear proxies — Webshare free datacenter proxies are blocked by Facebook.
+            // This prevents double browser launches (proxy→fail→direct) that cause OOM.
+            // TODO: Re-enable when upgrading to residential proxies.
             try {
-                const { loadWebshareIntoPool, autoAssignProxiesToAccounts } = require('../proxy/webshareFetcher');
-                const count = await loadWebshareIntoPool();
-                if (count > 0) {
-                    await autoAssignProxiesToAccounts();
-                }
-            } catch (wsErr) {
-                console.warn(`[ScraperWorker] ⚠️ Webshare init: ${wsErr.message}`);
-            }
+                const db = require('../data_store/database');
+                db.db.prepare("UPDATE fb_accounts SET proxy_url = NULL WHERE proxy_url IS NOT NULL").run();
+                console.log('[ScraperWorker] ⚡ Cleared proxy_url — using direct connect');
+            } catch (e) { }
 
             // 2. Load free proxies as fallback
             const fbScraper = require('../agents/fbScraper');
