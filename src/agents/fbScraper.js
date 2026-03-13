@@ -1347,20 +1347,15 @@ async function _scrapeAccountGroups(account, groups) {
         // (unhandled promise rejections in route handler kill context)
         // 3GB container has enough RAM for full page loads
 
-        // Load cookies (session file → JSON cookie file → .env)
+        // Load cookies: JSON cookie file FIRST (fresh), session file as fallback
         const accUsername = accEmail.split('@')[0];
         const cookieJsonPath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
         const sessionDir = path.join(__dirname, '..', '..', 'data', 'fb_sessions');
         const sessionPath = path.join(sessionDir, `${accEmail.replace(/[@.]/g, '_')}.json`);
         let loaded = false;
 
-        if (fs.existsSync(sessionPath)) {
-            try {
-                const saved = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
-                if (saved.length > 0) { await context.addCookies(saved); loaded = true; console.log(`${tag} 📂 Session (${saved.length} cookies)`); }
-            } catch { }
-        }
-        if (!loaded && fs.existsSync(cookieJsonPath)) {
+        // Priority 1: JSON cookie file (from Cookie Editor export — always fresh)
+        if (fs.existsSync(cookieJsonPath)) {
             try {
                 const raw = JSON.parse(fs.readFileSync(cookieJsonPath, 'utf8'));
                 const pwc = raw.filter(c => c.name && c.value && c.domain).map(c => ({
@@ -1371,7 +1366,16 @@ async function _scrapeAccountGroups(account, groups) {
                 }));
                 await context.addCookies(pwc); loaded = true;
                 console.log(`${tag} 🍪 Cookies from ${path.basename(cookieJsonPath)} (${pwc.length})`);
+                // Delete stale session file since we have fresh cookies
+                try { if (fs.existsSync(sessionPath)) fs.unlinkSync(sessionPath); } catch { }
             } catch (e) { console.warn(`${tag} ⚠️ Cookie error: ${e.message}`); }
+        }
+        // Priority 2: Saved session (fallback only if no JSON file)
+        if (!loaded && fs.existsSync(sessionPath)) {
+            try {
+                const saved = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
+                if (saved.length > 0) { await context.addCookies(saved); loaded = true; console.log(`${tag} 📂 Session fallback (${saved.length} cookies)`); }
+            } catch { }
         }
         if (!loaded) {
             const env = process.env.FB_COOKIES || '';
