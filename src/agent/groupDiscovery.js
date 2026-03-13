@@ -226,6 +226,11 @@ function seedGroups() {
         ['Amazon FBA Europe Sellers', 'https://www.facebook.com/groups/amazoneuropesellers', null, 0, 'ecommerce-eu', 88],
         ['Amazon FBA Europe', 'https://www.facebook.com/groups/1007531559318711', '1007531559318711', 0, 'ecommerce-eu', 85],
         ['Amazon DE Sellers Community', 'https://www.facebook.com/groups/971577527971421', '971577527971421', 0, 'ecommerce-eu', 88],
+
+        // === NEW: User-requested groups ===
+        ['Cộng đồng DROPSHIP & POD - US, UK', 'https://www.facebook.com/groups/1110506846984730', '1110506846984730', 0, 'ecommerce', 92],
+        ['Cộng đồng Dropshipping Ebay, Amazon, Etsy Chia sẻ từ a-z', 'https://www.facebook.com/groups/3043290549049105', '3043290549049105', 0, 'ecommerce', 90],
+        ['CỘNG ĐỒNG SUPPLIER POD - DROPSHIPPING', 'https://www.facebook.com/groups/dropshippodvietnam', null, 0, 'ecommerce', 92],
     ];
 
     const insertMany = _db.transaction((rows) => {
