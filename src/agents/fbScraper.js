@@ -1414,7 +1414,21 @@ async function _scrapeWithContext(browser, account, groups) {
             await testPage.close(); await context.close(); return [];
         }
         console.log(`${tag} ✅ Session valid!`);
-        try { const c = await context.cookies(); fs.mkdirSync(sessionDir, { recursive: true }); fs.writeFileSync(sessionPath, JSON.stringify(c, null, 2)); } catch { }
+        // AUTO-RENEW: Save fresh cookies back to JSON file (FB rotates tokens!)
+        try {
+            const freshCookies = await context.cookies();
+            // Save to session file
+            fs.mkdirSync(sessionDir, { recursive: true });
+            fs.writeFileSync(sessionPath, JSON.stringify(freshCookies, null, 2));
+            // Save back to JSON cookie file (so next run uses fresh tokens)
+            if (fs.existsSync(cookieJsonPath)) {
+                const fbCookies = freshCookies.filter(c => c.domain?.includes('facebook'));
+                if (fbCookies.length > 0) {
+                    fs.writeFileSync(cookieJsonPath, JSON.stringify(fbCookies, null, 2));
+                    console.log(`${tag} 🔄 Cookies auto-renewed → ${path.basename(cookieJsonPath)} (${fbCookies.length})`);
+                }
+            }
+        } catch (e) { console.warn(`${tag} ⚠️ Cookie save error: ${e.message}`); }
         await testPage.close();
 
         // Scrape each group (reuse page)
