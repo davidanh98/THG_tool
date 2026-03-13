@@ -1452,12 +1452,16 @@ async function _scrapeAccountGroups(account, groups) {
                 }
                 if (!hasFeed) { await page.close(); continue; }
 
-                // Scroll to load posts
-                for (let s = 0; s < 20; s++) {
-                    await page.evaluate(() => window.scrollBy(0, 4000));
-                    await delay(300);
+                // Scroll to load posts (FB needs ~800ms to lazy-load)
+                let noGrowth = 0;
+                let prevCnt = 0;
+                for (let s = 0; s < 30; s++) {
+                    await page.evaluate(() => window.scrollBy(0, 3000));
+                    await delay(800);
                     const cnt = await page.evaluate(() => { const f = document.querySelector('div[role="feed"]'); return f ? f.children.length : 0; });
-                    if (cnt >= 60) break;
+                    if (cnt >= 40) break;
+                    if (cnt === prevCnt) { noGrowth++; if (noGrowth >= 3) break; } else { noGrowth = 0; }
+                    prevCnt = cnt;
                 }
 
                 // Extract posts
