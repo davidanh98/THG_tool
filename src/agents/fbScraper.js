@@ -1407,68 +1407,92 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
 
 /**
  * Self-Healing Login: Auto-login when session dies.
+ * Creates a FRESH context (no cookies) so Facebook shows the login form.
  * Uses TOTP (authenticator app) or recovery codes to pass 2FA.
- * @returns {boolean} true if login succeeded
+ * @returns {string|null} path to new storageState file, or null if failed
  */
-async function _selfHealLogin(context, account, tag) {
+async function _selfHealLogin(browser, account, tag) {
     const accEmail = account.email;
     const accPassword = account.password;
     const accUsername = accEmail.split('@')[0];
 
     if (!accPassword) {
         console.warn(`${tag} ⚠️ No password for ${accEmail} — cannot self-heal`);
-        return false;
+        return null;
     }
 
+    let freshContext = null;
     try {
-        const page = await context.newPage();
-        console.log(`${tag} 🔧 Self-healing: navigating to login...`);
+        // Create FRESH context (no cookies) so Facebook shows login page
+        freshContext = await browser.newContext({
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            viewport: { width: 1280, height: 720 },
+        });
+        const page = await freshContext.newPage();
+
+        console.log(`${tag} 🔧 Self-healing: fresh context → facebook.com...`);
         await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 25000 });
-        await delay(2000);
+        await delay(3000);
+
+        // Log what URL we landed on
+        const landingUrl = page.url();
+        console.log(`${tag} 🔧 Landing URL: ${landingUrl.substring(0, 80)}`);
 
         // Fill login form
-        const emailInput = await page.$('input[name="email"]');
-        const passInput = await page.$('input[name="pass"]');
+        const emailInput = await page.$('input[name="email"], input#email');
+        const passInput = await page.$('input[name="pass"], input#pass');
         if (!emailInput || !passInput) {
-            console.warn(`${tag} ⚠️ No login form found`);
-            await page.close();
-            return false;
+            // Try mobile/alternate login page
+            console.log(`${tag} 🔧 No form on main page, trying m.facebook.com...`);
+            await page.goto('https://m.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 20000 });
+            await delay(2000);
         }
 
-        await emailInput.fill(accEmail);
+        const email2 = await page.$('input[name="email"], input#email, input#m_login_email');
+        const pass2 = await page.$('input[name="pass"], input#pass, input#m_login_password');
+        const finalEmail = emailInput || email2;
+        const finalPass = passInput || pass2;
+
+        if (!finalEmail || !finalPass) {
+            const pageText = await page.evaluate(() => document.body?.innerText?.substring(0, 300) || '');
+            console.warn(`${tag} ⚠️ No login form found. Page text: ${pageText.substring(0, 100)}`);
+            await freshContext.close();
+            return null;
+        }
+
+        await finalEmail.fill(accEmail);
         await delay(500 + Math.random() * 500);
-        await passInput.fill(accPassword);
+        await finalPass.fill(accPassword);
         await delay(500 + Math.random() * 500);
-        await passInput.press('Enter');
+        await finalPass.press('Enter');
 
         console.log(`${tag} 🔧 Login submitted, waiting...`);
         await delay(8000);
 
         // Check for 2FA checkpoint
         const url = page.url();
-        if (url.includes('checkpoint') || url.includes('two_step')) {
+        if (url.includes('checkpoint') || url.includes('two_step') || url.includes('login/identify')) {
             console.log(`${tag} 🔐 2FA checkpoint detected — generating code...`);
 
-            // Get 2FA code: TOTP secret or recovery codes
             let code = null;
 
-            // Method 1: TOTP via otplib (from .env: FB_ACCOUNT_X_TOTP_SECRET)
+            // Method 1: TOTP via otplib
             const totpSecret = _getTotpSecret(accEmail);
             if (totpSecret && authenticator) {
                 code = authenticator.generate(totpSecret);
                 console.log(`${tag} 🔑 TOTP code generated: ${code}`);
             }
 
-            // Method 2: Recovery codes (from data/recovery_codes_{username}.json)
+            // Method 2: Recovery codes
             if (!code) {
                 code = _getRecoveryCode(accUsername);
                 if (code) console.log(`${tag} 🎫 Using recovery code: ${code}`);
             }
 
             if (!code) {
-                console.warn(`${tag} ❌ No 2FA method available — need TOTP secret or recovery codes`);
-                await page.close();
-                return false;
+                console.warn(`${tag} ❌ No 2FA method available`);
+                await freshContext.close();
+                return null;
             }
 
             // Enter the code
@@ -1480,13 +1504,14 @@ async function _selfHealLogin(context, account, tag) {
                 await delay(500);
                 const submitBtn = await page.$('button[type="submit"]') ||
                     await page.$('#checkpointSubmitButton') ||
-                    await page.$('button:has-text("Continue")');
+                    await page.$('button:has-text("Continue")') ||
+                    await page.$('button:has-text("Submit")');
                 if (submitBtn) await submitBtn.click();
                 else await codeInput.press('Enter');
 
                 await delay(8000);
 
-                // Handle "Save Browser" / "Trust this browser" step
+                // Handle "Save Browser" step
                 const saveBrowserBtn = await page.$('button:has-text("Continue")') ||
                     await page.$('button:has-text("Save")') ||
                     await page.$('#checkpointSubmitButton');
@@ -1506,23 +1531,23 @@ async function _selfHealLogin(context, account, tag) {
         if (hasNav && !finalUrl.includes('/login') && !finalUrl.includes('checkpoint')) {
             console.log(`${tag} ✅ Self-healing login SUCCESS!`);
             // Save new storageState
-            try {
-                const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
-                fs.mkdirSync(ssDir, { recursive: true });
-                await context.storageState({ path: path.join(ssDir, `${accUsername}_auth.json`) });
-                console.log(`${tag} 🔑 New storageState saved`);
-            } catch { }
-            await page.close();
-            return true;
+            const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
+            const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
+            fs.mkdirSync(ssDir, { recursive: true });
+            await freshContext.storageState({ path: ssPath });
+            console.log(`${tag} 🔑 New storageState saved → ${accUsername}_auth.json`);
+            await freshContext.close();
+            return ssPath;
         }
 
-        console.warn(`${tag} ❌ Self-healing login failed (final URL: ${finalUrl.substring(0, 80)})`);
-        await page.close();
-        return false;
+        console.warn(`${tag} ❌ Self-healing failed (URL: ${finalUrl.substring(0, 80)})`);
+        await freshContext.close();
+        return null;
 
     } catch (err) {
         console.warn(`${tag} ❌ Self-healing error: ${err.message}`);
-        return false;
+        if (freshContext) try { await freshContext.close(); } catch { }
+        return null;
     }
 }
 
@@ -1631,12 +1656,21 @@ async function _scrapeWithContext(browser, account, groups) {
             await testPage.close();
 
             // ═══ SELF-HEALING: Auto-login with 2FA ═══
-            const healed = await _selfHealLogin(context, account, tag);
-            if (!healed) {
+            const ssPath = await _selfHealLogin(browser, account, tag);
+            if (!ssPath) {
                 console.warn(`${tag} 💀 Self-healing failed — skipping account`);
                 await context.close(); return [];
             }
-            console.log(`${tag} 🔄 Self-healing successful! Resuming scrape...`);
+            // Replace old context with fresh authenticated one
+            await context.close();
+            context = await browser.newContext({
+                storageState: ssPath,
+                userAgent: fp.userAgent,
+                viewport: fp.viewport,
+                locale: 'en-US',
+                timezoneId: 'America/New_York',
+            });
+            console.log(`${tag} 🔄 Self-healing successful! New context loaded from ${path.basename(ssPath)}`);
         } else {
             console.log(`${tag} ✅ Session valid!`);
             await testPage.close();
