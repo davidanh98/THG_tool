@@ -3205,7 +3205,7 @@ body.light-mode a.author-link-cell:hover {
   -webkit-box-orient: vertical;
 }
 
-/* Category tag */
+/* Category tag (legacy static) */
 .category-tag {
   display: inline-block;
   padding: 2px 10px;
@@ -3215,6 +3215,58 @@ body.light-mode a.author-link-cell:hover {
   font-weight: 600;
   letter-spacing: 0.04em;
   white-space: nowrap;
+}
+
+/* Category toggle group (interactive) */
+.cat-toggle-group {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.cat-toggle-btn {
+  padding: 3px 7px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.cat-toggle-btn:hover {
+  border-color: var(--cat-color);
+  color: var(--cat-color);
+  background: color-mix(in srgb, var(--cat-color) 10%, transparent);
+}
+
+.cat-toggle-btn.cat-active {
+  background: color-mix(in srgb, var(--cat-color) 20%, transparent);
+  border-color: var(--cat-color);
+  color: var(--cat-color);
+  font-weight: 700;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--cat-color) 25%, transparent);
+}
+
+body.light-mode .cat-toggle-btn {
+  border-color: #e5e7eb;
+  color: #9ca3af;
+}
+
+body.light-mode .cat-toggle-btn:hover {
+  border-color: var(--cat-color);
+  color: var(--cat-color);
+  background: color-mix(in srgb, var(--cat-color) 8%, transparent);
+}
+
+body.light-mode .cat-toggle-btn.cat-active {
+  background: color-mix(in srgb, var(--cat-color) 15%, transparent);
+  border-color: var(--cat-color);
+  color: var(--cat-color);
 }
 
 /* Status tag */

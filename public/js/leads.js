@@ -182,8 +182,12 @@ function renderLeadTableRow(lead, gridId) {
       <td class="ant-td">
         <div class="summary-cell">${summaryDisplay}</div>
       </td>
-      <td class="ant-td">
-        <span class="category-tag" style="color:${catInfo.color};border-color:${catInfo.color}55;background:${catInfo.color}18">${catInfo.label}</span>
+      <td class="ant-td" onclick="event.stopPropagation()">
+        <div class="cat-toggle-group">
+          <button class="cat-toggle-btn${catInfo.label === 'Fulfill' ? ' cat-active' : ''}" style="--cat-color:#722ed1" onclick="updateCategory(${lead.id},'THG Fulfillment')" title="Fulfillment / POD / Dropship">Fulfill</button>
+          <button class="cat-toggle-btn${catInfo.label === 'Express' ? ' cat-active' : ''}" style="--cat-color:#1890ff" onclick="updateCategory(${lead.id},'THG Express')" title="Express Shipping">Express</button>
+          <button class="cat-toggle-btn${catInfo.label === 'Warehouse' ? ' cat-active' : ''}" style="--cat-color:#fa8c16" onclick="updateCategory(${lead.id},'THG Warehouse')" title="Warehouse Storage">WH</button>
+        </div>
       </td>
       <td class="ant-td">
         <span class="status-tag" style="color:${status.color};background:${status.bg}">${status.label}</span>

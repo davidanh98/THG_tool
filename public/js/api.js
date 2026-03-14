@@ -118,6 +118,25 @@ async function updateStatus(id, status) {
     }
 }
 
+async function updateCategory(id, category) {
+    try {
+        const res = await authFetch(`/api/leads/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category }),
+        });
+        if (res.ok) {
+            // Update in-memory lead data
+            const lead = AppState.leads.find(l => l.id === id) || AppState.ignoredLeads.find(l => l.id === id);
+            if (lead) lead.category = category;
+            showToast(`Lead #${id} → ${category}`, 'success');
+            renderLeads();
+        }
+    } catch (err) {
+        showToast('Error updating category', 'error');
+    }
+}
+
 // Contacted → auto-copy response to clipboard + change status
 async function contactLead(id) {
     const textarea = document.getElementById(`response-${id}`);
