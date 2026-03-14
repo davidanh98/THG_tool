@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y curl --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/node_modules ./node_modules
+ARG CACHE_BUST
 COPY . .
 ENV NODE_ENV=production
 RUN mkdir -p data logs
@@ -60,6 +61,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/node_modules ./node_modules
+ARG CACHE_BUST
 COPY . .
 
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1

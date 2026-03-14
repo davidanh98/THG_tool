@@ -18,6 +18,7 @@ jobs:
 
           # Bật BuildKit để dùng cache mount
           export DOCKER_BUILDKIT=1
+          BUST="${{ github.sha }}"
 
           echo "🔨 Build builder stage trước (1 lần duy nhất)..."
           # Build builder stage riêng để cache — 2 target bên dưới dùng chung
@@ -27,18 +28,18 @@ jobs:
             -t thg-builder:cache \
             -f Dockerfile .
 
-          echo "🔨 Build 2 targets song song từ cache..."
+          echo "🔨 Build 2 targets song song (cache-bust: $BUST)..."
           docker build \
             --target runner-slim \
+            --build-arg CACHE_BUST="$BUST" \
             --cache-from thg-builder:cache \
-            --cache-from thg-api-slim:latest \
             -t thg-api-slim:latest \
             -f Dockerfile . &
 
           docker build \
             --target runner-heavy \
+            --build-arg CACHE_BUST="$BUST" \
             --cache-from thg-builder:cache \
-            --cache-from thg-scraper-heavy:latest \
             -t thg-scraper-heavy:latest \
             -f Dockerfile . &
 
