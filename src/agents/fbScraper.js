@@ -1453,88 +1453,60 @@ async function _selfHealLogin(browser, account, tag) {
 
     let freshContext = null;
     try {
-        // ═══ TWO-PHASE NO-JS PROTOCOL ═══
-        // Phase 1: javaScriptEnabled=false → Arkose Labs DISABLED, login + 2FA
-        // Phase 2: Transfer cookies → JS-enabled context → Golden Session
+        // ═══ THREE-PHASE SELF-HEALING 3.0 ═══
+        // Phase 1: JS-enabled login on www (login form requires JS to submit)
+        // Phase 2: No-JS 2FA on checkpoint URL (Arkose Labs disabled)
+        // Phase 3: JS-enabled Golden Session with /me identity forcing
 
-        // ─── PHASE 1: NO-JS LOGIN ───
-        console.log(`${tag} 🛡️ Phase 1: No-JS login (Arkose Labs disabled)...`);
+        // UA rotation pool for Phase 3
+        const UA_POOL = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
+        ];
+        const goldenUA = UA_POOL[Math.floor(Math.random() * UA_POOL.length)];
+
+        // ─── PHASE 1: JS-ENABLED LOGIN (www.facebook.com) ───
+        console.log(`${tag} 🔧 Phase 1: JS login on www.facebook.com...`);
         freshContext = await browser.newContext({
-            javaScriptEnabled: false, // CRITICAL: Disables Arkose Labs anti-bot
-            userAgent: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
-            viewport: { width: 390, height: 844 },
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            viewport: { width: 1280, height: 720 },
         });
-        const page = await freshContext.newPage();
+        const loginPage = await freshContext.newPage();
 
-        // Navigate to mbasic login — will redirect to www but noscript fallback works
-        await page.goto('https://mbasic.facebook.com/login/', { waitUntil: 'load', timeout: 30000 });
+        await loginPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 25000 });
         await delay(3000);
+        console.log(`${tag} 🔧 Landing URL: ${loginPage.url().substring(0, 100)}`);
 
-        let landingUrl = page.url();
-        console.log(`${tag} 🔧 Landing URL: ${landingUrl.substring(0, 120)}`);
-
-        // If redirected to www, try the noscript URL directly
-        if (landingUrl.includes('www.facebook.com')) {
-            console.log(`${tag} 🔧 Redirected to www, trying noscript login...`);
-            await page.goto('https://www.facebook.com/login/?_fb_noscript=1', { waitUntil: 'load', timeout: 25000 });
-            await delay(3000);
-            landingUrl = page.url();
-            console.log(`${tag} 🔧 Noscript URL: ${landingUrl.substring(0, 120)}`);
-        }
-
-        // Wait for login form elements (Playwright API works without page JS)
-        let emailInput = null;
-        let passInput = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-            emailInput = await page.$('input[name="email"]');
-            passInput = await page.$('input[name="pass"]');
-            if (emailInput && passInput) break;
-            console.log(`${tag} 🔧 Waiting for login form (attempt ${attempt + 1}/3)...`);
-            await delay(3000);
-        }
-
+        // Fill login form (www React-rendered form)
+        const emailInput = await loginPage.$('input[name="email"], input#email');
+        const passInput = await loginPage.$('input[name="pass"], input#pass');
         if (!emailInput || !passInput) {
-            // Last resort: dump what we see
-            const bodyHtml = await page.content();
-            const textContent = bodyHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').substring(0, 300);
-            console.warn(`${tag} ⚠️ No login form found. Page text: ${textContent.substring(0, 200)}`);
+            console.warn(`${tag} ⚠️ No login form on www`);
             await freshContext.close();
             return null;
         }
 
-        console.log(`${tag} 🔧 Login form found! Filling credentials...`);
         await emailInput.fill(accEmail);
-        await delay(500);
+        await delay(500 + Math.random() * 500);
         await passInput.fill(accPassword);
-        await delay(500);
-
-        // Submit with Enter + click any submit button
-        const loginBtn = await page.$('input[name="login"], input[type="submit"], button[name="login"]');
-        if (loginBtn) {
-            await Promise.all([
-                page.waitForNavigation({ waitUntil: 'load', timeout: 25000 }).catch(() => { }),
-                loginBtn.click().catch(() => page.keyboard.press('Enter'))
-            ]);
-        } else {
-            await Promise.all([
-                page.waitForNavigation({ waitUntil: 'load', timeout: 25000 }).catch(() => { }),
-                page.keyboard.press('Enter')
-            ]);
-        }
-
+        await delay(500 + Math.random() * 500);
+        await passInput.press('Enter');
         console.log(`${tag} 🔧 Login submitted, waiting...`);
-        await delay(5000);
+        await delay(8000);
 
-        // ─── PHASE 1B: Handle 2FA (No-JS mode) ───
-        let url = page.url();
-        console.log(`${tag} 🔧 Post-login URL: ${url.substring(0, 120)}`);
+        let postLoginUrl = loginPage.url();
+        console.log(`${tag} 🔧 Post-login URL: ${postLoginUrl.substring(0, 120)}`);
 
-        if (url.includes('checkpoint') || url.includes('two_step') || url.includes('login/identify') || url.includes('approvals')) {
+        // Check for 2FA
+        const needs2FA = postLoginUrl.includes('checkpoint') || postLoginUrl.includes('two_step') ||
+            postLoginUrl.includes('login/identify') || postLoginUrl.includes('approvals');
+
+        if (needs2FA) {
             console.log(`${tag} 🔐 2FA checkpoint detected — generating code...`);
 
             let code = null;
-
-            // Method 1: TOTP
             const totpSecret = _getTotpSecret(accEmail);
             console.log(`${tag} 🔧 TOTP secret found: ${totpSecret ? 'YES' : 'NO'}`);
             if (totpSecret && authenticator) {
@@ -1542,41 +1514,62 @@ async function _selfHealLogin(browser, account, tag) {
                     code = authenticator.generate(totpSecret);
                     console.log(`${tag} 🔑 TOTP code generated: ${code}`);
                 } catch (e) {
-                    console.warn(`${tag} ⚠️ TOTP generate error: ${e.message}`);
+                    console.warn(`${tag} ⚠️ TOTP error: ${e.message}`);
                 }
             }
-
-            // Method 2: Recovery codes
             if (!code) {
                 code = _getRecoveryCode(accUsername);
                 if (code) console.log(`${tag} 🎫 Using recovery code: ${code}`);
             }
-
             if (!code) {
                 console.warn(`${tag} ❌ No 2FA method available`);
                 await freshContext.close();
                 return null;
             }
 
-            // Dump page content for debugging (use page.content() since evaluate won't work in no-JS)
-            const pageHtml = await page.content();
+            // ─── PHASE 2: NO-JS 2FA (Arkose Labs disabled) ───
+            // Transfer Phase 1 cookies to no-JS context, navigate to checkpoint URL
+            const phase1Cookies = await freshContext.cookies();
+            const checkpointUrl = loginPage.url();
+            await freshContext.close();
+            freshContext = null;
+
+            console.log(`${tag} 🛡️ Phase 2: No-JS 2FA (Arkose disabled)...`);
+            const noJsCtx = await browser.newContext({
+                javaScriptEnabled: false, // Disables Arkose Labs
+                userAgent: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
+                viewport: { width: 390, height: 844 },
+            });
+            await noJsCtx.addCookies(phase1Cookies);
+            const twoFaPage = await noJsCtx.newPage();
+
+            // Navigate to the exact checkpoint URL (with encrypted_context)
+            console.log(`${tag} 🔧 Navigating to checkpoint (No-JS): ${checkpointUrl.substring(0, 120)}`);
+            await twoFaPage.goto(checkpointUrl, { waitUntil: 'load', timeout: 30000 });
+            await delay(5000);
+
+            const twoFaUrl = twoFaPage.url();
+            console.log(`${tag} 🔧 2FA URL: ${twoFaUrl.substring(0, 120)}`);
+
+            // Dump page
+            const pageHtml = await twoFaPage.content();
             const pageText = pageHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').substring(0, 300);
-            console.log(`${tag} 🔧 2FA page text: ${pageText.substring(0, 200)}`);
+            console.log(`${tag} 🔧 2FA page: ${pageText.substring(0, 200)}`);
 
             // Find code input
-            let codeInput = await page.$('input[name="approvals_code"]');
+            let codeInput = await twoFaPage.$('input[name="approvals_code"]');
 
             if (!codeInput) {
-                // Click "Try another way" links if visible
+                // Click "Try another way" / "Thử cách khác"
                 console.log(`${tag} 🔍 No code input, looking for alternative links...`);
-                const altLinks = await page.$$('a');
+                const altLinks = await twoFaPage.$$('a');
                 for (const link of altLinks) {
                     try {
                         const text = await link.textContent();
                         if (text && /another way|khác|login code|mã xác nhận|code/i.test(text)) {
                             console.log(`${tag} 🔧 Clicking: "${text.trim().substring(0, 40)}"...`);
                             await Promise.all([
-                                page.waitForNavigation({ waitUntil: 'load', timeout: 15000 }).catch(() => { }),
+                                twoFaPage.waitForNavigation({ waitUntil: 'load', timeout: 15000 }).catch(() => { }),
                                 link.click()
                             ]);
                             await delay(3000);
@@ -1584,10 +1577,9 @@ async function _selfHealLogin(browser, account, tag) {
                         }
                     } catch { }
                 }
-                // Retry finding code input
-                codeInput = await page.$('input[name="approvals_code"]') ||
-                    await page.$('input[type="text"]:not([name="email"]):not([name="pass"])') ||
-                    await page.$('input[type="tel"]');
+                codeInput = await twoFaPage.$('input[name="approvals_code"]') ||
+                    await twoFaPage.$('input[type="text"]:not([name="email"]):not([name="pass"])') ||
+                    await twoFaPage.$('input[type="tel"]');
             }
 
             if (codeInput) {
@@ -1595,128 +1587,148 @@ async function _selfHealLogin(browser, account, tag) {
                 await codeInput.fill(code.replace(/\s/g, ''));
                 await delay(1000);
 
-                // Force submit with Enter + click submit button
-                console.log(`${tag} ⚡ Force-submitting...`);
-                const submitBtn = await page.$('input[type="submit"], button[type="submit"]');
+                // Submit
+                console.log(`${tag} ⚡ Submitting 2FA code...`);
+                const submitBtn = await twoFaPage.$('input[type="submit"], button[type="submit"]');
                 if (submitBtn) {
                     await Promise.all([
-                        page.waitForNavigation({ waitUntil: 'load', timeout: 20000 }).catch(() => { }),
-                        submitBtn.click().catch(() => page.keyboard.press('Enter'))
+                        twoFaPage.waitForNavigation({ waitUntil: 'load', timeout: 20000 }).catch(() => { }),
+                        submitBtn.click().catch(() => twoFaPage.keyboard.press('Enter'))
                     ]);
                 } else {
                     await Promise.all([
-                        page.waitForNavigation({ waitUntil: 'load', timeout: 20000 }).catch(() => { }),
-                        page.keyboard.press('Enter')
+                        twoFaPage.waitForNavigation({ waitUntil: 'load', timeout: 20000 }).catch(() => { }),
+                        twoFaPage.keyboard.press('Enter')
                     ]);
                 }
                 await delay(5000);
-                console.log(`${tag} 🔧 URL after 2FA: ${page.url().substring(0, 120)}`);
+                console.log(`${tag} 🔧 URL after 2FA: ${twoFaPage.url().substring(0, 120)}`);
 
-                // Handle checkpoint steps (Continue/Save — keep pressing Enter)
+                // Handle checkpoint steps (Continue/Save Browser)
                 for (let step = 0; step < 5; step++) {
-                    const stepUrl = page.url();
+                    const stepUrl = twoFaPage.url();
                     if (!stepUrl.includes('checkpoint') && !stepUrl.includes('two_step') && !stepUrl.includes('approvals')) break;
-
-                    const contBtn = await page.$('input[type="submit"], button[type="submit"]');
+                    const contBtn = await twoFaPage.$('input[type="submit"], button[type="submit"]');
                     if (contBtn) {
                         await Promise.all([
-                            page.waitForNavigation({ waitUntil: 'load', timeout: 10000 }).catch(() => { }),
-                            contBtn.click().catch(() => page.keyboard.press('Enter'))
+                            twoFaPage.waitForNavigation({ waitUntil: 'load', timeout: 10000 }).catch(() => { }),
+                            contBtn.click().catch(() => twoFaPage.keyboard.press('Enter'))
                         ]);
                     } else {
                         await Promise.all([
-                            page.waitForNavigation({ waitUntil: 'load', timeout: 10000 }).catch(() => { }),
-                            page.keyboard.press('Enter')
+                            twoFaPage.waitForNavigation({ waitUntil: 'load', timeout: 10000 }).catch(() => { }),
+                            twoFaPage.keyboard.press('Enter')
                         ]);
                     }
                     await delay(3000);
-                    console.log(`${tag} ✅ Checkpoint step ${step + 1} → ${page.url().substring(0, 80)}`);
+                    console.log(`${tag} ✅ Checkpoint step ${step + 1} → ${twoFaPage.url().substring(0, 80)}`);
                 }
             } else {
                 console.warn(`${tag} ❌ No code input found!`);
-                const html = await page.content();
+                const html = await twoFaPage.content();
                 console.log(`${tag} 🔧 HTML: ${html.substring(0, 400)}`);
-                await freshContext.close();
+                await noJsCtx.close();
                 return null;
             }
-        }
 
-        // ─── PHASE 1 COMPLETE: Check status ───
-        await delay(3000);
-        const phase1Url = page.url();
-        console.log(`${tag} 🔧 Phase 1 final URL: ${phase1Url.substring(0, 120)}`);
+            // Get Phase 2 cookies (post-2FA, should have auth)
+            const phase2Cookies = await noJsCtx.cookies();
+            const p2FbCookies = phase2Cookies.filter(c => c.domain?.includes('facebook'));
+            console.log(`${tag} 📥 Phase 2 cookies: ${phase2Cookies.length} total, ${p2FbCookies.length} Facebook`);
+            console.log(`${tag} 🔧 Phase 2 final URL: ${twoFaPage.url().substring(0, 120)}`);
+            await noJsCtx.close();
 
-        // Get Phase 1 cookies (basic set from no-JS login)
-        const phase1Cookies = await freshContext.cookies();
-        const p1FbCookies = phase1Cookies.filter(c => c.domain?.includes('facebook'));
-        console.log(`${tag} 📥 Phase 1 cookies: ${phase1Cookies.length} total, ${p1FbCookies.length} Facebook`);
+            // ─── PHASE 3: GOLDEN SESSION (JS enabled + Identity Forcing) ───
+            console.log(`${tag} 💎 Phase 3: Golden Session + Identity Forcing (UA: ${goldenUA.substring(0, 40)}...)...`);
+            const goldenContext = await browser.newContext({
+                userAgent: goldenUA,
+                viewport: { width: 1280, height: 720 },
+            });
+            await goldenContext.addCookies(phase2Cookies);
+            const goldenPage = await goldenContext.newPage();
 
-        // Close no-JS context
-        await freshContext.close();
-        freshContext = null;
+            try {
+                // IDENTITY FORCING: Navigate to /me (forces c_user creation)
+                console.log(`${tag} 🔧 Identity forcing: navigating to /me...`);
+                await goldenPage.goto('https://www.facebook.com/me', { waitUntil: 'domcontentloaded', timeout: 60000 });
+                await delay(5000);
 
-        // ─── PHASE 2: GOLDEN SESSION (JS enabled) ───
-        console.log(`${tag} 💎 Phase 2: Golden Session (JS enabled)...`);
-        const goldenContext = await browser.newContext({
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            viewport: { width: 1280, height: 720 },
-        });
-        // Inject Phase 1 cookies
-        await goldenContext.addCookies(phase1Cookies);
-        const goldenPage = await goldenContext.newPage();
+                // Handle "Save Browser?" or "Review Login" checkpoint
+                let goldenUrl = goldenPage.url();
+                console.log(`${tag} 🔧 /me URL: ${goldenUrl.substring(0, 100)}`);
 
-        try {
-            // Navigate to www — should be logged in with Phase 1 cookies
-            await goldenPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-            await delay(5000);
-
-            const wwwUrl = goldenPage.url();
-            console.log(`${tag} 🔧 www URL: ${wwwUrl.substring(0, 100)}`);
-
-            if (!wwwUrl.includes('/login')) {
-                // Scroll newsfeed
-                console.log(`${tag} 🎢 Warming up newsfeed...`);
-                for (let i = 0; i < 3; i++) {
-                    await goldenPage.mouse.wheel(0, 800 + Math.random() * 400);
-                    await delay(3000 + Math.random() * 2000);
+                if (goldenUrl.includes('checkpoint') || goldenUrl.includes('login')) {
+                    console.log(`${tag} 🛡️ Checkpoint/login screen, pressing Enter to confirm...`);
+                    for (let i = 0; i < 3; i++) {
+                        await goldenPage.keyboard.press('Enter');
+                        await delay(3000);
+                    }
+                    goldenUrl = goldenPage.url();
+                    console.log(`${tag} 🔧 After confirm: ${goldenUrl.substring(0, 100)}`);
                 }
 
-                // Visit Groups feed
-                await goldenPage.goto('https://www.facebook.com/groups/feed/', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => { });
-                await delay(5000);
+                // Warm up newsfeed
+                if (!goldenUrl.includes('/login')) {
+                    console.log(`${tag} 🎢 Warming up newsfeed...`);
+                    await goldenPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+                    await delay(5000);
+                    for (let i = 0; i < 3; i++) {
+                        await goldenPage.mouse.wheel(0, 800 + Math.random() * 400);
+                        await delay(3000 + Math.random() * 2000);
+                    }
+
+                    // Visit Groups feed
+                    await goldenPage.goto('https://www.facebook.com/groups/feed/', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => { });
+                    await delay(5000);
+                }
+
+                // CHECK COOKIE QUALITY
+                const cookies = await goldenContext.cookies();
+                const fbCookies = cookies.filter(c => c.domain?.includes('facebook'));
+                const hasCUser = cookies.some(c => c.name === 'c_user');
+                const hasXs = cookies.some(c => c.name === 'xs');
+                console.log(`${tag} 🍪 Total: ${cookies.length}, Facebook: ${fbCookies.length}, c_user: ${hasCUser ? 'YES' : 'NO'}, xs: ${hasXs ? 'YES' : 'NO'}`);
+
+                // Save
+                const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
+                const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
+                fs.mkdirSync(ssDir, { recursive: true });
+                await goldenContext.storageState({ path: ssPath });
+                const cookieJsonPath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
+                fs.writeFileSync(cookieJsonPath, JSON.stringify(fbCookies, null, 2));
+
+                if (hasCUser && hasXs) {
+                    console.log(`${tag} ✨ GOLDEN SESSION SAVED! (${fbCookies.length} cookies, c_user: ✅, xs: ✅) → ${accUsername}`);
+                } else if (hasCUser) {
+                    console.log(`${tag} ⚠️ Session saved (c_user: ✅ but xs: ❌) → ${accUsername}`);
+                } else {
+                    console.log(`${tag} ⚠️ Session saved but WEAK (${fbCookies.length} cookies, no c_user) → ${accUsername}`);
+                }
+
+                await goldenContext.close();
+                return ssPath;
+            } catch (warmErr) {
+                console.warn(`${tag} ⚠️ Phase 3 failed: ${warmErr.message}. Saving Phase 2 cookies...`);
+                const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
+                const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
+                fs.mkdirSync(ssDir, { recursive: true });
+                await goldenContext.storageState({ path: ssPath });
+                await goldenContext.close();
+                return ssPath;
             }
-
-            // CHECK COOKIE QUALITY
-            const cookies = await goldenContext.cookies();
+        } else {
+            // No 2FA needed — just save and do golden session
+            console.log(`${tag} ✅ Login SUCCESS (no 2FA needed)!`);
+            const cookies = await freshContext.cookies();
             const fbCookies = cookies.filter(c => c.domain?.includes('facebook'));
-            const hasCUser = cookies.some(c => c.name === 'c_user');
-            const hasXs = cookies.some(c => c.name === 'xs');
-            console.log(`${tag} 🍪 Total: ${cookies.length}, Facebook: ${fbCookies.length}, c_user: ${hasCUser ? 'YES' : 'NO'}, xs: ${hasXs ? 'YES' : 'NO'}`);
-
-            // Save Golden Session
             const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
             const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
             fs.mkdirSync(ssDir, { recursive: true });
-            await goldenContext.storageState({ path: ssPath });
-
+            await freshContext.storageState({ path: ssPath });
             const cookieJsonPath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
             fs.writeFileSync(cookieJsonPath, JSON.stringify(fbCookies, null, 2));
-
-            if (hasCUser && fbCookies.length >= 8) {
-                console.log(`${tag} ✨ GOLDEN SESSION SAVED! (${fbCookies.length} cookies, c_user: ✅) → ${accUsername}`);
-            } else {
-                console.log(`${tag} ⚠️ Session saved but weak (${fbCookies.length} cookies, c_user: ${hasCUser}) → ${accUsername}`);
-            }
-
-            await goldenContext.close();
-            return ssPath;
-        } catch (warmErr) {
-            console.warn(`${tag} ⚠️ Phase 2 failed: ${warmErr.message}. Saving Phase 1 cookies...`);
-            const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
-            const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
-            fs.mkdirSync(ssDir, { recursive: true });
-            await goldenContext.storageState({ path: ssPath });
-            await goldenContext.close();
+            console.log(`${tag} 💎 Session saved (${fbCookies.length} cookies) → ${accUsername}`);
+            await freshContext.close();
             return ssPath;
         }
 
