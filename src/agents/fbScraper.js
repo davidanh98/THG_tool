@@ -1471,22 +1471,42 @@ async function _selfHealLogin(browser, account, tag) {
 
         // Check for 2FA checkpoint
         const url = page.url();
+        console.log(`${tag} 🔧 Post-login URL: ${url.substring(0, 100)}`);
         if (url.includes('checkpoint') || url.includes('two_step') || url.includes('login/identify')) {
             console.log(`${tag} 🔐 2FA checkpoint detected — generating code...`);
 
             let code = null;
+            let isRecoveryCode = false;
 
             // Method 1: TOTP via otplib
             const totpSecret = _getTotpSecret(accEmail);
+            console.log(`${tag} 🔧 TOTP secret found: ${totpSecret ? 'YES' : 'NO'}, authenticator loaded: ${authenticator ? 'YES' : 'NO'}`);
             if (totpSecret && authenticator) {
-                code = authenticator.generate(totpSecret);
-                console.log(`${tag} 🔑 TOTP code generated: ${code}`);
+                try {
+                    code = authenticator.generate(totpSecret);
+                    console.log(`${tag} 🔑 TOTP code generated: ${code}`);
+                } catch (e) {
+                    console.warn(`${tag} ⚠️ TOTP generate error: ${e.message}`);
+                }
             }
 
-            // Method 2: Recovery codes
+            // Method 2: Recovery codes (need to click "Try another way" first)
             if (!code) {
                 code = _getRecoveryCode(accUsername);
-                if (code) console.log(`${tag} 🎫 Using recovery code: ${code}`);
+                if (code) {
+                    isRecoveryCode = true;
+                    console.log(`${tag} 🎫 Using recovery code: ${code}`);
+                    // Click "Try another way" / "Having trouble?" to switch to recovery code input
+                    const tryAnotherBtn = await page.$('a:has-text("Try another way")') ||
+                        await page.$('a:has-text("Having trouble")') ||
+                        await page.$('a:has-text("recovery code")') ||
+                        await page.$('a[href*="recovery"]');
+                    if (tryAnotherBtn) {
+                        await tryAnotherBtn.click();
+                        await delay(3000);
+                        console.log(`${tag} 🔧 Switched to recovery code mode`);
+                    }
+                }
             }
 
             if (!code) {
@@ -1511,14 +1531,16 @@ async function _selfHealLogin(browser, account, tag) {
 
                 await delay(8000);
 
-                // Handle "Save Browser" step
-                const saveBrowserBtn = await page.$('button:has-text("Continue")') ||
-                    await page.$('button:has-text("Save")') ||
-                    await page.$('#checkpointSubmitButton');
-                if (saveBrowserBtn) {
-                    await saveBrowserBtn.click();
-                    await delay(5000);
-                    console.log(`${tag} ✅ Browser saved/trusted`);
+                // Handle "Save Browser" step (may appear multiple times)
+                for (let step = 0; step < 3; step++) {
+                    const saveBrowserBtn = await page.$('button:has-text("Continue")') ||
+                        await page.$('button:has-text("Save")') ||
+                        await page.$('#checkpointSubmitButton');
+                    if (saveBrowserBtn) {
+                        await saveBrowserBtn.click();
+                        await delay(4000);
+                        console.log(`${tag} ✅ Checkpoint step ${step + 1} passed`);
+                    } else break;
                 }
             }
         }
@@ -1526,9 +1548,11 @@ async function _selfHealLogin(browser, account, tag) {
         // Verify login success
         await delay(3000);
         const finalUrl = page.url();
-        const hasNav = await page.$('div[role="navigation"], div[aria-label="Facebook"]');
+        console.log(`${tag} 🔧 Final URL after 2FA: ${finalUrl.substring(0, 100)}`);
+        const hasNav = await page.$('div[role="navigation"], div[aria-label="Facebook"], a[aria-label="Home"], a[href="/"], div[data-pagelet="LeftRail"]');
+        const isFbHome = finalUrl.includes('facebook.com') && !finalUrl.includes('/login') && !finalUrl.includes('checkpoint') && !finalUrl.includes('two_step');
 
-        if (hasNav && !finalUrl.includes('/login') && !finalUrl.includes('checkpoint')) {
+        if (isFbHome) {
             console.log(`${tag} ✅ Self-healing login SUCCESS!`);
             // Save new storageState
             const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
