@@ -17,7 +17,18 @@ const { chromium } = require('playwright-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const axios = require('axios');
 let authenticator = null;
-try { authenticator = require('otplib').authenticator; } catch { }
+try {
+    const otplib = require('otplib');
+    if (otplib.authenticator) {
+        // otplib v12
+        authenticator = otplib.authenticator;
+    } else if (otplib.TOTP) {
+        // otplib v13+ uses TOTP class
+        const totp = new otplib.TOTP();
+        authenticator = { generate: (secret) => totp.generate({ secret }) };
+        console.log('[FBScraper] 🔑 otplib v13 TOTP loaded');
+    }
+} catch (e) { console.warn('[FBScraper] ⚠️ otplib not available:', e.message); }
 const fs = require('fs');
 const path = require('path');
 const { pool } = require('../proxy/proxyPool');
