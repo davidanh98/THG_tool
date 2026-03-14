@@ -1453,26 +1453,34 @@ async function _selfHealLogin(browser, account, tag) {
 
     let freshContext = null;
     try {
-        // ═══ HYBRID STRATEGY ═══
-        // Step 1: Login on www.facebook.com (always works, no redirect issues)
-        // Step 2: If 2FA → switch to mbasic.facebook.com/checkpoint/ (plain HTML, no reCAPTCHA)
+        // ═══ MBASIC-FIRST STRATEGY ═══
+        // Login AND 2FA both on mbasic.facebook.com (same domain = no session loss)
+        // Then switch to www.facebook.com ONLY for Deep Session Save
         freshContext = await browser.newContext({
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            viewport: { width: 1280, height: 720 },
+            userAgent: 'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+            viewport: { width: 412, height: 915 },
         });
         const page = await freshContext.newPage();
 
-        // ─── STEP 1: Login on www.facebook.com ───
-        console.log(`${tag} 🔧 Self-healing: www.facebook.com login...`);
-        await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 25000 });
-        await delay(3000);
+        // ─── STEP 1: Login on mbasic.facebook.com ───
+        console.log(`${tag} 🔧 Self-healing: mbasic.facebook.com/login...`);
+        await page.goto('https://mbasic.facebook.com/login/', { waitUntil: 'domcontentloaded', timeout: 25000 });
+        await delay(2000);
 
         const landingUrl = page.url();
-        console.log(`${tag} 🔧 Landing URL: ${landingUrl.substring(0, 100)}`);
+        console.log(`${tag} 🔧 Landing URL: ${landingUrl.substring(0, 120)}`);
 
-        // Fill login form (www selectors)
-        const emailInput = await page.$('input[name="email"], input#email');
-        const passInput = await page.$('input[name="pass"], input#pass');
+        // Check if we got redirected away from mbasic
+        if (!landingUrl.includes('mbasic.facebook.com')) {
+            console.log(`${tag} ⚠️ Redirected away from mbasic! Trying m.facebook.com/login...`);
+            await page.goto('https://m.facebook.com/login/', { waitUntil: 'domcontentloaded', timeout: 25000 });
+            await delay(2000);
+            console.log(`${tag} 🔧 m.fb Landing URL: ${page.url().substring(0, 120)}`);
+        }
+
+        // Fill login form (mbasic/m.facebook selectors)
+        const emailInput = await page.$('input[name="email"]');
+        const passInput = await page.$('input[name="pass"]');
 
         if (!emailInput || !passInput) {
             const bodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 300) || '');
@@ -1485,12 +1493,17 @@ async function _selfHealLogin(browser, account, tag) {
         await delay(500 + Math.random() * 500);
         await passInput.fill(accPassword);
         await delay(500 + Math.random() * 500);
-        await passInput.press('Enter');
+
+        // Submit login with Enter (most reliable on mbasic)
+        await Promise.all([
+            page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => { }),
+            page.keyboard.press('Enter')
+        ]);
 
         console.log(`${tag} 🔧 Login submitted, waiting...`);
-        await delay(8000);
+        await delay(5000);
 
-        // ─── STEP 2: Check for 2FA ───
+        // ─── STEP 2: Handle 2FA (still on mbasic, same domain!) ───
         let url = page.url();
         console.log(`${tag} 🔧 Post-login URL: ${url.substring(0, 120)}`);
 
@@ -1523,63 +1536,39 @@ async function _selfHealLogin(browser, account, tag) {
                 return null;
             }
 
-            // ─── SWITCH TO MBASIC for 2FA (plain HTML, no reCAPTCHA) ───
-            // CRITICAL: Transform the CURRENT checkpoint URL from www → mbasic
-            // (preserves encrypted_context parameter needed for session continuity)
-            const currentUrl = page.url();
-            const mbasicTargetUrl = currentUrl.replace('www.facebook.com', 'mbasic.facebook.com');
-            console.log(`${tag} 🔄 Switching to mbasic: ${mbasicTargetUrl.substring(0, 120)}`);
-            await page.goto(mbasicTargetUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
-            await delay(3000);
-
-            let mbasicUrl = page.url();
-            console.log(`${tag} 🔧 mbasic URL: ${mbasicUrl.substring(0, 120)}`);
-
-            // Check if mbasic lost session (redirected to login page)
-            if (mbasicUrl.includes('/login') || (await page.$('input[name="email"]') && !await page.$('input[name="approvals_code"]'))) {
-                console.log(`${tag} ⚠️ mbasic lost session, trying /checkpoint/ directly...`);
-                await page.goto('https://mbasic.facebook.com/checkpoint/', { waitUntil: 'domcontentloaded', timeout: 20000 });
-                await delay(3000);
-                mbasicUrl = page.url();
-                console.log(`${tag} 🔧 Retry URL: ${mbasicUrl.substring(0, 120)}`);
-            }
-
             // Dump page for debugging
             const bodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 500) || 'EMPTY');
-            console.log(`${tag} 🔧 2FA page text: ${bodyText.substring(0, 200)}`);
+            console.log(`${tag} 🔧 2FA page text: ${bodyText.substring(0, 250)}`);
 
             // ─── SMART NAVIGATOR: Find code input or click "Try Another Way" ───
             let codeInput = await page.$('input[name="approvals_code"]');
 
             if (!codeInput) {
-                // Facebook may default to "Approve from device" — need to click "Try another way"
+                // Facebook may default to "Approve from device" — click "Try another way"
                 console.log(`${tag} 🔍 No code input, looking for "Try another way"...`);
-                const tryAnotherLinks = [
-                    'a:has-text("Try another way")',
-                    'a:has-text("Thử cách khác")',
-                    'a:has-text("another way")',
-                    'a:has-text("Sử dụng mã xác nhận")',
-                    'a:has-text("Use a login code")',
-                    'a:has-text("Enter login code")',
-                    'a[href*="login_code"]',
-                    'a[href*="approvals"]',
-                ];
-                for (const sel of tryAnotherLinks) {
-                    try {
-                        const link = await page.$(sel);
-                        if (link) {
-                            console.log(`${tag} 🔧 Found "${sel}" — clicking...`);
-                            await Promise.all([
-                                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => { }),
-                                link.click()
-                            ]);
-                            await delay(3000);
-                            console.log(`${tag} 🔧 After "Try another way": ${page.url().substring(0, 100)}`);
-                            break;
+
+                // Try clicking any link that leads to code entry
+                const found = await page.evaluate(() => {
+                    const links = [...document.querySelectorAll('a')];
+                    const keywords = ['another way', 'khác', 'login code', 'mã xác nhận', 'text message', 'code'];
+                    for (const link of links) {
+                        const text = (link.innerText || '').toLowerCase();
+                        if (keywords.some(k => text.includes(k))) {
+                            link.click();
+                            return link.innerText.substring(0, 50);
                         }
-                    } catch { }
+                    }
+                    return null;
+                });
+
+                if (found) {
+                    console.log(`${tag} 🔧 Clicked: "${found}"`);
+                    await delay(3000);
+                    const afterText = await page.evaluate(() => document.body?.innerText?.substring(0, 300) || '');
+                    console.log(`${tag} 🔧 After click: ${afterText.substring(0, 150)}`);
                 }
-                // Try to find code input again
+
+                // Try again to find code input
                 codeInput = await page.$('input[name="approvals_code"]') ||
                     await page.$('input[type="text"]:not([name="email"]):not([name="pass"])') ||
                     await page.$('input[type="tel"]');
@@ -1587,28 +1576,29 @@ async function _selfHealLogin(browser, account, tag) {
 
             if (codeInput) {
                 console.log(`${tag} 🔧 Code input FOUND — filling ${code}...`);
-                await codeInput.fill(code.replace(/\s/g, '')); // Remove spaces
+                await codeInput.fill(code.replace(/\s/g, '')); // Remove spaces for recovery codes
                 await delay(1000);
 
-                // ─── FORCE SUBMIT: Enter key + JS eval (bypass invisible button) ───
-                console.log(`${tag} ⚡ Force-submitting with Enter + JS eval...`);
+                // ─── FORCE SUBMIT: Enter + JS eval (bypass invisible buttons) ───
+                console.log(`${tag} ⚡ Force-submitting...`);
+                await page.focus('input[name="approvals_code"]').catch(() => { });
                 await Promise.all([
                     page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => { }),
                     page.keyboard.press('Enter'),
                     page.evaluate(() => {
-                        const btn = document.querySelector('input[type="submit"], button[type="submit"], input[value="Xác nhận"], input[value="Continue"], input[value="Submit Code"]');
+                        const btn = document.querySelector('input[type="submit"], button[type="submit"], input[value="Xác nhận"], input[value="Continue"], input[value="Submit Code"], input[name="submit[Continue]"]');
                         if (btn) btn.click();
                     }).catch(() => { })
                 ]);
-                await delay(3000);
+                await delay(5000);
                 console.log(`${tag} 🔧 URL after 2FA submit: ${page.url().substring(0, 120)}`);
 
-                // Handle checkpoint steps (Continue/Save Browser — use force click)
+                // Handle checkpoint steps (Continue/Save Browser)
                 for (let step = 0; step < 5; step++) {
                     const stepUrl = page.url();
                     if (!stepUrl.includes('checkpoint') && !stepUrl.includes('two_step') && !stepUrl.includes('approvals')) break;
 
-                    // Force submit with Enter + JS eval
+                    // Force submit
                     await Promise.all([
                         page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => { }),
                         page.keyboard.press('Enter'),
@@ -1621,7 +1611,7 @@ async function _selfHealLogin(browser, account, tag) {
                     console.log(`${tag} ✅ Checkpoint step ${step + 1} → ${page.url().substring(0, 80)}`);
                 }
             } else {
-                console.warn(`${tag} ❌ No code input found on mbasic 2FA page!`);
+                console.warn(`${tag} ❌ No code input found on 2FA page!`);
                 const html = await page.evaluate(() => document.body?.innerHTML?.substring(0, 500) || '');
                 console.log(`${tag} 🔧 2FA HTML: ${html.substring(0, 300)}`);
                 await freshContext.close();
@@ -1629,105 +1619,68 @@ async function _selfHealLogin(browser, account, tag) {
             }
         }
 
-        // Verify login success
+        // ─── STEP 3: Verify login success ───
         await delay(3000);
         const finalUrl = page.url();
-        console.log(`${tag} 🔧 Final URL: ${finalUrl.substring(0, 100)}`);
+        console.log(`${tag} 🔧 Final URL: ${finalUrl.substring(0, 120)}`);
         const isFbHome = finalUrl.includes('facebook.com') && !finalUrl.includes('/login') && !finalUrl.includes('checkpoint') && !finalUrl.includes('two_step');
 
         if (isFbHome) {
-            console.log(`${tag} ✅ Self-healing login on mbasic SUCCESS!`);
+            console.log(`${tag} ✅ Self-healing login SUCCESS!`);
 
             // ═══ DEEP SESSION SAVING ═══
-            // mbasic context has JS disabled — transfer cookies to a new JS-enabled desktop context
-            // then "warm up" on www.facebook.com to acquire full cookie set (c_user, xs, fr, datr, sb)
+            // Switch to www.facebook.com for Golden Session cookies
             console.log(`${tag} 🕵️ Starting Deep Session Save...`);
 
-            // 1. Extract cookies from mbasic context
-            const mbasicCookies = await freshContext.cookies();
-            console.log(`${tag} 🍪 mbasic cookies: ${mbasicCookies.length}`);
-            await freshContext.close();
-            freshContext = null;
+            // Navigate to www.facebook.com using same context
+            // (cookies from mbasic should carry over — same .facebook.com domain)
+            console.log(`${tag} 🔧 Navigating to www.facebook.com (desktop mode)...`);
+            await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await delay(5000);
 
-            // 2. Create NEW context with JS enabled + desktop user agent for warming
-            const desktopCtx = await browser.newContext({
-                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                viewport: { width: 1280, height: 720 },
-            });
-            // Inject mbasic cookies into desktop context
-            await desktopCtx.addCookies(mbasicCookies);
-            const deskPage = await desktopCtx.newPage();
+            // Check if we're logged in on www
+            const wwwUrl = page.url();
+            console.log(`${tag} 🔧 www URL: ${wwwUrl.substring(0, 100)}`);
 
-            try {
-                // 3. Navigate to www.facebook.com — should be logged in with transferred cookies
-                console.log(`${tag} 🔧 Navigating to www.facebook.com (desktop)...`);
-                await deskPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-
-                // 4. Wait for profile element — proves Facebook trusts this session
-                console.log(`${tag} ⏳ Waiting for profile indicator...`);
-                try {
-                    await deskPage.waitForSelector('a[href*="/me/"], div[aria-label*="Your profile"], div[aria-label="Facebook"], div[role="navigation"]', { timeout: 30000 });
-                    console.log(`${tag} ✅ Profile indicator found!`);
-                } catch {
-                    console.log(`${tag} ⚠️ No profile indicator, but continuing with warming...`);
-                }
-
-                // 5. CRITICAL: Scroll newsfeed to trigger internal cookie generation
+            if (!wwwUrl.includes('/login')) {
+                // Scroll newsfeed to trigger cookie generation
                 console.log(`${tag} 🎢 Warming up — scrolling newsfeed...`);
                 for (let i = 0; i < 3; i++) {
-                    await deskPage.mouse.wheel(0, 800 + Math.random() * 400);
+                    await page.mouse.wheel(0, 800 + Math.random() * 400);
                     await delay(3000 + Math.random() * 2000);
-                    await deskPage.mouse.wheel(0, -300);
+                    await page.mouse.wheel(0, -300);
                     await delay(1000);
                 }
 
-                // 6. Visit Groups feed to warm group cookies
-                await deskPage.goto('https://www.facebook.com/groups/feed/', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => { });
+                // Visit Groups feed
+                await page.goto('https://www.facebook.com/groups/feed/', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => { });
                 await delay(5000);
-
-                // 7. CHECK COOKIE QUALITY — must have c_user
-                const cookies = await desktopCtx.cookies();
-                const fbCookies = cookies.filter(c => c.domain?.includes('facebook'));
-                const hasCUser = cookies.some(c => c.name === 'c_user');
-                const hasXs = cookies.some(c => c.name === 'xs');
-                console.log(`${tag} 🍪 Total: ${cookies.length}, Facebook: ${fbCookies.length}, c_user: ${hasCUser ? 'YES' : 'NO'}, xs: ${hasXs ? 'YES' : 'NO'}`);
-
-                if (hasCUser && fbCookies.length >= 8) {
-                    // "Session Vàng" — save it!
-                    const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
-                    const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
-                    fs.mkdirSync(ssDir, { recursive: true });
-                    await desktopCtx.storageState({ path: ssPath });
-
-                    const cookieJsonPath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
-                    fs.writeFileSync(cookieJsonPath, JSON.stringify(fbCookies, null, 2));
-                    console.log(`${tag} 💎 GOLDEN SESSION saved! (${fbCookies.length} FB cookies, c_user: ✅) → ${accUsername}`);
-
-                    await desktopCtx.close();
-                    return ssPath;
-                } else {
-                    console.warn(`${tag} ⚠️ Session incomplete (${fbCookies.length} cookies, c_user: ${hasCUser}). Saving anyway...`);
-                    const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
-                    const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
-                    fs.mkdirSync(ssDir, { recursive: true });
-                    await desktopCtx.storageState({ path: ssPath });
-
-                    const cookieJsonPath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
-                    fs.writeFileSync(cookieJsonPath, JSON.stringify(fbCookies, null, 2));
-
-                    await desktopCtx.close();
-                    return ssPath;
-                }
-            } catch (warmErr) {
-                console.warn(`${tag} ⚠️ Desktop warming failed: ${warmErr.message}. Saving mbasic cookies...`);
-                // Fallback: save whatever we have
-                const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
-                const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
-                fs.mkdirSync(ssDir, { recursive: true });
-                await desktopCtx.storageState({ path: ssPath });
-                await desktopCtx.close();
-                return ssPath;
             }
+
+            // CHECK COOKIE QUALITY
+            const cookies = await freshContext.cookies();
+            const fbCookies = cookies.filter(c => c.domain?.includes('facebook'));
+            const hasCUser = cookies.some(c => c.name === 'c_user');
+            const hasXs = cookies.some(c => c.name === 'xs');
+            console.log(`${tag} 🍪 Total: ${cookies.length}, Facebook: ${fbCookies.length}, c_user: ${hasCUser ? 'YES' : 'NO'}, xs: ${hasXs ? 'YES' : 'NO'}`);
+
+            // Save session
+            const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
+            const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
+            fs.mkdirSync(ssDir, { recursive: true });
+            await freshContext.storageState({ path: ssPath });
+
+            const cookieJsonPath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
+            fs.writeFileSync(cookieJsonPath, JSON.stringify(fbCookies, null, 2));
+
+            if (hasCUser && fbCookies.length >= 8) {
+                console.log(`${tag} 💎 GOLDEN SESSION saved! (${fbCookies.length} FB cookies, c_user: ✅) → ${accUsername}`);
+            } else {
+                console.log(`${tag} ⚠️ Session saved but incomplete (${fbCookies.length} cookies, c_user: ${hasCUser}) → ${accUsername}`);
+            }
+
+            await freshContext.close();
+            return ssPath;
         }
 
         console.warn(`${tag} ❌ Self-healing failed (URL: ${finalUrl.substring(0, 80)})`);
