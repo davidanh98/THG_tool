@@ -28,6 +28,8 @@ const delay = (ms) => new Promise(r => setTimeout(r, ms + Math.random() * 600));
 const FB_URL = 'https://www.facebook.com';
 // Legacy single-account session path (fallback)
 const COOKIES_PATH = path.join(__dirname, '..', '..', 'data', 'fb_session.json');
+// StorageState sessions (preferred, created by fb-login.js)
+const SESSIONS_DIR = path.join(__dirname, '..', '..', 'data', 'sessions');
 
 const FB_EMAIL = process.env.FB_EMAIL || '';
 const FB_PASSWORD = process.env.FB_PASSWORD || '';
@@ -228,6 +230,8 @@ async function getAuthContext(account = null) {
     const accPassword = account?.password || FB_PASSWORD;
     const accProxy = account?.proxy_url || '';
     const sessionPath = account ? accountManager.getSessionPath(account) : COOKIES_PATH;
+    const accUsername = accEmail.split('@')[0];
+    const storageStatePath = path.join(SESSIONS_DIR, `${accUsername}_auth.json`);
 
     sessionAge++;
 
@@ -235,13 +239,19 @@ async function getAuthContext(account = null) {
     if (activeBrowser && sessionAge > MAX_SESSION_AGE) {
         console.log('[FBScraper] 🔄 Rotating browser session...');
         if (activeContext) {
-            // Save session to account-specific path
+            // Save storageState (cookies + localStorage) for longer session life
             try {
-                const cookies = await activeContext.cookies();
-                fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
-                fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
-                console.log(`[FBScraper] 💾 Session saved → ${path.basename(sessionPath)}`);
-            } catch { }
+                fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+                await activeContext.storageState({ path: storageStatePath });
+                console.log(`[FBScraper] 💾 StorageState saved → ${accUsername}_auth.json`);
+            } catch (e) {
+                // Fallback: save cookies only
+                try {
+                    const cookies = await activeContext.cookies();
+                    fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
+                    fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
+                } catch { }
+            }
         }
         try { await activeBrowser.close(); } catch { }
         activeBrowser = null;
@@ -379,7 +389,51 @@ async function getAuthContext(account = null) {
         }
     }
 
-    // Try loading saved session first (account-specific)
+    // ═══ PRIORITY 0: StorageState auth (from fb-login.js — most stable) ═══
+    if (fs.existsSync(storageStatePath)) {
+        console.log(`[FBScraper] 🔑 Found storageState: ${accUsername}_auth.json`);
+        try {
+            // Close existing context if any, create new one with storageState
+            if (activeContext && activeBrowser) {
+                try { await activeContext.close(); } catch { }
+            }
+            activeContext = await activeBrowser.newContext({
+                storageState: storageStatePath,
+                userAgent: fp.userAgent,
+                viewport: fp.viewport,
+                locale: 'en-US',
+                timezoneId: 'America/New_York',
+            });
+            // Validate storageState session
+            const testPage = await activeContext.newPage();
+            await testPage.goto(`${FB_URL}`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+            await delay(2000);
+            const testUrl = testPage.url();
+            const hasNav = await testPage.$('div[role="navigation"], div[aria-label="Facebook"]');
+            if (hasNav && !testUrl.includes('/login') && !testUrl.includes('checkpoint')) {
+                console.log(`[FBScraper] ✅ StorageState session valid for ${accEmail}!`);
+                isLoggedIn = true;
+                // Auto-renew storageState with fresh tokens
+                try { await activeContext.storageState({ path: storageStatePath }); } catch { }
+                await testPage.close();
+                return activeContext;
+            }
+            console.warn(`[FBScraper] ⚠️ StorageState expired for ${accEmail}, falling back to cookies...`);
+            await testPage.close();
+        } catch (err) {
+            console.warn(`[FBScraper] ⚠️ StorageState error: ${err.message}`);
+        }
+        // Reset context for cookie-based fallback
+        try { if (activeContext) await activeContext.close(); } catch { }
+        activeContext = await activeBrowser.newContext({
+            userAgent: fp.userAgent,
+            viewport: fp.viewport,
+            locale: 'en-US',
+            timezoneId: 'America/New_York',
+        });
+    }
+
+    // ═══ PRIORITY 1: Saved cookie session (account-specific) ═══
     const savedCookies = loadSession(sessionPath);
     if (savedCookies && savedCookies.length > 0) {
         await activeContext.addCookies(savedCookies);
@@ -405,6 +459,12 @@ async function getAuthContext(account = null) {
         if (hasNav && !url.includes('/login')) {
             console.log(`[FBScraper] ✅ Session valid: ${accEmail}`);
             isLoggedIn = true;
+            // Auto-save as storageState for future (migrate cookie→storageState)
+            try {
+                fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+                await activeContext.storageState({ path: storageStatePath });
+                console.log(`[FBScraper] 🔄 Migrated to storageState: ${accUsername}_auth.json`);
+            } catch { }
             await page.close();
             return activeContext;
         }
@@ -413,9 +473,7 @@ async function getAuthContext(account = null) {
         await page.close();
     }
 
-    // ── Fallback 1: Per-account JSON cookie file (Cookie Editor export) ──
-    // Priority: data/fb_cookies_{username}.json (full attributes: domain, httpOnly, secure)
-    const accUsername = accEmail.split('@')[0];
+    // ═══ PRIORITY 2: Per-account JSON cookie file (Cookie Editor export) ═══
     const cookieJsonPath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
     if (fs.existsSync(cookieJsonPath)) {
         try {
@@ -453,11 +511,11 @@ async function getAuthContext(account = null) {
                 if (hasNav && !testUrl.includes('/login')) {
                     console.log(`[FBScraper] ✅ Cookie file session valid for ${accEmail}!`);
                     isLoggedIn = true;
-                    // Save as account session for next use
+                    // Auto-save as storageState (migrate cookie→storageState)
                     try {
-                        const cookies = await activeContext.cookies();
-                        fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
-                        fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
+                        fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+                        await activeContext.storageState({ path: storageStatePath });
+                        console.log(`[FBScraper] 🔄 Auto-migrated to storageState: ${accUsername}_auth.json`);
                     } catch { }
                     await testPage.close();
                     return activeContext;
