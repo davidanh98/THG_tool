@@ -456,9 +456,13 @@ function renderClosingRoom(lead) {
 
 
 function closeLeadDetail() {
-  document.getElementById('leadDetailView').style.display = 'none';
-  document.getElementById('leadsMainView').style.display = 'block';
-  document.getElementById('leadDetailView').innerHTML = '';
+  const detailView = document.getElementById('leadDetailView');
+  const mainView = document.getElementById('leadsMainView');
+  detailView.style.display = 'none';
+  mainView.style.display = 'block';
+  detailView.innerHTML = '';
+  // Scroll to top of leads table for clean re-entry
+  mainView.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 
@@ -723,12 +727,22 @@ function switchLeadTab(leadId, tab, btnEl) {
   const tabs = ['response', 'notes', 'agent'];
   tabs.forEach(t => {
     const panel = document.getElementById(`tab-${t}-${leadId}`);
-    if (panel) panel.style.display = t === tab ? '' : 'none';
+    if (panel) {
+      panel.style.display = t === tab ? '' : 'none';
+      if (t === tab) panel.style.opacity = '1';
+    }
   });
   if (btnEl) {
-    const allTabs = btnEl.closest('.lead-tabs')?.querySelectorAll('.lead-tab');
-    allTabs?.forEach(b => b.classList.remove('lead-tab--active'));
-    btnEl.classList.add('lead-tab--active');
+    // Support both inline card tabs (.lead-tab) and Closing Room tabs (.cr-tab)
+    const container = btnEl.closest('.lead-tabs') || btnEl.closest('.cr-tabs');
+    if (container) {
+      container.querySelectorAll('.lead-tab, .cr-tab').forEach(b => {
+        b.classList.remove('lead-tab--active', 'cr-tab--active');
+      });
+    }
+    btnEl.classList.add(
+      btnEl.classList.contains('cr-tab') ? 'cr-tab--active' : 'lead-tab--active'
+    );
   }
 }
 

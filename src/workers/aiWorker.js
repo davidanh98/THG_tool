@@ -44,13 +44,17 @@ function routeLead(content) {
 }
 
 // ── Regex pre-filters (mirrors leadQualifier.js) ─────────────────────
-const PROVIDER_RE = /(chúng tôi nhận|bên em nhận|bên em chuyên|dịch vụ vận chuyển|nhận gửi hàng|nhận ship|offering fulfillment|we ship|we offer|lh em|ib em|inbox em|liên hệ em|zalo:|chỉ từ \d+k)/i;
+const PROVIDER_RE = /(chúng tôi nhận|bên em nhận|bên em chuyên|bên mình chuyên|bên mình nhận|dịch vụ vận chuyển|nhận gửi hàng|nhận ship|offering fulfillment|we ship|we offer|lh em|ib em|inbox em|liên hệ em|zalo:|chỉ từ \d+k|giải pháp gửi hàng|giải pháp ship|giải pháp vận chuyển|xin phép admin|cam kết giao|cước phí cạnh tranh|liên hệ ngay|tham khảo ngay|đăng ký ngay|nhận từ 1 đơn|dạ em nhận|em chuyên nhận|chúng tôi chuyên|seller nên biết.*:|seller cần biết.*:|ready to scale|just launched|free quote|get started today|contact us.*whatsapp)/i;
 const WRONG_ROUTE_RE = /(giao hàng nhanh nội|ship cod toàn|vận chuyển nội địa|gửi.*về việt nam|order.*về vn|nhập hàng.*về vn|ship.*từ mỹ.*về)/i;
+const VAT_RE = /(thuế nhập khẩu|thuế vat|vat refund|ioss|eori|tariff|biểu thuế|customs duty|duty rate|khai báo hải quan|luật nhập khẩu|tax compliance|anti.?dumping)/i;
+const KNOWLEDGE_RE = /(chia sẻ kinh nghiệm|chia sẻ kiến thức|bài viết tổng hợp|tutorial|step.by.step|how to.*guide|tip.*seller|tips.*cho|mẹo.*bán hàng)/i;
 const MUST_HAVE_RE = /(ship|vận chuyển|fulfillment|fulfill|pod|dropship|gửi hàng|kho|warehouse|giá|tìm|cần|logistics|3pl|fba|ecommerce|seller|tracking|forwarder|express|freight|order|tìm đơn vị)/i;
 
 function preFilter(content) {
     if (PROVIDER_RE.test(content)) return { pass: false, reason: 'Provider/quảng cáo' };
     if (WRONG_ROUTE_RE.test(content)) return { pass: false, reason: 'Sai tuyến (nội địa/nhập về VN)' };
+    if (VAT_RE.test(content)) return { pass: false, reason: 'VAT/Tax/Compliance (không phải lead)' };
+    if (KNOWLEDGE_RE.test(content)) return { pass: false, reason: 'Bài chia sẻ kiến thức (không phải lead)' };
     if (!MUST_HAVE_RE.test(content)) return { pass: false, reason: 'Không có từ khóa kinh doanh' };
     return { pass: true };
 }

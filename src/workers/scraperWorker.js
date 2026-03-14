@@ -214,13 +214,65 @@ async function runPipeline(options = {}) {
         ];
         const jobExcludeRegex = new RegExp(JOB_EXCLUSION_KEYWORDS.join('|'), 'i');
 
+        // --- (A) VAT / Tax / Compliance exclusion ---
+        const VAT_TAX_KEYWORDS = [
+            'thuế nhập khẩu', 'thuế xuất khẩu', 'thuế vat', 'vat refund',
+            'khai báo hải quan', 'hồ sơ hải quan', 'thủ tục hải quan',
+            'ioss', 'eori', 'tariff', 'biểu thuế', 'mã hs',
+            'luật nhập khẩu', 'luật xuất khẩu', 'quy định nhập khẩu',
+            'compliance', 'regulation', 'certificate of origin', 'c/o',
+            'fda approval', 'cpsc', 'thuế chống bán phá giá', 'anti.?dumping',
+            'customs duty', 'duty rate', 'import duty', 'thuế quan',
+            'khai thuế', 'hoàn thuế', 'tax refund', 'tax compliance',
+        ];
+        const vatExcludeRegex = new RegExp(VAT_TAX_KEYWORDS.join('|'), 'i');
+
+        // --- (B) Provider / Advertiser exclusion (subtle wording) ---
+        const PROVIDER_AD_KEYWORDS = [
+            'giải pháp gửi hàng', 'giải pháp ship', 'giải pháp vận chuyển',
+            'giải pháp logistics', 'giải pháp fulfillment',
+            'ưu đãi .{0,15}(ship|gửi|vận)', 'khuyến mãi', 'chiết khấu',
+            'liên hệ ngay', 'đăng ký ngay', 'tham khảo ngay',
+            'hãy liên hệ', 'gọi ngay', 'inbox ngay', 'ib ngay',
+            'nhận ship .*hàng', 'nhận gửi .*hàng', 'nhận vận chuyển',
+            'chuyên nhận', 'chúng tôi chuyên', 'bên em chuyên', 'bên mình chuyên',
+            'bên em nhận', 'bên mình nhận', 'đơn vị vận chuyển',
+            'xin phép admin', 'xin phép ad',
+            'cam kết giao', 'cam kết.*nhanh', 'cam kết.*uy tín',
+            'cước phí cạnh tranh', 'giá cạnh tranh', 'giá tốt nhất',
+            'chỉ từ \\d+k', 'chỉ từ \\d+đ', 'chỉ từ \\$',
+            'nhận từ 1 đơn', 'không giới hạn', 'free packing',
+            'zalo:\\s*0', 'hotline:', 'sđt:', 'liên hệ sđt',
+            'dạ em nhận', 'em chuyên nhận',
+            'seller nên biết.*:', 'seller cần biết.*:',
+            'ready to scale', 'just launched', 'our warehouse', 'free quote',
+            'get started today', 'contact us', 'whatsapp.*\\+',
+        ];
+        const providerAdRegex = new RegExp(PROVIDER_AD_KEYWORDS.join('|'), 'i');
+
+        // --- (C) Knowledge-sharing / Info post exclusion ---
+        const KNOWLEDGE_SHARE_KEYWORDS = [
+            'chia sẻ kinh nghiệm', 'chia sẻ kiến thức', 'chia sẻ cho.*anh.chị',
+            'bài viết tổng hợp', 'tổng hợp.*kinh nghiệm',
+            'hướng dẫn.*chi tiết', 'hướng dẫn.*cách',
+            'tip.*seller', 'tips.*cho', 'mẹo.*bán hàng',
+            'tutorial', 'step.by.step', 'how to.*guide',
+            'kinh nghiệm.*năm', 'tổng kết.*năm',
+            'review .*dịch vụ', 'so sánh.*dịch vụ', 'top \\d+.*dịch vụ',
+            'danh sách.*đơn vị', 'list.*đơn vị',
+        ];
+        const knowledgeShareRegex = new RegExp(KNOWLEDGE_SHARE_KEYWORDS.join('|'), 'i');
+
         const relevantPosts = freshPosts.filter(post => {
             const text = (post.content || '').toLowerCase();
             const group = (post.group_name || post.source_group || '').toLowerCase();
             // Must match THG keywords
             if (!keywordRegex.test(text) && !keywordRegex.test(group)) return false;
-            // Must NOT match job exclusion keywords
+            // Must NOT match any exclusion filters
             if (jobExcludeRegex.test(text)) return false;
+            if (vatExcludeRegex.test(text)) return false;
+            if (providerAdRegex.test(text)) return false;
+            if (knowledgeShareRegex.test(text)) return false;
             return true;
         });
 
