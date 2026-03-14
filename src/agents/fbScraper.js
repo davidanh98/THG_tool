@@ -16,6 +16,8 @@
 const { chromium } = require('playwright-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const axios = require('axios');
+let authenticator = null;
+try { authenticator = require('otplib').authenticator; } catch { }
 const fs = require('fs');
 const path = require('path');
 const { pool } = require('../proxy/proxyPool');
@@ -1404,6 +1406,157 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
 }
 
 /**
+ * Self-Healing Login: Auto-login when session dies.
+ * Uses TOTP (authenticator app) or recovery codes to pass 2FA.
+ * @returns {boolean} true if login succeeded
+ */
+async function _selfHealLogin(context, account, tag) {
+    const accEmail = account.email;
+    const accPassword = account.password;
+    const accUsername = accEmail.split('@')[0];
+
+    if (!accPassword) {
+        console.warn(`${tag} ⚠️ No password for ${accEmail} — cannot self-heal`);
+        return false;
+    }
+
+    try {
+        const page = await context.newPage();
+        console.log(`${tag} 🔧 Self-healing: navigating to login...`);
+        await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 25000 });
+        await delay(2000);
+
+        // Fill login form
+        const emailInput = await page.$('input[name="email"]');
+        const passInput = await page.$('input[name="pass"]');
+        if (!emailInput || !passInput) {
+            console.warn(`${tag} ⚠️ No login form found`);
+            await page.close();
+            return false;
+        }
+
+        await emailInput.fill(accEmail);
+        await delay(500 + Math.random() * 500);
+        await passInput.fill(accPassword);
+        await delay(500 + Math.random() * 500);
+        await passInput.press('Enter');
+
+        console.log(`${tag} 🔧 Login submitted, waiting...`);
+        await delay(8000);
+
+        // Check for 2FA checkpoint
+        const url = page.url();
+        if (url.includes('checkpoint') || url.includes('two_step')) {
+            console.log(`${tag} 🔐 2FA checkpoint detected — generating code...`);
+
+            // Get 2FA code: TOTP secret or recovery codes
+            let code = null;
+
+            // Method 1: TOTP via otplib (from .env: FB_ACCOUNT_X_TOTP_SECRET)
+            const totpSecret = _getTotpSecret(accEmail);
+            if (totpSecret && authenticator) {
+                code = authenticator.generate(totpSecret);
+                console.log(`${tag} 🔑 TOTP code generated: ${code}`);
+            }
+
+            // Method 2: Recovery codes (from data/recovery_codes_{username}.json)
+            if (!code) {
+                code = _getRecoveryCode(accUsername);
+                if (code) console.log(`${tag} 🎫 Using recovery code: ${code}`);
+            }
+
+            if (!code) {
+                console.warn(`${tag} ❌ No 2FA method available — need TOTP secret or recovery codes`);
+                await page.close();
+                return false;
+            }
+
+            // Enter the code
+            const codeInput = await page.$('input[name="approvals_code"]') ||
+                await page.$('input[type="text"]') ||
+                await page.$('input[type="tel"]');
+            if (codeInput) {
+                await codeInput.fill(code);
+                await delay(500);
+                const submitBtn = await page.$('button[type="submit"]') ||
+                    await page.$('#checkpointSubmitButton') ||
+                    await page.$('button:has-text("Continue")');
+                if (submitBtn) await submitBtn.click();
+                else await codeInput.press('Enter');
+
+                await delay(8000);
+
+                // Handle "Save Browser" / "Trust this browser" step
+                const saveBrowserBtn = await page.$('button:has-text("Continue")') ||
+                    await page.$('button:has-text("Save")') ||
+                    await page.$('#checkpointSubmitButton');
+                if (saveBrowserBtn) {
+                    await saveBrowserBtn.click();
+                    await delay(5000);
+                    console.log(`${tag} ✅ Browser saved/trusted`);
+                }
+            }
+        }
+
+        // Verify login success
+        await delay(3000);
+        const finalUrl = page.url();
+        const hasNav = await page.$('div[role="navigation"], div[aria-label="Facebook"]');
+
+        if (hasNav && !finalUrl.includes('/login') && !finalUrl.includes('checkpoint')) {
+            console.log(`${tag} ✅ Self-healing login SUCCESS!`);
+            // Save new storageState
+            try {
+                const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
+                fs.mkdirSync(ssDir, { recursive: true });
+                await context.storageState({ path: path.join(ssDir, `${accUsername}_auth.json`) });
+                console.log(`${tag} 🔑 New storageState saved`);
+            } catch { }
+            await page.close();
+            return true;
+        }
+
+        console.warn(`${tag} ❌ Self-healing login failed (final URL: ${finalUrl.substring(0, 80)})`);
+        await page.close();
+        return false;
+
+    } catch (err) {
+        console.warn(`${tag} ❌ Self-healing error: ${err.message}`);
+        return false;
+    }
+}
+
+/**
+ * Get TOTP secret for an account from env vars
+ */
+function _getTotpSecret(email) {
+    let i = 1;
+    while (process.env[`FB_ACCOUNT_${i}_EMAIL`]) {
+        if (process.env[`FB_ACCOUNT_${i}_EMAIL`] === email) {
+            return process.env[`FB_ACCOUNT_${i}_TOTP_SECRET`] || null;
+        }
+        i++;
+    }
+    return null;
+}
+
+/**
+ * Get and consume a recovery code (removes used code from file)
+ */
+function _getRecoveryCode(accUsername) {
+    const codesPath = path.join(__dirname, '..', '..', 'data', `recovery_codes_${accUsername}.json`);
+    if (!fs.existsSync(codesPath)) return null;
+    try {
+        const codes = JSON.parse(fs.readFileSync(codesPath, 'utf8'));
+        if (!Array.isArray(codes) || codes.length === 0) return null;
+        const code = codes.shift(); // Take first code
+        fs.writeFileSync(codesPath, JSON.stringify(codes, null, 2)); // Save remaining
+        console.log(`[SelfHeal] 🎫 Recovery codes remaining for ${accUsername}: ${codes.length}`);
+        return code;
+    } catch { return null; }
+}
+
+/**
  * Scrape groups for ONE account using a context in the shared browser.
  * No resource blocking — 4GB + 4GB swap handles full FB pages.
  */
@@ -1474,17 +1627,26 @@ async function _scrapeWithContext(browser, account, groups) {
         const hasNav = await testPage.$('div[role="navigation"], div[aria-label="Facebook"]');
         const testUrl = testPage.url();
         if (!hasNav || testUrl.includes('/login') || testUrl.includes('checkpoint')) {
-            console.warn(`${tag} ❌ Session invalid — skipping`);
-            await testPage.close(); await context.close(); return [];
+            console.warn(`${tag} ❌ Session invalid — attempting self-healing...`);
+            await testPage.close();
+
+            // ═══ SELF-HEALING: Auto-login with 2FA ═══
+            const healed = await _selfHealLogin(context, account, tag);
+            if (!healed) {
+                console.warn(`${tag} 💀 Self-healing failed — skipping account`);
+                await context.close(); return [];
+            }
+            console.log(`${tag} 🔄 Self-healing successful! Resuming scrape...`);
+        } else {
+            console.log(`${tag} ✅ Session valid!`);
+            await testPage.close();
         }
-        console.log(`${tag} ✅ Session valid!`);
-        // AUTO-RENEW: Save fresh cookies back to JSON file (FB rotates tokens!)
+
+        // AUTO-RENEW: Save fresh cookies + storageState
         try {
             const freshCookies = await context.cookies();
-            // Save to session file
             fs.mkdirSync(sessionDir, { recursive: true });
             fs.writeFileSync(sessionPath, JSON.stringify(freshCookies, null, 2));
-            // Save back to JSON cookie file (so next run uses fresh tokens)
             if (fs.existsSync(cookieJsonPath)) {
                 const fbCookies = freshCookies.filter(c => c.domain?.includes('facebook'));
                 if (fbCookies.length > 0) {
@@ -1492,14 +1654,30 @@ async function _scrapeWithContext(browser, account, groups) {
                     console.log(`${tag} 🔄 Cookies auto-renewed → ${path.basename(cookieJsonPath)} (${fbCookies.length})`);
                 }
             }
-            // ═══ StorageState migration: save cookies + localStorage for 15-30 day session ═══
+            // StorageState migration
             const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
             const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
             fs.mkdirSync(ssDir, { recursive: true });
             await context.storageState({ path: ssPath });
             console.log(`${tag} 🔑 StorageState saved → ${accUsername}_auth.json`);
         } catch (e) { console.warn(`${tag} ⚠️ Cookie save error: ${e.message}`); }
-        await testPage.close();
+
+        // ═══ NEWSFEED WARM-UP: Browse like a real human before scraping ═══
+        const warmPage = await context.newPage();
+        try {
+            console.log(`${tag} 🏠 Newsfeed warm-up...`);
+            await warmPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 20000 });
+            await delay(3000);
+            // Scroll newsfeed 2-3 times like reading
+            const scrolls = 2 + Math.floor(Math.random() * 2);
+            for (let s = 0; s < scrolls; s++) {
+                await warmPage.evaluate(() => window.scrollBy(0, 800 + Math.random() * 600));
+                await delay(2000 + Math.random() * 3000);
+            }
+            console.log(`${tag} 🏠 Warm-up done (${scrolls} scrolls)`);
+        } catch (e) { console.warn(`${tag} ⚠️ Warm-up error: ${e.message}`); }
+        await warmPage.close();
+        await delay(2000 + Math.random() * 3000); // Brief pause before starting
 
         // Scrape each group (reuse page)
         const page = await context.newPage();
@@ -1510,9 +1688,22 @@ async function _scrapeWithContext(browser, account, groups) {
             if (!groupId) continue;
 
             try {
+                // ═══ HUMAN-LIKE JITTER between groups ═══
+                if (i > 0) {
+                    const jitter = 8000 + Math.random() * 12000; // 8-20 seconds
+                    console.log(`${tag} 😴 Jitter: ${(jitter / 1000).toFixed(1)}s`);
+                    await delay(jitter);
+                    // Every 5th group: take a longer "coffee break"
+                    if (i % 5 === 0) {
+                        const breakTime = 25000 + Math.random() * 20000; // 25-45 seconds
+                        console.log(`${tag} ☕ Coffee break: ${(breakTime / 1000).toFixed(0)}s`);
+                        await delay(breakTime);
+                    }
+                }
+
                 console.log(`${tag} [${i + 1}/${groups.length}] 📥 ${group.name}`);
                 await page.goto(`https://www.facebook.com/groups/${groupId}?sorting_setting=CHRONOLOGICAL`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-                await delay(3000);
+                await delay(3000 + Math.random() * 2000); // 3-5s after page load
 
                 const url = page.url();
                 if (url.includes('checkpoint')) {
