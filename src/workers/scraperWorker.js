@@ -136,27 +136,28 @@ async function runPipeline(options = {}) {
             return stats;
         }
 
-        // Step 1.5: Filter old posts (>30 days)
-        console.log('\n[Pipeline] 🔍 Step 1.5: Filtering old posts...');
-        const MAX_POST_AGE_DAYS = 30;
-        const nowMs = Date.now();
+        // Step 1.5: Filter old posts (current month only)
+        console.log('\n[Pipeline] 🔍 Step 1.5: Filtering old posts (current month only)...');
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth(); // 0-indexed
         const freshPosts = allPosts.filter(post => {
             const timeStr = (post.item_type === 'comment')
                 ? (post.parent_created_at || post.post_created_at)
                 : post.post_created_at;
-            if (!timeStr) return true;
-            const postTimeMs = new Date(timeStr).getTime();
-            if (isNaN(postTimeMs)) return true;
-            const ageDays = (nowMs - postTimeMs) / (1000 * 60 * 60 * 24);
-            return ageDays <= MAX_POST_AGE_DAYS;
+            if (!timeStr) return true; // No date → assume fresh
+            const postDate = new Date(timeStr);
+            if (isNaN(postDate.getTime())) return true;
+            // Must be same year AND same month
+            return postDate.getFullYear() === currentYear && postDate.getMonth() === currentMonth;
         });
         const oldDropped = allPosts.length - freshPosts.length;
         if (oldDropped > 0) {
-            console.log(`[Pipeline] 🕐 Dropped ${oldDropped} posts older than ${MAX_POST_AGE_DAYS} days`);
+            console.log(`[Pipeline] 🕐 Dropped ${oldDropped} posts from previous months (keeping ${currentMonth + 1}/${currentYear} only)`);
         }
 
         if (freshPosts.length === 0) {
-            console.log('[Pipeline] ℹ️ All posts too old, skipping classification');
+            console.log('[Pipeline] ℹ️ No posts from current month, skipping classification');
             database.updateScanLog.run({ id: scanId, posts_found: allPosts.length, leads_detected: 0, status: 'completed', error: null });
             return stats;
         }
