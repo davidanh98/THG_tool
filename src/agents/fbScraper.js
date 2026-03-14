@@ -1453,71 +1453,69 @@ async function _selfHealLogin(browser, account, tag) {
 
     let freshContext = null;
     try {
-        // Use MOBILE Facebook to avoid reCAPTCHA (www.facebook.com shows CAPTCHA for headless)
+        // Use MBASIC Facebook — pure HTML, NO JavaScript, NO React, NO reCAPTCHA
+        // mbasic.facebook.com is designed for old phones, works perfectly with headless
         freshContext = await browser.newContext({
-            userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-            viewport: { width: 412, height: 915 },
+            userAgent: 'Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; SCH-I535 Build/KOT49H) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30',
+            viewport: { width: 360, height: 640 },
+            javaScriptEnabled: false, // mbasic works without JS
         });
         const page = await freshContext.newPage();
 
-        console.log(`${tag} 🔧 Self-healing: fresh context → m.facebook.com...`);
-        await page.goto('https://m.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 25000 });
-        await delay(3000);
+        console.log(`${tag} 🔧 Self-healing: fresh context → mbasic.facebook.com...`);
+        await page.goto('https://mbasic.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 25000 });
+        await delay(2000);
 
         // Log what URL we landed on
         const landingUrl = page.url();
-        console.log(`${tag} 🔧 Landing URL: ${landingUrl.substring(0, 80)}`);
+        console.log(`${tag} 🔧 Landing URL: ${landingUrl.substring(0, 100)}`);
 
-        // Fill login form (mobile selectors)
-        const emailInput = await page.$('input[name="email"]') ||
-            await page.$('input#m_login_email') ||
-            await page.$('input#email');
-        const passInput = await page.$('input[name="pass"]') ||
-            await page.$('input#m_login_password') ||
-            await page.$('input#pass');
+        // mbasic login form uses simple HTML input fields
+        const emailInput = await page.$('input[name="email"]');
+        const passInput = await page.$('input[name="pass"]');
 
         if (!emailInput || !passInput) {
             const bodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 300) || '');
-            console.warn(`${tag} ⚠️ No login form on m.facebook.com. Body: ${bodyText.substring(0, 150)}`);
+            console.warn(`${tag} ⚠️ No login form on mbasic. Body: ${bodyText.substring(0, 150)}`);
             await freshContext.close();
             return null;
         }
 
         await emailInput.fill(accEmail);
-        await delay(500 + Math.random() * 500);
+        await delay(300);
         await passInput.fill(accPassword);
-        await delay(500 + Math.random() * 500);
+        await delay(300);
 
-        // Click login button (mobile has a specific button)
-        const loginBtn = await page.$('button[name="login"]') ||
-            await page.$('input[name="login"]') ||
-            await page.$('button[type="submit"]') ||
-            await page.$('input[type="submit"]');
-        if (loginBtn) await loginBtn.click();
-        else await passInput.press('Enter');
+        // Submit form — mbasic uses input[type="submit"] or form submit
+        const loginBtn = await page.$('input[name="login"]') ||
+            await page.$('input[type="submit"]') ||
+            await page.$('button[name="login"]');
+        if (loginBtn) {
+            await Promise.all([
+                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => { }),
+                loginBtn.click()
+            ]);
+        } else {
+            await passInput.press('Enter');
+            await delay(5000);
+        }
 
         console.log(`${tag} 🔧 Login submitted, waiting...`);
-        await delay(8000);
+        await delay(3000);
 
         // Check for 2FA checkpoint — also handle delayed redirect
         let url = page.url();
-        console.log(`${tag} 🔧 Post-login URL: ${url.substring(0, 100)}`);
+        console.log(`${tag} 🔧 Post-login URL: ${url.substring(0, 120)}`);
 
-        // If we're on facebook.com/, wait a bit more for potential 2FA redirect
-        if (url === 'https://www.facebook.com/' || url === 'https://m.facebook.com/') {
-            await delay(5000);
-            url = page.url();
-            console.log(`${tag} 🔧 URL after extra wait: ${url.substring(0, 100)}`);
-        }
-
-        if (url.includes('checkpoint') || url.includes('two_step') || url.includes('login/identify')) {
+        // mbasic 2FA patterns: checkpoint, two_step, login/identify, approvals
+        if (url.includes('checkpoint') || url.includes('two_step') || url.includes('login/identify') || url.includes('approvals')) {
             console.log(`${tag} 🔐 2FA checkpoint detected — generating code...`);
 
             let code = null;
 
             // Method 1: TOTP
             const totpSecret = _getTotpSecret(accEmail);
-            console.log(`${tag} 🔧 TOTP secret found: ${totpSecret ? 'YES' : 'NO'}, authenticator loaded: ${authenticator ? 'YES' : 'NO'}`);
+            console.log(`${tag} 🔧 TOTP secret found: ${totpSecret ? 'YES' : 'NO'}`);
             if (totpSecret && authenticator) {
                 try {
                     code = authenticator.generate(totpSecret);
@@ -1530,18 +1528,7 @@ async function _selfHealLogin(browser, account, tag) {
             // Method 2: Recovery codes
             if (!code) {
                 code = _getRecoveryCode(accUsername);
-                if (code) {
-                    console.log(`${tag} 🎫 Using recovery code: ${code}`);
-                    const tryAnotherBtn = await page.$('a:has-text("Try another way")') ||
-                        await page.$('a:has-text("Having trouble")') ||
-                        await page.$('a:has-text("recovery code")') ||
-                        await page.$('a[href*="recovery"]');
-                    if (tryAnotherBtn) {
-                        await tryAnotherBtn.click();
-                        await delay(3000);
-                        console.log(`${tag} 🔧 Switched to recovery code mode`);
-                    }
-                }
+                if (code) console.log(`${tag} 🎫 Using recovery code: ${code}`);
             }
 
             if (!code) {
@@ -1550,113 +1537,59 @@ async function _selfHealLogin(browser, account, tag) {
                 return null;
             }
 
-            // Wait for React to render the 2FA form (DOM is empty on initial load)
-            console.log(`${tag} 🔧 Waiting for 2FA form to render...`);
-            try {
-                await page.waitForSelector('input', { timeout: 20000 });
-            } catch {
-                // Fallback: wait for network to settle
-                try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch { }
-                await delay(5000);
-            }
-            // Debug: dump page HTML to see what Facebook is showing
+            // mbasic uses simple HTML forms — dump page for debugging
             const bodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 500) || 'EMPTY');
-            console.log(`${tag} 🔧 Page body text: ${bodyText.substring(0, 200)}`);
+            console.log(`${tag} 🔧 2FA page text: ${bodyText.substring(0, 200)}`);
 
-            // Check for iframes (Facebook might put 2FA in an iframe)
-            const frames = page.frames();
-            console.log(`${tag} 🔧 Page has ${frames.length} frames`);
-
-            // Search all frames for inputs
-            let targetFrame = page;
-            for (const frame of frames) {
-                try {
-                    const hasInput = await frame.$('input');
-                    if (hasInput) {
-                        console.log(`${tag} 🔧 Found input in frame: ${frame.url().substring(0, 80)}`);
-                        targetFrame = frame;
-                        break;
-                    }
-                } catch { }
-            }
-
-            // Debug: dump inputs/buttons from target frame
-            const pageDebug = await targetFrame.evaluate(() => {
-                const inputs = [...document.querySelectorAll('input')].map(i => ({
-                    name: i.name, type: i.type, id: i.id, placeholder: i.placeholder,
-                    visible: i.offsetParent !== null
-                }));
-                const buttons = [...document.querySelectorAll('button, div[role="button"]')].map(b => ({
-                    type: b.type || b.tagName, text: b.innerText?.substring(0, 30), id: b.id,
-                    visible: b.offsetParent !== null
-                }));
-                return { inputs, buttons };
-            });
-            console.log(`${tag} 🔧 Page inputs: ${JSON.stringify(pageDebug.inputs)}`);
-            console.log(`${tag} 🔧 Page buttons: ${JSON.stringify(pageDebug.buttons)}`);
-
-            // Find code input — try all common selectors (in target frame)
-            const codeInput = await targetFrame.$('input[name="approvals_code"]') ||
-                await targetFrame.$('input[autocomplete="one-time-code"]') ||
-                await targetFrame.$('input[type="tel"]') ||
-                await targetFrame.$('input[type="number"]') ||
-                await targetFrame.$('input[type="text"]:not([name="email"]):not([name="pass"])');
+            // Find code input (mbasic uses simple input fields)
+            const codeInput = await page.$('input[name="approvals_code"]') ||
+                await page.$('input[type="text"]') ||
+                await page.$('input[type="tel"]');
 
             if (codeInput) {
                 console.log(`${tag} 🔧 Code input FOUND — filling ${code}...`);
-                // Clear and type character by character (more reliable than fill)
-                await codeInput.click();
-                await codeInput.fill('');
-                await codeInput.type(code, { delay: 50 });
-                await delay(1000);
+                await codeInput.fill(code);
+                await delay(500);
 
-                // Find and click submit button
-                const submitBtn = await targetFrame.$('button[type="submit"]') ||
-                    await targetFrame.$('#checkpointSubmitButton') ||
-                    await targetFrame.$('button:has-text("Continue")') ||
-                    await targetFrame.$('button:has-text("Submit")') ||
-                    await targetFrame.$('div[role="button"]:has-text("Continue")');
+                // Submit the form
+                const submitBtn = await page.$('input[type="submit"]') ||
+                    await page.$('button[type="submit"]') ||
+                    await page.$('#checkpointSubmitButton');
 
                 if (submitBtn) {
                     console.log(`${tag} 🔧 Submit button FOUND — clicking...`);
-                    // Use Promise.race: waitForNavigation + click
-                    try {
-                        await Promise.all([
-                            page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => { }),
-                            submitBtn.click()
-                        ]);
-                    } catch { await submitBtn.click(); }
+                    await Promise.all([
+                        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => { }),
+                        submitBtn.click()
+                    ]);
                 } else {
-                    console.log(`${tag} 🔧 No submit button — pressing Enter...`);
-                    await page.keyboard.press('Enter');
+                    await codeInput.press('Enter');
                 }
+                await delay(3000);
+                console.log(`${tag} 🔧 URL after 2FA submit: ${page.url().substring(0, 120)}`);
 
-                await delay(5000);
-                console.log(`${tag} 🔧 URL after 2FA submit: ${page.url().substring(0, 100)}`);
-
-                // Handle checkpoint steps (Continue/Save Browser — may appear 2-3 times)
-                for (let step = 0; step < 3; step++) {
+                // Handle checkpoint steps (mbasic may show "Continue" forms)
+                for (let step = 0; step < 5; step++) {
                     const stepUrl = page.url();
-                    if (!stepUrl.includes('checkpoint') && !stepUrl.includes('two_step')) break;
+                    if (!stepUrl.includes('checkpoint') && !stepUrl.includes('two_step') && !stepUrl.includes('approvals')) break;
 
-                    const continueBtn = await page.$('button:has-text("Continue")') ||
-                        await page.$('button:has-text("Save")') ||
-                        await page.$('#checkpointSubmitButton') ||
+                    // mbasic checkpoint has submit buttons
+                    const continueBtn = await page.$('input[type="submit"]') ||
                         await page.$('button[type="submit"]') ||
-                        await page.$('div[role="button"]:has-text("Continue")');
+                        await page.$('#checkpointSubmitButton');
                     if (continueBtn) {
-                        try {
-                            await Promise.all([
-                                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => { }),
-                                continueBtn.click()
-                            ]);
-                        } catch { await continueBtn.click(); }
-                        await delay(3000);
+                        await Promise.all([
+                            page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => { }),
+                            continueBtn.click()
+                        ]);
+                        await delay(2000);
                         console.log(`${tag} ✅ Checkpoint step ${step + 1} → ${page.url().substring(0, 80)}`);
                     } else break;
                 }
             } else {
                 console.warn(`${tag} ❌ No code input found on 2FA page!`);
+                const html = await page.evaluate(() => document.body?.innerHTML?.substring(0, 500) || '');
+                console.log(`${tag} 🔧 2FA HTML: ${html.substring(0, 300)}`);
                 await freshContext.close();
                 return null;
             }
@@ -1669,35 +1602,98 @@ async function _selfHealLogin(browser, account, tag) {
         const isFbHome = finalUrl.includes('facebook.com') && !finalUrl.includes('/login') && !finalUrl.includes('checkpoint') && !finalUrl.includes('two_step');
 
         if (isFbHome) {
-            console.log(`${tag} ✅ Self-healing login SUCCESS!`);
+            console.log(`${tag} ✅ Self-healing login on mbasic SUCCESS!`);
 
-            // Navigate to DESKTOP facebook to acquire full cookie set
-            // (mobile login may only have m.facebook.com cookies)
-            console.log(`${tag} 🔧 Acquiring desktop session cookies...`);
-            await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 25000 });
-            await delay(5000);
-            // Visit a few key pages to trigger all cookie sets
-            await page.goto('https://www.facebook.com/groups/feed/', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => { });
-            await delay(3000);
+            // ═══ DEEP SESSION SAVING ═══
+            // mbasic context has JS disabled — transfer cookies to a new JS-enabled desktop context
+            // then "warm up" on www.facebook.com to acquire full cookie set (c_user, xs, fr, datr, sb)
+            console.log(`${tag} 🕵️ Starting Deep Session Save...`);
 
-            // Log cookie count for debugging
-            const cookies = await freshContext.cookies();
-            const fbCookies = cookies.filter(c => c.domain?.includes('facebook'));
-            console.log(`${tag} 🍪 Total cookies: ${cookies.length}, Facebook cookies: ${fbCookies.length}`);
-
-            // Save new storageState with full cookies
-            const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
-            const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
-            fs.mkdirSync(ssDir, { recursive: true });
-            await freshContext.storageState({ path: ssPath });
-
-            // Also save cookies in fb_cookies format for next restart
-            const cookieJsonPath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
-            fs.writeFileSync(cookieJsonPath, JSON.stringify(fbCookies, null, 2));
-            console.log(`${tag} 🔑 StorageState + cookies saved (${fbCookies.length} FB cookies) → ${accUsername}`);
-
+            // 1. Extract cookies from mbasic context
+            const mbasicCookies = await freshContext.cookies();
+            console.log(`${tag} 🍪 mbasic cookies: ${mbasicCookies.length}`);
             await freshContext.close();
-            return ssPath;
+            freshContext = null;
+
+            // 2. Create NEW context with JS enabled + desktop user agent for warming
+            const desktopCtx = await browser.newContext({
+                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                viewport: { width: 1280, height: 720 },
+            });
+            // Inject mbasic cookies into desktop context
+            await desktopCtx.addCookies(mbasicCookies);
+            const deskPage = await desktopCtx.newPage();
+
+            try {
+                // 3. Navigate to www.facebook.com — should be logged in with transferred cookies
+                console.log(`${tag} 🔧 Navigating to www.facebook.com (desktop)...`);
+                await deskPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+                // 4. Wait for profile element — proves Facebook trusts this session
+                console.log(`${tag} ⏳ Waiting for profile indicator...`);
+                try {
+                    await deskPage.waitForSelector('a[href*="/me/"], div[aria-label*="Your profile"], div[aria-label="Facebook"], div[role="navigation"]', { timeout: 30000 });
+                    console.log(`${tag} ✅ Profile indicator found!`);
+                } catch {
+                    console.log(`${tag} ⚠️ No profile indicator, but continuing with warming...`);
+                }
+
+                // 5. CRITICAL: Scroll newsfeed to trigger internal cookie generation
+                console.log(`${tag} 🎢 Warming up — scrolling newsfeed...`);
+                for (let i = 0; i < 3; i++) {
+                    await deskPage.mouse.wheel(0, 800 + Math.random() * 400);
+                    await delay(3000 + Math.random() * 2000);
+                    await deskPage.mouse.wheel(0, -300);
+                    await delay(1000);
+                }
+
+                // 6. Visit Groups feed to warm group cookies
+                await deskPage.goto('https://www.facebook.com/groups/feed/', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => { });
+                await delay(5000);
+
+                // 7. CHECK COOKIE QUALITY — must have c_user
+                const cookies = await desktopCtx.cookies();
+                const fbCookies = cookies.filter(c => c.domain?.includes('facebook'));
+                const hasCUser = cookies.some(c => c.name === 'c_user');
+                const hasXs = cookies.some(c => c.name === 'xs');
+                console.log(`${tag} 🍪 Total: ${cookies.length}, Facebook: ${fbCookies.length}, c_user: ${hasCUser ? 'YES' : 'NO'}, xs: ${hasXs ? 'YES' : 'NO'}`);
+
+                if (hasCUser && fbCookies.length >= 8) {
+                    // "Session Vàng" — save it!
+                    const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
+                    const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
+                    fs.mkdirSync(ssDir, { recursive: true });
+                    await desktopCtx.storageState({ path: ssPath });
+
+                    const cookieJsonPath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
+                    fs.writeFileSync(cookieJsonPath, JSON.stringify(fbCookies, null, 2));
+                    console.log(`${tag} 💎 GOLDEN SESSION saved! (${fbCookies.length} FB cookies, c_user: ✅) → ${accUsername}`);
+
+                    await desktopCtx.close();
+                    return ssPath;
+                } else {
+                    console.warn(`${tag} ⚠️ Session incomplete (${fbCookies.length} cookies, c_user: ${hasCUser}). Saving anyway...`);
+                    const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
+                    const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
+                    fs.mkdirSync(ssDir, { recursive: true });
+                    await desktopCtx.storageState({ path: ssPath });
+
+                    const cookieJsonPath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
+                    fs.writeFileSync(cookieJsonPath, JSON.stringify(fbCookies, null, 2));
+
+                    await desktopCtx.close();
+                    return ssPath;
+                }
+            } catch (warmErr) {
+                console.warn(`${tag} ⚠️ Desktop warming failed: ${warmErr.message}. Saving mbasic cookies...`);
+                // Fallback: save whatever we have
+                const ssDir = path.join(__dirname, '..', '..', 'data', 'sessions');
+                const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
+                fs.mkdirSync(ssDir, { recursive: true });
+                await desktopCtx.storageState({ path: ssPath });
+                await desktopCtx.close();
+                return ssPath;
+            }
         }
 
         console.warn(`${tag} ❌ Self-healing failed (URL: ${finalUrl.substring(0, 80)})`);
