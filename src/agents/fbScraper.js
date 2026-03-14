@@ -1738,6 +1738,35 @@ function _getRecoveryCode(accUsername) {
 }
 
 /**
+ * Check if a session has the critical cookies (c_user, xs) for Facebook access
+ * @returns {{ healthy: boolean, cookieCount: number, hasCUser: boolean, hasXs: boolean }}
+ */
+function _isSessionHealthy(accUsername) {
+    // Check storageState file first
+    const ssPath = path.join(__dirname, '..', '..', 'data', 'sessions', `${accUsername}_auth.json`);
+    if (fs.existsSync(ssPath)) {
+        try {
+            const data = JSON.parse(fs.readFileSync(ssPath, 'utf8'));
+            const cookies = data.cookies || [];
+            const hasCUser = cookies.some(c => c.name === 'c_user');
+            const hasXs = cookies.some(c => c.name === 'xs');
+            return { healthy: hasCUser && hasXs && cookies.length >= 10, cookieCount: cookies.length, hasCUser, hasXs };
+        } catch { }
+    }
+    // Check fb_cookies file
+    const cookiePath = path.join(__dirname, '..', '..', 'data', `fb_cookies_${accUsername}.json`);
+    if (fs.existsSync(cookiePath)) {
+        try {
+            const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf8'));
+            const hasCUser = cookies.some(c => c.name === 'c_user');
+            const hasXs = cookies.some(c => c.name === 'xs');
+            return { healthy: hasCUser && hasXs && cookies.length >= 10, cookieCount: cookies.length, hasCUser, hasXs };
+        } catch { }
+    }
+    return { healthy: false, cookieCount: 0, hasCUser: false, hasXs: false };
+}
+
+/**
  * Scrape groups for ONE account using a context in the shared browser.
  * No resource blocking — 4GB + 4GB swap handles full FB pages.
  */
@@ -1745,6 +1774,14 @@ async function _scrapeWithContext(browser, account, groups) {
     const accEmail = account.email;
     const tag = `[${accEmail.split('@')[0]}]`;
     console.log(`\n${tag} ═══ Starting (${groups.length} groups) ═══`);
+
+    // 🏥 SESSION HEALTH CHECK — verify cookies before scraping
+    const health = _isSessionHealthy(accEmail.split('@')[0]);
+    if (health.healthy) {
+        console.log(`${tag} 🏥 Session HEALTHY: ${health.cookieCount} cookies, c_user: ✅, xs: ✅`);
+    } else {
+        console.log(`${tag} 🏥 Session WEAK: ${health.cookieCount} cookies, c_user: ${health.hasCUser ? '✅' : '❌'}, xs: ${health.hasXs ? '✅' : '❌'} → will need self-healing`);
+    }
 
     const fp = generateFingerprint({ region: 'US', accountId: accEmail });
     let context = null;
