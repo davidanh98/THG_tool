@@ -1490,9 +1490,18 @@ async function _scrapeWithContext(browser, account, groups) {
     let context = null;
     const posts = [];
 
+    // 🔑 UA Sync: use the EXACT User-Agent from cookie injection (if exists)
+    const accUsername = accEmail.split('@')[0];
+    const uaPath = path.join(__dirname, '..', '..', 'data', `ua_${accUsername}.txt`);
+    let syncedUA = fp.userAgent;
+    if (fs.existsSync(uaPath)) {
+        syncedUA = fs.readFileSync(uaPath, 'utf8').trim();
+        console.log(`${tag} 🔑 UA Synced from cookie injection: ${syncedUA.substring(0, 60)}...`);
+    }
+
     try {
         context = await browser.newContext({
-            userAgent: fp.userAgent,
+            userAgent: syncedUA,
             viewport: fp.viewport,
             locale: 'en-US',
             timezoneId: 'America/New_York',
