@@ -317,8 +317,9 @@
               <input type="text" name="fakeusernameremembered" style="display:none" aria-hidden="true">
               <input type="password" name="fakepasswordremembered" style="display:none" aria-hidden="true">
 
-              <input type="text" class="filter-input" id="filterSearch" name="search-lead-query" autocomplete="off"
-                placeholder="Search content, author..." oninput="debounceSearch()">
+              <input type="search" class="filter-input" id="filterSearch" autocomplete="new-password"
+                data-lpignore="true" data-1p-ignore="true" placeholder="Search content, author..."
+                oninput="debounceSearch()">
               <div class="filter-spacer"></div>
               <button class="btn" onclick="clearAllLeads()"
                 style="font-size:0.85rem;padding:8px 14px;background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;">
