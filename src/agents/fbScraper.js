@@ -1168,22 +1168,13 @@ async function getPostComments(postUrl, source) {
  */
 async function autoJoinGroups(groups = null, account = null) {
     const config = require('../config');
-    const fs = require('fs');
-    const PROD_GROUPS_FILE = path.join(__dirname, '..', '..', 'data', 'prod_groups.json');
 
-    // Load groups: groups.db (all active) > prod_groups.json fallback > config fallback
+    // Load groups: groups.db (source of truth) > config fallback
     let targetGroups = groups;
     if (!targetGroups || targetGroups.length === 0) {
         try {
             const groupDiscovery = require('../agent/groupDiscovery');
             targetGroups = groupDiscovery.getScanRotationList(200);
-        } catch { }
-    }
-    if (!targetGroups || targetGroups.length === 0) {
-        try {
-            if (fs.existsSync(PROD_GROUPS_FILE)) {
-                targetGroups = JSON.parse(fs.readFileSync(PROD_GROUPS_FILE, 'utf8'));
-            }
         } catch { }
     }
     if (!targetGroups || targetGroups.length === 0) {
