@@ -62,7 +62,7 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
         });
         console.log('[FBScraper] 🌐 Browser launched');
 
-        const MAX_PARALLEL = 4; // Each account has its own static proxy IP
+        const MAX_PARALLEL = parseInt(process.env.MAX_PARALLEL || '2', 10); // VPS-safe default; local .env can set 4
         const entries = Object.values(accountGroupMap);
         for (let i = 0; i < entries.length; i += MAX_PARALLEL) {
             const batch = entries.slice(i, i + MAX_PARALLEL);
