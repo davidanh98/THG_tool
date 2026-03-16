@@ -1106,7 +1106,7 @@ app.get('/api/agent/feedback-history', (req, res) => {
 app.patch('/api/leads/:id', (req, res) => {
     try {
         const { id } = req.params;
-        const ALLOWED = ['assigned_to', 'claimed_by', 'claimed_at', 'status', 'notes', 'suggested_response', 'category'];
+        const ALLOWED = ['assigned_to', 'claimed_by', 'claimed_at', 'status', 'notes', 'suggested_response', 'category', 'language'];
         const updates = Object.fromEntries(
             Object.entries(req.body).filter(([k]) => ALLOWED.includes(k))
         );

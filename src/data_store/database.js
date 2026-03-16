@@ -221,6 +221,27 @@ try {
   db.exec(`ALTER TABLE leads ADD COLUMN gap_opportunity TEXT DEFAULT ''`);
 } catch { /* column already exists */ }
 
+// --- AI Language Targeting column ---
+try {
+  db.exec(`ALTER TABLE leads ADD COLUMN language TEXT DEFAULT 'foreign'`);
+  // One-time data migration for existing rows (if they haven't been tagged yet)
+  const isVietnamese = (text) => {
+    if (!text) return false;
+    return /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(text);
+  };
+  const unclassified = db.prepare("SELECT id, content FROM leads WHERE language = 'foreign'").all();
+  if (unclassified.length > 0) {
+    db.transaction(() => {
+      const updateLang = db.prepare("UPDATE leads SET language = 'vietnamese' WHERE id = ?");
+      for (const lead of unclassified) {
+        if (isVietnamese(lead.content)) {
+          updateLang.run(lead.id);
+        }
+      }
+    })();
+  }
+} catch { /* column already exists or migration failed */ }
+
 // --- Sales Activities table (interaction timeline) ---
 db.exec(`
   CREATE TABLE IF NOT EXISTS sales_activities (
@@ -505,7 +526,7 @@ const insertLead = db.prepare(`
 const LEADS_LIST_COLS = `id, platform, author_name, author_url, author_avatar, post_url,
   score, category, summary, urgency, status, role, source_group,
   assigned_to, claimed_by, claimed_at, deal_value, winner_staff,
-  pain_score, spam_score, item_type, notes, created_at, post_created_at`;
+  pain_score, spam_score, item_type, notes, language, created_at, post_created_at`;
 
 const getLeads = (filters = {}) => {
   let query = `SELECT ${LEADS_LIST_COLS} FROM leads WHERE 1=1`;
@@ -514,6 +535,10 @@ const getLeads = (filters = {}) => {
   if (filters.platform) {
     query += ' AND platform = @platform';
     params.platform = filters.platform;
+  }
+  if (filters.language) {
+    query += ' AND language = @language';
+    params.language = filters.language;
   }
   if (filters.category) {
     const cat = filters.category;
@@ -579,6 +604,8 @@ const updateLeadStatus = db.prepare(`
 const _statsSummary = db.prepare(`
   SELECT
     COUNT(*) as total,
+    SUM(CASE WHEN language = 'vietnamese' THEN 1 ELSE 0 END) as totalViet,
+    SUM(CASE WHEN language = 'foreign' THEN 1 ELSE 0 END) as totalForeign,
     SUM(CASE WHEN date(created_at) = date('now') THEN 1 ELSE 0 END) as today,
     SUM(CASE WHEN score >= 80 THEN 1 ELSE 0 END) as highValue,
     ROUND(AVG(CASE WHEN score > 0 THEN score END)) as avgScore
@@ -596,6 +623,8 @@ const getStats = () => {
 
   return {
     total: summary.total || 0,
+    totalViet: summary.totalViet || 0,
+    totalForeign: summary.totalForeign || 0,
     today: summary.today || 0,
     highValue: summary.highValue || 0,
     avgScore: Math.round(summary.avgScore || 0),
