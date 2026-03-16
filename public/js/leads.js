@@ -243,7 +243,26 @@ function renderClosingRoom(lead) {
   const status = statusMap[lead.status] || statusMap['new'];
 
   const author = escapeHtml(lead.author_name || 'Unknown');
-  const content = escapeHtml(lead.content || '—');
+
+  // Clean raw scraped content
+  let rawContent = lead.content || '—';
+  if (lead.platform === 'facebook') {
+    rawContent = rawContent.replace(/(Facebook\n)+/gi, ''); // remove facebook watermark
+    let bulletIdx = rawContent.indexOf('·\n');
+    if (bulletIdx === -1) bulletIdx = rawContent.indexOf('· \n'); // some browsers add space
+    if (bulletIdx !== -1 && bulletIdx < 500) {
+      rawContent = rawContent.substring(bulletIdx + 2);
+    }
+    const stops = ['Like\nComment', 'Thích\nBình luận', 'Tất cả cảm xúc:', 'All reactions:'];
+    for (const s of stops) {
+      const idx = rawContent.indexOf(s);
+      if (idx !== -1) rawContent = rawContent.substring(0, idx);
+    }
+    // Remove isolated "+ number" before reactions often found
+    rawContent = rawContent.replace(/\+\d+\n$/, '');
+  }
+  const content = escapeHtml(rawContent.trim() || '—');
+
   const summary = escapeHtml(lead.summary || '');
   const gap = escapeHtml(lead.gap_opportunity || '');
   const postDateStr = lead.post_created_at || lead.scraped_at || lead.created_at;
