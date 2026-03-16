@@ -207,6 +207,10 @@ async function _getGroupPostsInner(groupUrl, groupName, account = null) {
                         const strong = unit.querySelector('strong');
                         if (strong && (strong.innerText?.trim()?.length || 0) < 40) authorName = strong.innerText?.trim() || 'Unknown';
                     }
+                    if (!authorUrl) {
+                        const userLink = unit.querySelector('a[href*="/user/"]');
+                        if (userLink) authorUrl = userLink.href.split('?')[0];
+                    }
                     const svgImg = unit.querySelector('image[href], image[xlink\\:href]');
                     if (svgImg) authorAvatar = svgImg.getAttribute('href') || svgImg.getAttribute('xlink:href') || '';
                     if (!authorAvatar) {
