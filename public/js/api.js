@@ -88,6 +88,17 @@ async function loadLeads() {
     }
 }
 
+async function loadLeadById(id) {
+    try {
+        const res = await authFetch(`/api/leads/${id}`);
+        const { data } = await res.json();
+        return data; // returns full lead object including content and original_post
+    } catch (err) {
+        console.error('Failed to load full lead:', err);
+        return null;
+    }
+}
+
 async function loadIgnoredLeads() {
     try {
         const res = await authFetch(`/api/leads?status=ignored`);
