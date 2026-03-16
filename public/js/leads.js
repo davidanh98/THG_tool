@@ -24,17 +24,12 @@ function renderLeadsList(leadsArray, gridId = 'leadsGrid') {
   console.log('[THG] renderLeadsList:', leadsArray.length, 'in, cat:', currentCat, ', gridId:', gridId);
 
 
-  const isVietnamese = (text) => {
-    if (!text) return false;
-    return /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(text);
-  };
-
   const filteredLeads = leadsArray.filter(lead => {
     if (gridId === 'ignoredGrid') return true;
 
     if (currentCat && currentCat !== 'All' && currentCat !== 'Foreign-All' && currentCat !== 'Viet-All') {
       let svcCat = currentCat;
-      const isViet = isVietnamese(lead.content || '');
+      const isViet = (lead.language === 'vietnamese');
 
       // Handle Geography Split
       if (currentCat.startsWith('Foreign-')) {
@@ -60,9 +55,9 @@ function renderLeadsList(leadsArray, gridId = 'leadsGrid') {
         }
       }
     } else if (currentCat === 'Foreign-All') {
-      if (isVietnamese(lead.content || '')) return false;
+      if (lead.language === 'vietnamese') return false;
     } else if (currentCat === 'Viet-All') {
-      if (!isVietnamese(lead.content || '')) return false;
+      if (lead.language !== 'vietnamese') return false;
     }
 
     if (!filterDate && !filterTime) return true;
@@ -181,6 +176,12 @@ function renderLeadTableRow(lead, gridId) {
     ? `<a href="${rawAuthorUrl}" target="_blank" rel="noopener noreferrer" title="👤 Xem profile người đăng" class="author-name author-link-cell">${author}</a>`
     : `<span class="author-name">${author}</span>`;
 
+  // ── Language Toggle ──
+  const lang = lead.language || 'foreign';
+  const langIcon = lang === 'vietnamese' ? '🇻🇳' : '🌍';
+  const langTitle = lang === 'vietnamese' ? 'Khách Việt Nam - Bấm đổi thành Nước Ngoài' : 'Khách Ngoại Quốc - Bấm đổi thành Việt Nam';
+  const langToggle = `<button onclick="toggleLanguage(event, ${lead.id}, '${lang}')" title="${langTitle}" style="background:none;border:none;cursor:pointer;font-size:1.1rem;padding:0;margin-right:6px;transition:transform 0.1s" onmousedown="this.style.transform='scale(0.8)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">${langIcon}</button>`;
+
   return `
     <tr class="ant-tr${isClaimed ? ' ant-tr-claimed' : ''}${score >= 80 ? ' hot-lead-row' : ''}" onclick="openLeadDetail(${lead.id})" title="Click to open The Closing Room">
       <td class="ant-td" style="text-align:center">
@@ -196,8 +197,9 @@ function renderLeadTableRow(lead, gridId) {
         </div>
       </td>
       <td class="ant-td" onclick="event.stopPropagation()">
-        <div class="author-cell">
+        <div class="author-cell" style="display:flex; align-items:center">
           ${urgencyDot}
+          ${langToggle}
           ${sellerEl}
           ${isClaimed ? '<span class="claimed-badge" title="Being handled">⚡</span>' : ''}
         </div>
@@ -231,6 +233,27 @@ function renderLeadTableRow(lead, gridId) {
 function renderCompactLeadCard(lead) {
   return renderLeadTableRow(lead, 'leadsGrid');
 }
+
+window.toggleLanguage = async function (event, id, currentLang) {
+  event.stopPropagation();
+  const newLang = currentLang === 'vietnamese' ? 'foreign' : 'vietnamese';
+  try {
+    const res = await authFetch('/api/leads/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language: newLang })
+    });
+    if (res.ok) {
+      const lead = AppState.leads.find(l => l.id === id);
+      if (lead) lead.language = newLang;
+      // Re-evaluate display and counts
+      if (typeof window.loadLeads === 'function') await window.loadLeads();
+      else renderLeadsList(AppState.leads, 'leadsGrid');
+    }
+  } catch (e) {
+    console.error('Failed to toggle language', e);
+  }
+};
 
 
 async function openLeadDetail(leadId) {

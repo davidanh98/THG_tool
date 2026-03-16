@@ -31,6 +31,8 @@ async function loadStats() {
         const { data } = await res.json();
         const statTotalForeign = document.getElementById('statTotalForeign');
         const statTotalViet = document.getElementById('statTotalViet');
+        if (statTotalForeign) statTotalForeign.textContent = data.totalForeign || 0;
+        if (statTotalViet) statTotalViet.textContent = data.totalViet || 0;
         document.getElementById('statHighValue').textContent = data.highValue || 0;
         document.getElementById('statAvgScore').textContent = data.avgScore || 0;
         document.getElementById('tabLeadsCount').textContent = data.total || 0;
@@ -60,17 +62,24 @@ async function loadLeads() {
     try {
         const params = new URLSearchParams();
         const platform = document.getElementById('filterPlatform')?.value || '';
-        let category = AppState.currentCategory || '';
         const status = document.getElementById('filterStatus')?.value || '';
         const minScore = document.getElementById('filterScore')?.value || '';
         const search = document.getElementById('filterSearch')?.value || '';
 
-        // Strip UI-specific prefixes before sending to backend DB
-        if (category.startsWith('Foreign-')) category = category.replace('Foreign-', '');
-        else if (category.startsWith('Viet-')) category = category.replace('Viet-', '');
+        // Handle language prefix from the sidebar UI and map it to DB columns
+        let category = AppState.currentCategory || '';
+        let language = '';
+        if (category.startsWith('Foreign-')) {
+            language = 'foreign';
+            category = category.replace('Foreign-', '');
+        } else if (category.startsWith('Viet-')) {
+            language = 'vietnamese';
+            category = category.replace('Viet-', '');
+        }
 
         if (platform) params.set('platform', platform);
         if (category && category !== 'All') params.set('category', category);
+        if (language) params.set('language', language);
         if (status) params.set('status', status);
         if (minScore) params.set('minScore', minScore);
         if (search) params.set('search', search);
@@ -83,33 +92,10 @@ async function loadLeads() {
         AppState.leads = data || [];
         console.log('[THG] loadLeads:', AppState.leads.length, 'leads, category:', AppState.currentCategory);
 
-        // ── Client-side count segmentation (because the backend only knows Services, not Languages)
-        let displayCount = count || 0;
-        const currentCat = AppState.currentCategory || '';
-
-        const isVietnamese = (text) => {
-            if (!text) return false;
-            return /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(text);
-        };
-
-        const totalVietCount = AppState.leads.filter(l => isVietnamese(l.content || '')).length;
-        const totalForeignCount = AppState.leads.length - totalVietCount;
-
-        const statForeign = document.getElementById('statTotalForeign');
-        const statViet = document.getElementById('statTotalViet');
-        if (statForeign) statForeign.textContent = totalForeignCount;
-        if (statViet) statViet.textContent = totalVietCount;
-
-        if (currentCat.startsWith('Foreign-')) {
-            displayCount = totalForeignCount;
-        } else if (currentCat.startsWith('Viet-')) {
-            displayCount = totalVietCount;
-        }
-
         const leadsCountEl = document.getElementById('leadsCount');
         const tabLeadsCountEl = document.getElementById('tabLeadsCount');
-        if (leadsCountEl) leadsCountEl.textContent = `${displayCount} leads`;
-        if (tabLeadsCountEl) tabLeadsCountEl.textContent = displayCount;
+        if (leadsCountEl) leadsCountEl.textContent = `${count} leads`;
+        if (tabLeadsCountEl) tabLeadsCountEl.textContent = count;
         renderLeads();
     } catch (err) {
         console.error('Failed to load leads:', err);
