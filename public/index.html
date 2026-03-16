@@ -266,6 +266,15 @@
         <div id="leadsTab">
           <!-- ── MAIN LEADS VIEW (List/Grid) ── -->
           <div id="leadsMainView">
+
+            <!-- INLINE CATEGORY TABS -->
+            <div class="leads-category-tabs">
+              <button class="cat-tab-btn active" onclick="filterByMenu('All', this)">🌐 All Leads</button>
+              <button class="cat-tab-btn" onclick="filterByMenu('Fulfill', this)">📦 THG Fulfill</button>
+              <button class="cat-tab-btn" onclick="filterByMenu('Express', this)">✈️ THG Express</button>
+              <button class="cat-tab-btn" onclick="filterByMenu('Warehouse', this)">🏢 THG Warehouse</button>
+            </div>
+
             <div class="filter-bar">
               <label>🔎 Filter</label>
               <select class="filter-select" id="filterPlatform" onchange="loadLeads()">
@@ -290,8 +299,8 @@
               <select class="filter-select" id="filterTime" onchange="renderLeads()">
                 <option value="">All Times</option>
               </select>
-              <input type="text" class="filter-input" id="filterSearch" placeholder="Search content, author..."
-                oninput="debounceSearch()">
+              <input type="text" class="filter-input" id="filterSearch" autocomplete="new-password"
+                placeholder="Search content, author..." oninput="debounceSearch()">
               <div class="filter-spacer"></div>
               <button class="btn" onclick="clearAllLeads()"
                 style="font-size:0.85rem;padding:8px 14px;background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;">

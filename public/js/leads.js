@@ -159,7 +159,7 @@ function renderLeadTableRow(lead, gridId) {
     : `<span class="author-name">${author}</span>`;
 
   return `
-    <tr class="ant-tr${isClaimed ? ' ant-tr-claimed' : ''}" onclick="openLeadDetail(${lead.id})" title="Click to open The Closing Room">
+    <tr class="ant-tr${isClaimed ? ' ant-tr-claimed' : ''}${score >= 80 ? ' hot-lead-row' : ''}" onclick="openLeadDetail(${lead.id})" title="Click to open The Closing Room">
       <td class="ant-td" style="text-align:center">
         <div class="score-tag ${scoreClass}">
           <span class="score-num">${score}</span>
@@ -314,6 +314,13 @@ function renderClosingRoom(lead) {
           </div>
         </div>
 
+        <!-- Raw content card -->
+        <div class="cr-card">
+          <div class="cr-section-title">📄 Nội dung gốc</div>
+          <div class="cr-content-box" id="content-${lead.id}" style="white-space: pre-wrap;">${content}</div>
+          <button class="cr-expand-btn" onclick="toggleContent(${lead.id})">Xem thêm ▼</button>
+        </div>
+
         <!-- AI Analysis card -->
         ${summary || gap ? `
         <div class="cr-card">
@@ -339,13 +346,6 @@ function renderClosingRoom(lead) {
             <div class="cr-profit-value">💰 ${escapeHtml(lead.profit_estimate)}</div>
           </div>` : ''}
         </div>` : ''}
-
-        <!-- Raw content card -->
-        <div class="cr-card">
-          <div class="cr-section-title">📄 Nội dung gốc</div>
-          <div class="cr-content-box" id="content-${lead.id}">${content}</div>
-          <button class="cr-expand-btn" onclick="toggleContent(${lead.id})">Xem thêm ▼</button>
-        </div>
 
         <!-- Response / Notes / Agent tabs -->
         <div class="cr-card">
