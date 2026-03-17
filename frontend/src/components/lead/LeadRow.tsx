@@ -85,14 +85,14 @@ export default function LeadRow({ lead, onSelect }: LeadRowProps) {
             <td onClick={(e) => e.stopPropagation()}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                     <button
-                        className="lang-toggle"
+                        className={`lang-toggle ${lang === 'vietnamese' ? 'lang-toggle--vn' : 'lang-toggle--foreign'}`}
                         title={langTitle}
                         onClick={(e) => {
                             e.stopPropagation()
                             toggleLanguage(lead.id)
                         }}
                     >
-                        {langIcon}
+                        {langIcon} {lang === 'vietnamese' ? 'VN' : 'Foreign'}
                     </button>
                     {lead.author_url ? (
                         <a
