@@ -70,9 +70,8 @@ app.use(cookieParser());
 
 // ── Static files — React frontend (production) ──────────────────────────────
 const reactDistPath = path.join(__dirname, '..', 'frontend', 'dist');
-if (fs.existsSync(reactDistPath)) {
-    app.use(express.static(reactDistPath));
-}
+console.log(`[Server] 📂 React dist path: ${reactDistPath} (exists: ${fs.existsSync(reactDistPath)})`);
+app.use(express.static(reactDistPath));
 // Fallback: legacy public/ (only dev.html remains)
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -159,12 +158,14 @@ try {
 // ║  REACT SPA CATCH-ALL — serve index.html for all non-API   ║
 // ║  routes so React Router handles client-side navigation     ║
 // ╚═══════════════════════════════════════════════════════════╝
-if (fs.existsSync(path.join(reactDistPath, 'index.html'))) {
-    app.get('*', (req, res) => {
-        if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
-        res.sendFile(path.join(reactDistPath, 'index.html'));
+const reactIndexPath = path.join(reactDistPath, 'index.html');
+console.log(`[Server] 📄 React index.html: ${reactIndexPath} (exists: ${fs.existsSync(reactIndexPath)})`);
+app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
+    res.sendFile(reactIndexPath, (err) => {
+        if (err) res.status(500).send('Frontend not built. Run: cd frontend && npm run build');
     });
-}
+});
 
 // ╔═══════════════════════════════════════════════════════════╗
 // ║  START SERVER + GRACEFUL SHUTDOWN                         ║
