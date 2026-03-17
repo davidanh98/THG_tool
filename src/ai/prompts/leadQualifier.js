@@ -74,7 +74,13 @@ let consecutiveErrors = 0;
 const BATCH_SIZE = 10; // Posts per batch
 const BATCH_DELAY_MS = 3000; // 3s sleep between batches
 
-const PROVIDER_REGEX = /(chúng tôi nhận gửi|quy trình gửi hàng|lợi ích khi gửi hàng với chúng tôi|nhận gửi hàng đi|chuyên tuyến việt|cước phí cạnh tranh|cam kết giao tận tay|hỗ trợ tư vấn, chăm sóc khách hàng 24\/7|we offer fulfillment|shipping services from us|dịch vụ vận chuyển uy tín|không phát sinh chi phí|bao thuế bao luật|nhận pick up|đóng gói miễn phí|hút chân không|lh em ngay|lh em|liên hệ em|ib em ngay|ib em|inbox em|cmt em|chấm em|check ib|check inbox|dạ em nhận|em chuyên nhận|gửi hàng đi mỹ inbox|nhận vận chuyển|zalo: 0|tham khảo ngay|viettel post|epacket|saigonbay|nhận ship hàng|dịch vụ ship|cước ship|giá ship từ|bảng giá ship|đặt ship ngay|cam kết|chuyên gửi|nhận gửi|dịch vụ gửi|giao hàng nhanh|giao tận nơi|ship cod|bên em chuyên|bên em nhận|bên mình chuyên|bên mình nhận|anh.chị.*(tham khảo|liên hệ|ib|inbox)|giải pháp gửi hàng|ready to scale|from warehousing|we ship|we offer|contact us|whatsapp|xin phép admin|seller nên biết|nhận từ 1 đơn|chỉ từ \d+k|chỉ từ \d+đ|giá tốt nhất|nếu mọi người đang tìm|nếu anh.chị.*(cần|tìm|đang)|just launched.*(fulfillment|warehouse)|moving into our new|ecoli express|free quote|get started today|our warehouse|customs clearance|nhắn em để|nhắn em ngay|inbox ngay|mở rộng sản xuất|sẵn sàng cùng seller|xưởng.*sản xuất|fulfill trực tiếp|fulfill ngay tại|giá xưởng|giá gốc|báo giá|cần thêm thông tin.*nhắn|hỗ trợ.*nhanh nhất|đánh chiếm|siêu lợi nhuận|ưu đãi.*seller|chương trình.*ưu đãi|dm\s+for|dm\s+me|message\s+us|book\s+a\s+call|schedule\s+a\s+call|sign\s+up\s+now|sẵn sàng phục vụ|phục vụ.*seller|cung cấp dịch vụ|chúng tôi cung cấp|we\s+provide|we\s+specialize|our\s+service)/i;
+const PROVIDER_REGEX = /(chúng tôi nhận gửi|quy trình gửi hàng|lợi ích khi gửi hàng với chúng tôi|nhận gửi hàng đi|chuyên tuyến việt|cước phí cạnh tranh|cam kết giao tận tay|hỗ trợ tư vấn, chăm sóc khách hàng 24\/7|we offer fulfillment|shipping services from us|dịch vụ vận chuyển uy tín|không phát sinh chi phí|bao thuế bao luật|bao thuế 2 đầu|bao thuế|nhận pick up|đóng gói miễn phí|hút chân không|lh em ngay|lh em|liên hệ em|ib em ngay|ib em|ibox em|ibox ngay|inbox em|cmt em|chấm em|check ib|check inbox|dạ em nhận|em chuyên nhận|em chuyên vận chuyển|em chuyên gửi|em nhận ship|em nhận gửi|gửi hàng đi mỹ inbox|nhận vận chuyển|zalo: 0|tham khảo ngay|viettel post|epacket|saigonbay|nhận ship hàng|dịch vụ ship|cước ship|giá ship từ|bảng giá ship|đặt ship ngay|cam kết|chuyên gửi|nhận gửi|dịch vụ gửi|giao hàng nhanh|giao tận nơi|ship cod|bên em chuyên|bên em nhận|bên em có kho|bên em sẵn|bên mình chuyên|bên mình nhận|bên mình có kho|bên mình sẵn|anh.chị.*(tham khảo|liên hệ|ib|inbox|ibox)|giải pháp gửi hàng|ready to scale|from warehousing|we ship|we offer|contact us|whatsapp|xin phép admin|seller nên biết|nhận từ 1 đơn|chỉ từ \d+k|chỉ từ \d+đ|giá tốt nhất|nếu mọi người đang tìm|nếu anh.chị.*(cần|tìm|đang)|just launched.*(fulfillment|warehouse)|moving into our new|ecoli express|free quote|get started today|our warehouse|customs clearance|nhắn em để|nhắn em ngay|inbox ngay|mở rộng sản xuất|sẵn sàng cùng seller|xưởng.*sản xuất|fulfill trực tiếp|fulfill ngay tại|giá xưởng|giá gốc|báo giá|cần thêm thông tin.*nhắn|hỗ trợ.*nhanh nhất|đánh chiếm|siêu lợi nhuận|ưu đãi.*seller|chương trình.*ưu đãi|dm\s+for|dm\s+me|message\s+us|book\s+a\s+call|schedule\s+a\s+call|sign\s+up\s+now|sẵn sàng phục vụ|phục vụ.*seller|cung cấp dịch vụ|chúng tôi cung cấp|we\s+provide|we\s+specialize|our\s+service|tele\s*:\s*@|\bpm\s+em\b|\bpm\s+mình\b|gom đồ hộ|nhận mua hộ|nhận mua và gom|đường sea chỉ từ|đường bay chỉ từ|bay cargo|cước.{0,10}\d+[eđdk]\/kg|sẵn kho ở|em sẵn kho|hỗ trợ đóng gói|hỗ trợ lưu kho|pick.?up tận nơi|pick.?up tận nhà|free nhận đồ|free nhận hàng|nhận đồ tại nhà|gom hàng|xử lý trọn gói|tận tâm trên từng|đừng chần chừ|đừng bỏ lỡ|mở ưu đãi|cước.*chỉ\s*(?:từ\s*)?\d|bay thẳng.*\d+[eđdk]|traking|tracking theo dõi)/i;
+
+// Pricing regex — catches logistics pricing ads: 159.000đ/kg, $2.5/kg, 8.2e/kg
+const PRICING_AD_REGEX = /(?:cước|giá|price|rate|cost|phí)\s*.{0,20}\d+[.,]?\d*\s*(?:đ|d|k|usd|\$|e)\/(?:kg|kiện|cbm|m3|đơn|order|pcs)/i;
+
+// Company name in content — "Phúc An Logistics", "XYZ Express", etc.
+const COMPANY_IN_CONTENT_REGEX = /(?:[A-ZÀ-Ỹ][a-zà-ỹ]+\s+){1,3}(?:logistics|express|shipping|cargo|freight|fulfillment|warehouse|vận chuyển|chuyển phát)/i;
 
 // SERVICE_AD_REGEX — catches service ads with SELF-PROMOTION CONTEXT
 // These patterns REQUIRE provider self-identification words ("bên em", "bên mình", "chúng tôi")
@@ -90,7 +96,7 @@ const TQ_TO_VN_REGEX = /(nhập hàng.{0,20}(trung quốc|tq|quảng châu|1688|
 const US_TO_VN_REGEX = /(gửi (hàng|đồ|quà).{0,15}(về|ve).{0,15}(việt nam|vn|quê)|ship.{0,10}(hàng|đồ).{0,10}(về|ve).{0,10}(việt|vn)|chuyển (hàng|đồ).{0,15}(từ|tu).{0,10}(mỹ|us|america).{0,10}(về|ve).{0,10}(việt|vn))/i;
 
 // Blacklist: posts from these accounts are NEVER leads (they're competitors/providers)
-const BLACKLIST_AUTHORS = ['merchize', 'bestexpressvn', 'boxmeglobal', 'printify', 'shopify', 'printful', 'amzprep', 'shiphype', 'salesupply', 'viettelpost', 'viettel post', 'saigonbay', 'ak47express', 'burgerprints', 'onospod', 'cj dropshipping', 'omega fulfillment', 'yourfulfillment', 'lizyprint', 'lizy print', 'tiximax', 'ecoli express', 'northpointe', 'northpointe logistics', 'sweats collective'];
+const BLACKLIST_AUTHORS = ['merchize', 'bestexpressvn', 'boxmeglobal', 'printify', 'shopify', 'printful', 'amzprep', 'shiphype', 'salesupply', 'viettelpost', 'viettel post', 'saigonbay', 'ak47express', 'burgerprints', 'onospod', 'cj dropshipping', 'omega fulfillment', 'yourfulfillment', 'lizyprint', 'lizy print', 'tiximax', 'ecoli express', 'northpointe', 'northpointe logistics', 'sweats collective', 'phúc an', 'phuc an', 'nynn hoàng', 'nynn hoang', 'roxieus'];
 
 // Must-have: posts without ANY business keyword are skipped (saves AI credits)
 const MUST_HAVE_KEYWORDS = /(ship|vận chuyển|fulfillment|fulfill|pod|dropship|gửi hàng|tuyến|kho|warehouse|giá|báo giá|tìm đơn vị|logistics|3pl|fba|ecommerce|e-commerce|seller|bán hàng|order|đơn hàng|tracking|inventory|supplier|basecost|print on demand|freight|cargo|express|đóng gói|cần tìm|xưởng|prep|xin|nhờ|hỏi|tìm|cần|review|recommend|line us|ddp|forwarder|thông quan|customs|lcl|fcl|cbm|pallet|container|amazon|tiktok shop|etsy|shopify|mua hàng|hàng từ|gửi về|ship về|nhờ ai|ai biết|chỗ nào|ở đâu|mua ở|đặt hàng|order hàng|mua sỉ|nhập hàng|nguồn hàng|đồ từ|hàng việt|hàng trung)/i;
@@ -492,6 +498,20 @@ async function classifyPosts(posts) {
             continue;
         }
 
+        // ── LAYER 2e: Pricing ad — "cước 159.000đ/kg", "$2.5/kg" ──
+        if (PRICING_AD_REGEX.test(content) && spamScore >= 1) {
+            preFiltered.push({ ...post, isLead: false, role: 'provider', score: 0, category: 'NotRelevant', summary: 'Pricing ad detected', urgency: 'low', buyerSignals: '', spamScore, painScore: 0 });
+            console.log(`[Sieve] 💰 Pricing ad block: ${content.substring(0, 80)}...`);
+            continue;
+        }
+
+        // ── LAYER 2f: Company name in content — "Phúc An Logistics", "XYZ Express" ──
+        if (COMPANY_IN_CONTENT_REGEX.test(content) && (PROVIDER_REGEX.test(content) || spamScore >= 2)) {
+            preFiltered.push({ ...post, isLead: false, role: 'provider', score: 0, category: 'NotRelevant', summary: 'Provider company name in content', urgency: 'low', buyerSignals: '', spamScore, painScore: 0 });
+            console.log(`[Sieve] 🏢 Company name block: ${content.substring(0, 80)}...`);
+            continue;
+        }
+
         if (IRRELEVANT_REGEX.test(content)) {
             preFiltered.push({ ...post, ...makeFallback(), summary: 'Không liên quan', spamScore, painScore });
             continue;
@@ -628,6 +648,22 @@ async function classifyPosts(posts) {
                         merged.score = 0;
                         merged.summary = 'Post-AI safety: high spam + provider bio';
                         console.log(`[Classifier] 🛡️ Post-AI blocked spam+bio: ${postContent.substring(0, 60)}`);
+                    }
+                    // Pricing ad in content
+                    else if (PRICING_AD_REGEX.test(postContent) && postSpam >= 1) {
+                        merged.isLead = false;
+                        merged.role = 'provider';
+                        merged.score = 0;
+                        merged.summary = 'Post-AI safety: pricing ad';
+                        console.log(`[Classifier] 🛡️ Post-AI blocked pricing ad: ${postContent.substring(0, 60)}`);
+                    }
+                    // Company name + provider signals
+                    else if (COMPANY_IN_CONTENT_REGEX.test(postContent) && postSpam >= 2) {
+                        merged.isLead = false;
+                        merged.role = 'provider';
+                        merged.score = 0;
+                        merged.summary = 'Post-AI safety: company name detected';
+                        console.log(`[Classifier] 🛡️ Post-AI blocked company: ${postContent.substring(0, 60)}`);
                     }
                     // category NotRelevant but AI gave high score — force block
                     else if (merged.category === 'NotRelevant') {
