@@ -402,7 +402,7 @@ function makeFallback() {
 // ═══════════════════════════════════════════════════════
 async function classifyPosts(posts) {
     console.log(`[Classifier] 🧠 Classifying ${posts.length} posts (Agent-powered)...`);
-    console.log(`[Classifier] 🔄 Models: ${AI_MODELS.join(' → ')}`);
+    console.log(`[Classifier] 🔄 Providers: ${PROVIDERS.map(p => p.name).join(' → ')} → Gemini`);
 
     const toClassify = [];
     const preFiltered = [];
@@ -533,14 +533,14 @@ async function classifyPosts(posts) {
     console.log(`[Classifier] 🔍 Pre-filter: ${preFiltered.length} posts skipped locally, ${toClassify.length} posts → AI`);
     if (intentTagged > 0) console.log(`[Classifier] 🎯 Intent detected in ${intentTagged} posts (score boost active)`);
 
-    const BATCH_SIZE = 5;
+    const PIPELINE_BATCH = 5;
     const results = [...preFiltered];
-    currentModelIndex = 0;
+    activeProviderIndex = 0;
     consecutiveErrors = 0;
     let stopEarly = false;
 
-    for (let i = 0; i < toClassify.length && !stopEarly; i += BATCH_SIZE) {
-        const batch = toClassify.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < toClassify.length && !stopEarly; i += PIPELINE_BATCH) {
+        const batch = toClassify.slice(i, i + PIPELINE_BATCH);
         try {
             const batchResults = await classifyBatch(batch);
             if (consecutiveErrors >= 5) stopEarly = true;
@@ -601,13 +601,41 @@ async function classifyPosts(posts) {
                     }
                 }
 
-                // ── POST-BOOST SAFETY NET: catch service ads that slipped through AI ──
-                if (merged.isLead && merged.spamScore >= 3 && SERVICE_AD_REGEX.test(batch[j].content || '')) {
-                    merged.isLead = false;
-                    merged.role = 'provider';
-                    merged.score = 0;
-                    merged.summary = 'Post-boost safety: service ad detected (spamScore=' + merged.spamScore + ')';
-                    console.log(`[Classifier] 🛡️ Post-boost safety net caught service ad: ${(batch[j].content || '').substring(0, 60)}`);
+                // ── POST-BOOST SAFETY NET: catch provider posts that AI wrongly scored high ──
+                const postContent = batch[j].content || '';
+                const postSpam = batch[j]._spamScore || 0;
+                if (merged.isLead) {
+                    // Re-check PROVIDER_REGEX after AI — critical for false positive prevention
+                    if (PROVIDER_REGEX.test(postContent)) {
+                        merged.isLead = false;
+                        merged.role = 'provider';
+                        merged.score = 0;
+                        merged.summary = 'Post-AI safety: provider regex match (AI false positive)';
+                        console.log(`[Classifier] 🛡️ Post-AI blocked provider: ${postContent.substring(0, 80)}`);
+                    }
+                    // Service ad with any spam signal
+                    else if (SERVICE_AD_REGEX.test(postContent) && postSpam >= 2) {
+                        merged.isLead = false;
+                        merged.role = 'provider';
+                        merged.score = 0;
+                        merged.summary = 'Post-AI safety: service ad (spamScore=' + postSpam + ')';
+                        console.log(`[Classifier] 🛡️ Post-AI blocked service ad: ${postContent.substring(0, 80)}`);
+                    }
+                    // High spam + provider keywords in bio
+                    else if (postSpam >= 4 && BIO_PROVIDER_REGEX.test(batch[j].author_bio || '')) {
+                        merged.isLead = false;
+                        merged.role = 'provider';
+                        merged.score = 0;
+                        merged.summary = 'Post-AI safety: high spam + provider bio';
+                        console.log(`[Classifier] 🛡️ Post-AI blocked spam+bio: ${postContent.substring(0, 60)}`);
+                    }
+                    // category NotRelevant but AI gave high score — force block
+                    else if (merged.category === 'NotRelevant') {
+                        merged.isLead = false;
+                        merged.role = 'irrelevant';
+                        merged.score = 0;
+                        merged.summary = 'Post-AI safety: NotRelevant category';
+                    }
                 }
                 delete merged._intent;
 
@@ -626,10 +654,10 @@ async function classifyPosts(posts) {
             for (const post of batch) results.push({ ...post, ...makeFallback() });
         }
 
-        const done = Math.min(i + BATCH_SIZE, toClassify.length);
-        console.log(`[Classifier]   → ${done}/${toClassify.length} classified (batch ${Math.ceil(done / BATCH_SIZE)}/${Math.ceil(toClassify.length / BATCH_SIZE)}, model: ${AI_MODELS[currentModelIndex]})`);
+        const done = Math.min(i + PIPELINE_BATCH, toClassify.length);
+        console.log(`[Classifier]   → ${done}/${toClassify.length} classified (batch ${Math.ceil(done / PIPELINE_BATCH)}/${Math.ceil(toClassify.length / PIPELINE_BATCH)}, provider: ${PROVIDERS[activeProviderIndex]?.name || 'Gemini'})`);
 
-        if (i + BATCH_SIZE < toClassify.length && !stopEarly) await delay(1000);
+        if (i + PIPELINE_BATCH < toClassify.length && !stopEarly) await sleep(1000);
     }
 
     if (stopEarly) {
