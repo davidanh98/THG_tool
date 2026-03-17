@@ -25,6 +25,18 @@ try {
     }
 } catch (e) { }
 
+// ═══ Gemini Rate Limiter (Free Tier: 15 RPM = 4s between calls) ═══
+let lastGeminiCall = 0;
+const GEMINI_MIN_INTERVAL_MS = 4200; // ~14 RPM to stay safely under 15 RPM
+async function geminiThrottle() {
+    const now = Date.now();
+    const elapsed = now - lastGeminiCall;
+    if (elapsed < GEMINI_MIN_INTERVAL_MS) {
+        await new Promise(r => setTimeout(r, GEMINI_MIN_INTERVAL_MS - elapsed));
+    }
+    lastGeminiCall = Date.now();
+}
+
 const AI_MODELS = [
     config.AI_MODEL || 'llama-3.3-70b-versatile',
     'meta-llama/llama-4-scout-17b-16e-instruct',
@@ -277,6 +289,11 @@ async function classifyBatch(posts) {
             }
             if (isLimit) {
                 consecutiveErrors++;
+                // Wait before falling back to Gemini (saves quota)
+                const waitSec = Math.min(30, 5 * consecutiveErrors);
+                console.warn(`[Classifier] ⏳ All Groq models rate-limited. Waiting ${waitSec}s before Gemini fallback...`);
+                await new Promise(r => setTimeout(r, waitSec * 1000));
+                await geminiThrottle();
                 const geminiResults = await classifyBatchWithGemini(posts);
                 if (geminiResults) return geminiResults;
             }
@@ -340,10 +357,12 @@ async function classifyPost(post) {
                 continue;
             }
             console.error('[Classifier] ✗ Error:', err.message);
+            await geminiThrottle();
             const geminiResult = await classifyWithGemini(post);
             return geminiResult || makeFallback();
         }
     }
+    await geminiThrottle();
     const geminiResult = await classifyWithGemini(post);
     return geminiResult || makeFallback();
 }
@@ -369,6 +388,30 @@ async function classifyBatchWithGemini(posts) {
         if (!Array.isArray(arr)) return null;
         return arr.map(r => parseResult(r));
     } catch (err) {
+        // If Gemini 429, wait and retry once
+        if (err.message?.includes('429') || err.message?.includes('Too Many Requests')) {
+            console.warn('[Classifier] ⏳ Gemini 429 — waiting 60s before retry...');
+            await new Promise(r => setTimeout(r, 60000));
+            try {
+                const combinedContent = posts.map(p => p.content || '').join(' ');
+                const dynamicPrompt = buildSystemPrompt(combinedContent);
+                const postsList = posts.map((p, i) =>
+                    `[POST ${i + 1}] Platform: ${p.platform}\nContent: ${(p.content || '').substring(0, 600)}`
+                ).join('\n\n');
+                const prompt = dynamicPrompt + `\n\nPhân tích ${posts.length} bài. Trả về {"results": [...]}:\n\n${postsList}`;
+                const result = await geminiModel.generateContent(prompt);
+                const text = result.response.text();
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) return null;
+                const parsed = JSON.parse(jsonMatch[0]);
+                const arr = parsed.results || Object.values(parsed).find(v => Array.isArray(v));
+                if (!Array.isArray(arr)) return null;
+                return arr.map(r => parseResult(r));
+            } catch (retryErr) {
+                console.error('[Classifier] ❌ Gemini batch retry failed:', retryErr.message);
+                return null;
+            }
+        }
         console.error('[Classifier] ❌ Gemini batch failed:', err.message);
         return null;
     }
@@ -386,6 +429,21 @@ async function classifyWithGemini(post) {
         if (!jsonMatch) return null;
         return parseResult(JSON.parse(jsonMatch[0]));
     } catch (err) {
+        // If Gemini 429, wait 60s and retry once
+        if (err.message?.includes('429') || err.message?.includes('Too Many Requests')) {
+            console.warn('[Classifier] ⏳ Gemini 429 — waiting 60s...');
+            await new Promise(r => setTimeout(r, 60000));
+            try {
+                const dynamicPrompt = buildSystemPrompt(post.content);
+                const userPrompt = buildUserPrompt(post);
+                const prompt = dynamicPrompt + '\n\n' + userPrompt;
+                const result = await geminiModel.generateContent(prompt);
+                const text = result.response.text();
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) return null;
+                return parseResult(JSON.parse(jsonMatch[0]));
+            } catch { /* give up */ }
+        }
         console.error('[Classifier] ❌ Gemini failed:', err.message);
         return null;
     }
