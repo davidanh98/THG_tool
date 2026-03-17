@@ -22,7 +22,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function Sidebar() {
     const location = useLocation()
-    const stats = useLeadStore((s) => s.stats)
+    const leadCount = useLeadStore((s) => s.leads.length)
     const [scanning, setScanning] = useState(false)
 
     const triggerScan = async () => {
@@ -62,8 +62,8 @@ export default function Sidebar() {
                             <div className={`sidebar-item ${isActive ? 'sidebar-item--active' : ''}`}>
                                 <span className="sidebar-item-icon">{item.icon}</span>
                                 <span>{item.label}</span>
-                                {item.to === '/' && stats?.today ? (
-                                    <span className="sidebar-item-badge">{stats.today}</span>
+                                {item.to === '/' && leadCount > 0 ? (
+                                    <span className="sidebar-item-badge">{leadCount}</span>
                                 ) : null}
                                 {item.badge && (
                                     <span className="sidebar-item-badge" style={

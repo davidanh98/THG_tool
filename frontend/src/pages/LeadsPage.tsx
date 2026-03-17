@@ -12,9 +12,15 @@ export default function LeadsPage() {
     useEffect(() => {
         loadLeads()
         loadStats()
-        const interval = setInterval(loadLeads, 60_000)
+        const interval = setInterval(() => { loadLeads(); loadStats(); }, 60_000)
         return () => clearInterval(interval)
     }, [loadLeads, loadStats])
+
+    // Compute stats from actual loaded leads (ensures sync after delete)
+    const totalForeign = leads.filter(l => l.language === 'foreign').length
+    const totalViet = leads.filter(l => l.language !== 'foreign').length
+    const highValue = leads.filter(l => (l.score || 0) >= 80).length
+    const avgScore = leads.length > 0 ? Math.round(leads.reduce((sum, l) => sum + (l.score || 0), 0) / leads.length) : 0
 
     // If a lead is selected, show the Closing Room
     if (selectedLeadId) {
@@ -31,22 +37,22 @@ export default function LeadsPage() {
                 <div className="stat-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', gridColumn: 'span 2' }}>
                     <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>🌍 Foreign</div>
-                        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#3b82f6' }}>{stats?.totalForeign || 0}</div>
+                        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#3b82f6' }}>{totalForeign}</div>
                     </div>
                     <div style={{ width: 1, height: 40, background: 'var(--border)' }} />
                     <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>🇻🇳 Vietnamese</div>
-                        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#ef4444' }}>{stats?.totalViet || 0}</div>
+                        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#ef4444' }}>{totalViet}</div>
                     </div>
                 </div>
                 <div className="stat-card">
                     <div className="stat-card-label" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>High Value</div>
-                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700 }}>{stats?.highValue || 0}</div>
+                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700 }}>{highValue}</div>
                     <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>Score ≥ 80</div>
                 </div>
                 <div className="stat-card">
                     <div className="stat-card-label" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Avg Score</div>
-                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700 }}>{stats?.avgScore || 0}</div>
+                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700 }}>{avgScore}</div>
                 </div>
                 <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/inbox')}>
                     <div className="stat-card-label" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>📬 Inbox</div>
