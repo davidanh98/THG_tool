@@ -149,9 +149,23 @@ export default function LeadRow({ lead, onSelect }: LeadRowProps) {
             </td>
 
             <td onClick={(e) => e.stopPropagation()}>
-                <button className="btn btn-secondary btn-sm" onClick={() => onSelect(lead.id)}>
-                    View →
-                </button>
+                <div style={{ display: 'flex', gap: 4 }}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => onSelect(lead.id)}>
+                        View →
+                    </button>
+                    <button
+                        className="btn btn-sm"
+                        title="Xóa lead"
+                        style={{ background: 'transparent', border: '1px solid var(--border)', color: '#ef4444', padding: '4px 6px', cursor: 'pointer', borderRadius: 6 }}
+                        onClick={async () => {
+                            if (!confirm(`Xóa lead #${lead.id} — ${lead.author_name || 'Unknown'}?`)) return
+                            const { removeLead } = useLeadStore.getState()
+                            await removeLead(lead.id)
+                        }}
+                    >
+                        🗑️
+                    </button>
+                </div>
             </td>
         </tr>
     )

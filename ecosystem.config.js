@@ -60,7 +60,7 @@ module.exports = {
         // ── Scraper Worker (Playwright — Heavy) ──────────────────────────
         {
             name: 'thg-scraper',
-            script: 'src/workers/scraperWorker.js',
+            script: 'src/infra/workers/scraperWorker.js',
             cwd: __dirname,
 
             exec_mode: 'fork',
@@ -100,7 +100,7 @@ module.exports = {
         // ── AI Worker (Classification — I/O-bound) ───────────────────────
         {
             name: 'thg-ai-worker',
-            script: 'src/workers/aiWorker.js',
+            script: 'src/infra/workers/aiWorker.js',
             cwd: __dirname,
 
             exec_mode: 'fork',
