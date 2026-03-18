@@ -7,7 +7,7 @@
  * - Supports 3 tones: friendly / professional / urgent
  * - Auto-detects language (VN / EN)
  * 
- * Provider cascade: Cerebras → Sambanova → Groq → Gemini
+ * Provider cascade: Ollama (free/unlimited) → Cerebras → Sambanova → Groq → Gemini
  * 
  * @module ai/outreachGenerator
  */
@@ -19,10 +19,23 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const config = require('../config');
 
 // ─── Provider Clients ────────────────────────────────────────────────────────
+let ollamaClient = null;
 let cerebras = null;
 let sambanova = null;
 let groq = null;
 let geminiModel = null;
+
+try {
+    // Ollama — self-hosted, FREE, no rate limit (primary)
+    const OLLAMA_BASE_URL = config.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+    ollamaClient = new OpenAI({
+        apiKey: 'ollama',
+        baseURL: `${OLLAMA_BASE_URL}/v1`,
+    });
+    console.log(`[OutreachGen] ✅ Ollama loaded (primary — ${config.OLLAMA_MODEL || 'qwen2.5:3b'} @ ${OLLAMA_BASE_URL})`);
+} catch (e) {
+    console.warn(`[OutreachGen] ⚠️ Ollama not available: ${e.message}`);
+}
 
 try {
     if (config.CEREBRAS_API_KEY) {
@@ -42,11 +55,16 @@ try {
     console.error(`[OutreachGen] ⚠️ Provider init error: ${e.message}`);
 }
 
+const OLLAMA_MODEL = config.OLLAMA_MODEL || 'qwen2.5:3b';
+
 const PROVIDERS = [
-    { name: 'Cerebras', client: cerebras, model: 'llama-3.3-70b', type: 'openai' },
-    { name: 'Sambanova', client: sambanova, model: 'Meta-Llama-3.3-70B-Instruct', type: 'openai' },
-    { name: 'Groq', client: groq, model: 'llama-3.1-8b-instant', type: 'groq' },
+    { name: 'Ollama', client: ollamaClient, model: OLLAMA_MODEL, type: 'openai', timeout: 30000 },
+    { name: 'Cerebras', client: cerebras, model: 'llama-3.3-70b', type: 'openai', timeout: 15000 },
+    { name: 'Sambanova', client: sambanova, model: 'Meta-Llama-3.3-70B-Instruct', type: 'openai', timeout: 15000 },
+    { name: 'Groq', client: groq, model: 'llama-3.1-8b-instant', type: 'groq', timeout: 15000 },
 ].filter(p => p.client);
+
+console.log(`[OutreachGen] 🔄 Provider chain: ${PROVIDERS.map(p => p.name).join(' → ')}`);
 
 // ─── THG Service Context ─────────────────────────────────────────────────────
 const THG_CONTEXT = `
@@ -174,14 +192,20 @@ Return ONLY the comment text.`;
 /**
  * Call an OpenAI-compatible provider
  */
-async function callOpenAIProvider(client, model, prompt) {
-    const response = await client.chat.completions.create({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 400,
-    });
-    return response.choices[0].message.content.trim();
+async function callOpenAIProvider(client, model, prompt, timeoutMs = 15000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await client.chat.completions.create({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.7,
+            max_tokens: 400,
+        }, { signal: controller.signal });
+        return response.choices[0].message.content.trim();
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 /**
@@ -201,11 +225,11 @@ async function callGemini(prompt) {
  * @returns {string} AI-generated message
  */
 async function generateWithCascade(prompt) {
-    // Try each provider in order
+    // Try each provider in order (Ollama → Cerebras → Sambanova → Groq)
     for (const provider of PROVIDERS) {
         try {
             console.log(`[OutreachGen] 🔄 Trying ${provider.name}...`);
-            const result = await callOpenAIProvider(provider.client, provider.model, prompt);
+            const result = await callOpenAIProvider(provider.client, provider.model, prompt, provider.timeout || 15000);
             console.log(`[OutreachGen] ✅ ${provider.name} success`);
             return result;
         } catch (e) {
