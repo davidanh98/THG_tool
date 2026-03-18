@@ -67,22 +67,38 @@ const PROVIDERS = [
 console.log(`[OutreachGen] 🔄 Provider chain: ${PROVIDERS.map(p => p.name).join(' → ')}`);
 
 // ─── THG Service Context ─────────────────────────────────────────────────────
+// ─── Agent Profiles & Contact Info ─────────────────────────────────────────────
+const AGENT_PROFILES = {
+    'Trang': 'Zalo: 0949716391\nTele: @hairypoter98',
+    'Thu Nguyệt': 'Zalo: 0367689834\nTele: @Moonzzz03',
+    'Khải Huyền': 'Zalo: 0965309416\nFacebook: https://www.facebook.com/hana.thgfulfill3979',
+};
+
+function getAgentContact(staffName) {
+    return AGENT_PROFILES[staffName] || AGENT_PROFILES['Trang'];
+}
+
+// ─── THG Service Context ─────────────────────────────────────────────────────
 const THG_CONTEXT = `
-THG LOGISTICS — THÔNG TIN DỊCH VỤ:
-• THG Fulfillment: Seller gửi thiết kế → THG in + đóng gói + ship sang Mỹ (POD/Dropship)
-• THG Express: Tuyến VN/CN → Mỹ, tracking chuẩn TikTok/Amazon/Etsy policy
-• THG Warehouse: Kho tại Pennsylvania & North Carolina, ship nội địa Mỹ 2-5 ngày
-• Cam kết: Mất hàng đền 100%, tracking real-time, hỗ trợ 24/7
-• USP: Giá cạnh tranh, tốc độ xử lý nhanh, đội ngũ support tiếng Việt tại Mỹ
+THG Fulfill hỗ trợ in ấn – đóng gói – xử lý đơn POD/Dropship cho nhiều dòng sản phẩm hot như phonecase, sweater, ornament và các sản phẩm custom khác.
+👉 Xem catalog tại website: https://www.thgfulfill.com/catalog
+Hiện THG có:
+✅ Basecost tốt, sản xuất trực tiếp US – dễ scale
+✅ In nhanh, giao US chỉ 2–5 ngày
+✅ Team hỗ trợ xử lý lỗi/khiếu nại
+✅ Tracking realtime
+✅ Hỗ trợ lưu kho miễn phí tại TQ & US
 `.trim();
 
 const THG_CONTEXT_EN = `
-THG LOGISTICS — SERVICE INFO:
-• THG Fulfillment: Print-on-demand & dropship fulfillment (VN/CN → US)
-• THG Express: Shipping routes VN/CN → US, TikTok/Amazon/Etsy compliant tracking
-• THG Warehouse: US warehouses in Pennsylvania & North Carolina, 2-5 day domestic shipping
-• Guarantee: 100% lost package compensation, real-time tracking, 24/7 support
-• USP: Competitive pricing, fast processing, Vietnamese-speaking US-based support team
+THG Fulfill supports printing, packaging, and processing POD/Dropship orders for hot products like phone cases, sweaters, ornaments, and custom products.
+👉 Catalog: https://www.thgfulfill.com/catalog
+We offer:
+✅ Great base cost, direct US production - easy to scale
+✅ Fast printing, US delivery in just 2-5 days
+✅ Dedicated support team for errors/complaints
+✅ Real-time tracking
+✅ Free warehousing in China & US
 `.trim();
 
 // ─── Prompt Builders ─────────────────────────────────────────────────────────
@@ -97,7 +113,7 @@ function buildPromptVN(lead, staffName, tone) {
         urgent: 'Khẩn trương nhưng không push bán. Nhấn mạnh thời gian là cơ hội.',
     };
 
-    return `Bạn là ${staffName}, Sales của THG Logistics. Khách hàng vừa đăng bài trong group Facebook:
+    return `Bạn là ${staffName}, Sales của THG Fulfill. Khách hàng vừa đăng bài trong group Facebook:
 
 ━━━ BÀI POST CỦA KHÁCH ━━━
 "${(lead.content || '').substring(0, 500)}"
@@ -105,27 +121,19 @@ function buildPromptVN(lead, staffName, tone) {
 ━━━ PHÂN TÍCH AI ━━━
 • Category: ${lead.category || 'General'}
 • Pain point: ${lead.summary || 'Chưa xác định'}
-• Score: ${lead.score || 0}/100
-• Buyer signals: ${lead.buyer_signals || 'N/A'}
 
-━━━ DỊCH VỤ THG ━━━
+━━━ FORM MẪU BẮT BUỘC ━━━
+Mở đầu: Hãy viết 1-2 câu ĐẦU TIÊN thật tự nhiên, reference trực tiếp đến bài đăng hoặc hình ảnh ảnh tìm hàng của khách (ví dụ: "Chào bạn, thấy bạn đang tìm xưởng POD...").
+Phần giữa: Trình bày form thông tin dịch vụ sau một cách tự nhiên hoặc giữ nguyên:
 ${THG_CONTEXT}
+Phần cuối: Kết luận mời gọi liên hệ và BẮT BUỘC chèn thông tin liên hệ của bạn như sau:
+Nếu mình đang kinh doanh POD/Dropship, cứ liên hệ em để được hỗ trợ nhé!
+${getAgentContact(staffName)}
 
 ━━━ YÊU CẦU ━━━
-Viết TIN NHẮN MESSENGER DM tiếp cận khách. Bắt buộc:
-1. MỞ ĐẦU bằng reference TRỰC TIẾP đến vấn đề trong bài post (KHÔNG chào chung chung)
-2. Đưa ra giải pháp THG PHÙ HỢP với nhu cầu cụ thể
-3. Tone: ${toneGuide[tone] || toneGuide.friendly}
-4. Kết bằng CTA nhẹ (hỏi thêm thông tin, mời inbox)
-5. Độ dài: 3-5 câu, ngắn gọn tự nhiên
-
-KHÔNG ĐƯỢC:
-- Quảng cáo chung chung kiểu "bên mình chuyên..."  
-- Copy-paste template
-- Báo giá cụ thể
-- Spam
-
-CHỈ trả về nội dung tin nhắn, KHÔNG giải thích thêm.`;
+Viết TIN NHẮN MESSENGER DM hoặc COMMENT trọn vẹn. 
+Giọng văn: ${toneGuide[tone] || toneGuide.friendly}
+KHÔNG giải thích thêm, CHỈ trả về nội dung tin nhắn hoàn chỉnh.`;
 }
 
 /**
@@ -174,16 +182,18 @@ Return ONLY the message content, no explanations.`;
  */
 function buildCommentPrompt(lead, staffName, language) {
     if (language === 'vietnamese') {
-        return `Bạn là ${staffName} (THG Logistics). Khách đăng bài:
+        return `Bạn là ${staffName} (THG Fulfill). Khách đăng bài:
 "${(lead.content || '').substring(0, 300)}"
 
-Viết COMMENT REPLY ngắn (1-2 câu) phản hồi trực tiếp vấn đề khách nêu, gợi ý THG có thể giúp, và kết bằng "inbox mình nghe" hoặc tương tự.
-CHỈ trả về nội dung comment.`;
+Viết COMMENT REPLY (3-4 câu) phản hồi trực tiếp vấn đề khách nêu, và giới thiệu khéo léo form dịch vụ THG Fulfill, kèm theo contact của bạn ở cuối:
+${getAgentContact(staffName)}
+
+CHỈ trả về nội dung comment (bớt form cứng nhắc lại, nói tự nhiên như reviewer).`;
     }
-    return `You are ${staffName} (THG Logistics). Customer posted:
+    return `You are ${staffName} (THG Fulfill). Customer posted:
 "${(lead.content || '').substring(0, 300)}"
 
-Write a SHORT comment reply (1-2 sentences) directly addressing their issue, briefly mentioning THG can help, ending with "DM me for details" or similar.
+Write a comment reply addressing their issue naturally, briefly mentioning THG Fulfill's POD services, ending with your contact detail.
 Return ONLY the comment text.`;
 }
 
@@ -249,6 +259,25 @@ async function generateWithCascade(prompt) {
     }
 }
 
+// ─── Asset Image Selector ────────────────────────────────────────────────────
+const fs = require('fs');
+const path = require('path');
+
+function getAssetImage() {
+    try {
+        const assetsDir = path.join(__dirname, '..', '..', 'data', 'assets', 'images');
+        if (!fs.existsSync(assetsDir)) return null;
+
+        const files = fs.readdirSync(assetsDir).filter(f => f.match(/\.(jpg|jpeg|png|gif|webp)$/i));
+        if (files.length === 0) return null;
+
+        const randomFile = files[Math.floor(Math.random() * files.length)];
+        return path.join(assetsDir, randomFile);
+    } catch (e) {
+        return null;
+    }
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -271,8 +300,9 @@ async function generateDM(lead, opts = {}) {
 
     // Clean up AI quirks
     message = cleanMessage(message);
+    const imagePath = getAssetImage();
 
-    return { message, language, type: 'dm' };
+    return { message, imagePath, language, type: 'dm' };
 }
 
 /**
@@ -288,8 +318,9 @@ async function generateComment(lead, opts = {}) {
     const prompt = buildCommentPrompt(lead, staffName, language);
     let message = await generateWithCascade(prompt);
     message = cleanMessage(message);
+    const imagePath = getAssetImage();
 
-    return { message, language, type: 'comment' };
+    return { message, imagePath, language, type: 'comment' };
 }
 
 /**

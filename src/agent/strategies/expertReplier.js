@@ -22,6 +22,7 @@ const { generateComment } = require('../../ai/outreachGenerator');
 const { sniperComment } = require('../../squad/agents/sniperAgent');
 const accountManager = require('../accountManager');
 const database = require('../../core/data_store/database');
+const path = require('path');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const MIN_SCORE = 70;           // Only reply to leads with score >= 70
@@ -49,18 +50,20 @@ async function replyToPost(lead, opts = {}) {
         // 1. AI generates helpful comment
         const result = await generateComment(lead, { staffName });
         const comment = result.message;
+        const imagePath = result.imagePath;
 
         if (!comment) {
             return { success: false, comment: '', error: 'AI returned empty comment' };
         }
 
-        console.log(`[ExpertReplier] 💬 AI comment: "${comment.substring(0, 80)}..."`);
+        console.log(`[ExpertReplier] 💬 AI comment: "${comment.substring(0, 80)}..."${imagePath ? ` + 📸 ${path.basename(imagePath)}` : ''}`);
 
         // 2. If page provided, auto-comment via sniperAgent
         if (page) {
             const posted = await sniperComment(page, lead.post_url, {
                 customTemplate: comment,
                 account: staffName,
+                imagePath: imagePath
             });
 
             if (posted) {
