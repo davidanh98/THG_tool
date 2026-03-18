@@ -273,7 +273,7 @@ async function callProvider(provider, systemPrompt, userPrompt, maxTokens = 400)
         max_tokens: maxTokens,
     };
     if (provider.type === 'openai') {
-        // All providers support json_object via OpenAI-compatible API
+        params.response_format = { type: 'json_object' };
     }
 
     const timeoutMs = provider.timeout || 15000;
