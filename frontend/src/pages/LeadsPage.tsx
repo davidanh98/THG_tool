@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useLeadStore } from '../store/leadStore'
+import { apiGet } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import LeadTable from '../components/lead/LeadTable'
 import LeadFilters from '../components/lead/LeadFilters'
@@ -26,6 +27,9 @@ export default function LeadsPage() {
 
     return (
         <div>
+            {/* Agent Activity Banner */}
+            <AgentBanner />
+
             {/* Stats Bar — matching original dashboard */}
             <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
                 <div className="stat-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', gridColumn: 'span 2' }}>
@@ -71,6 +75,40 @@ export default function LeadsPage() {
 
             <LeadFilters />
             <LeadTable leads={leads} loading={loading} onSelectLead={selectLead} />
+        </div>
+    )
+}
+
+function AgentBanner() {
+    const [s, setS] = useState<{ replies: number; engagements: number; alerts: number; newLeads: number; totalActions: number } | null>(null)
+
+    useEffect(() => {
+        const fetch = () => apiGet<{ today: any }>('/api/activity/summary').then(r => setS(r.today)).catch(() => { })
+        fetch()
+        const id = setInterval(fetch, 60000)
+        return () => clearInterval(id)
+    }, [])
+
+    if (!s || s.totalActions === 0) return null
+
+    return (
+        <div className="activity-banner">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div className="ab-pulse" />
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--success)' }}>AGENTS</span>
+            </div>
+            <div className="ab-divider" />
+            {[
+                { v: s.replies, l: 'Replies', icon: '🏆' },
+                { v: s.engagements, l: 'Engaged', icon: '👀' },
+                { v: s.alerts, l: 'Alerts', icon: '⚡' },
+                { v: s.newLeads, l: 'New Leads', icon: '🎯' },
+            ].map((stat, i) => (
+                <div key={i} className="ab-stat">
+                    <div className="ab-stat-value">{stat.icon} {stat.v}</div>
+                    <div className="ab-stat-label">{stat.l}</div>
+                </div>
+            ))}
         </div>
     )
 }

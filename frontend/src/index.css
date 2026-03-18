@@ -1163,3 +1163,377 @@ select:focus {
     display: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Agent Integration — badges, activity feed, strategy cards, pulse
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Agent status badges on lead rows */
+.agent-badges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.agent-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.agent-badge--reply {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.agent-badge--engage {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+}
+
+.agent-badge--alert {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.agent-badge--dm {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+}
+
+/* Quick action bar (Facebook-style) */
+.quick-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.quick-actions .qa-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.quick-actions .qa-btn:hover {
+  background: var(--accent-muted);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.quick-actions .qa-btn--fb:hover {
+  border-color: var(--facebook);
+  color: var(--facebook);
+  background: rgba(24, 119, 242, 0.1);
+}
+
+.quick-actions .qa-btn--green:hover {
+  border-color: var(--success);
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.quick-actions .qa-btn--orange:hover {
+  border-color: var(--warning);
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+/* Activity banner on Leads page */
+.activity-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-sm) var(--space-lg);
+  background: linear-gradient(135deg, rgba(24, 119, 242, 0.08), rgba(99, 102, 241, 0.06));
+  border: 1px solid rgba(24, 119, 242, 0.15);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-md);
+  overflow-x: auto;
+}
+
+.activity-banner .ab-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 80px;
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.activity-banner .ab-stat-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.activity-banner .ab-stat-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.activity-banner .ab-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.activity-banner .ab-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  margin-right: var(--space-xs);
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+}
+
+/* Strategy cards */
+.strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--space-lg);
+}
+
+.strategy-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.strategy-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--facebook));
+}
+
+.strategy-card:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+}
+
+.strategy-card--green::before {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.strategy-card--blue::before {
+  background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+}
+
+.strategy-card--orange::before {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.strategy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+}
+
+.strategy-title {
+  font-size: var(--text-base);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.strategy-stat {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* Activity feed (sidebar mini + full page) */
+.mini-feed {
+  padding: var(--space-sm);
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+.mini-feed-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+.mini-feed-item .mfi-icon {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+}
+
+.mini-feed-item .mfi-time {
+  color: var(--text-muted);
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.activity-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s;
+}
+
+.activity-item:hover {
+  border-color: var(--border-hover);
+}
+
+.activity-item .ai-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.activity-item .ai-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-item .ai-label {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.activity-item .ai-detail {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.activity-item .ai-time {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.activity-item .ai-fb-link {
+  font-size: 0.6rem;
+  color: var(--facebook);
+  text-decoration: none;
+  margin-left: var(--space-xs);
+}
+
+.activity-item .ai-fb-link:hover {
+  text-decoration: underline;
+}
+
+/* Pipeline stage inline indicator */
+.pipeline-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+.pipeline-pill--new {
+  background: rgba(100, 116, 139, 0.12);
+  color: #94a3b8;
+}
+
+.pipeline-pill--contacted {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+}
+
+.pipeline-pill--interested {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.pipeline-pill--negotiating {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.pipeline-pill--won {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  font-weight: 700;
+}
+
+.pipeline-pill--lost {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+/* Sidebar agent status */
+.sidebar-agent-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px var(--space-sm);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.sidebar-agent-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: pulse-glow 2s infinite;
+}
+
+.sidebar-agent-dot--idle {
+  background: var(--text-muted);
+  animation: none;
+}

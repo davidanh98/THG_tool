@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useLeadStore } from '../../store/leadStore'
-import { apiPost } from '../../api/client'
-import { useState } from 'react'
+import { apiPost, apiGet } from '../../api/client'
+import { useState, useEffect } from 'react'
 
 type NavItem = { section: string } | { to: string; icon: string; label: string; badge?: string }
 
@@ -14,6 +14,7 @@ const NAV_ITEMS: NavItem[] = [
     { to: '/groups', icon: '👥', label: 'Groups' },
     { section: 'Team' },
     { to: '/agents', icon: '🧠', label: 'AI Agents' },
+    { to: '/strategies', icon: '🎯', label: 'Strategies', badge: 'NEW' },
     { to: '/leaderboard', icon: '🏆', label: 'Leaderboard', badge: 'LIVE' },
     { section: 'System' },
     { to: '/system', icon: '🏗️', label: 'Tổng Quan Hệ Thống', badge: 'AI' },
@@ -95,6 +96,7 @@ export default function Sidebar() {
             </nav>
 
             <div className="sidebar-footer">
+                <AgentMiniStatus />
                 <button className="sidebar-item" onClick={() => {
                     const theme = document.documentElement.getAttribute('data-theme')
                     document.documentElement.setAttribute('data-theme', theme === 'light' ? 'dark' : 'light')
@@ -105,5 +107,26 @@ export default function Sidebar() {
                 </button>
             </div>
         </aside>
+    )
+}
+
+function AgentMiniStatus() {
+    const [summary, setSummary] = useState<{ totalActions: number; replies: number; engagements: number; alerts: number } | null>(null)
+
+    useEffect(() => {
+        const fetch = () => apiGet<{ today: any }>('/api/activity/summary')
+            .then(r => setSummary(r.today)).catch(() => { })
+        fetch()
+        const id = setInterval(fetch, 60000)
+        return () => clearInterval(id)
+    }, [])
+
+    const active = summary && summary.totalActions > 0
+
+    return (
+        <div className="sidebar-agent-status">
+            <div className={`sidebar-agent-dot ${active ? '' : 'sidebar-agent-dot--idle'}`} />
+            <span>{active ? `🤖 ${summary!.totalActions} actions today` : '🤖 Agent idle'}</span>
+        </div>
     )
 }
