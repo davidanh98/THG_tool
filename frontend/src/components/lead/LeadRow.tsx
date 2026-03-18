@@ -149,14 +149,34 @@ export default function LeadRow({ lead, onSelect }: LeadRowProps) {
             </td>
 
             <td onClick={(e) => e.stopPropagation()}>
-                <div style={{ display: 'flex', gap: 4 }}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => onSelect(lead.id)}>
-                        View →
+                <div className="quick-actions">
+                    <button className="qa-btn qa-btn--green" title="Expert Reply (AI comment)"
+                        onClick={() => onSelect(lead.id)}>
+                        💬
+                    </button>
+                    {lead.author_url && (
+                        <a href={lead.author_url} target="_blank" rel="noopener noreferrer"
+                            className="qa-btn qa-btn--fb" title="Open Facebook Profile">
+                            👤
+                        </a>
+                    )}
+                    {lead.post_url && (
+                        <a href={lead.post_url} target="_blank" rel="noopener noreferrer"
+                            className="qa-btn qa-btn--fb" title="Open Facebook Post">
+                            🔗
+                        </a>
+                    )}
+                    <button className="qa-btn" title="Copy info"
+                        onClick={() => {
+                            const text = `${lead.author_name} (Score: ${lead.score})\n${lead.content?.substring(0, 200) || ''}\n${lead.author_url || ''}`
+                            navigator.clipboard.writeText(text)
+                        }}>
+                        📋
                     </button>
                     <button
-                        className="btn btn-sm"
+                        className="qa-btn"
                         title="Xóa lead"
-                        style={{ background: 'transparent', border: '1px solid var(--border)', color: '#ef4444', padding: '4px 6px', cursor: 'pointer', borderRadius: 6 }}
+                        style={{ color: '#ef4444' }}
                         onClick={async () => {
                             if (!confirm(`Xóa lead #${lead.id} — ${lead.author_name || 'Unknown'}?`)) return
                             const { removeLead } = useLeadStore.getState()

@@ -6,6 +6,7 @@ import AnalyticsPage from './pages/AnalyticsPage'
 import InboxPage from './pages/InboxPage'
 import GroupsPage from './pages/GroupsPage'
 import AgentsPage from './pages/AgentsPage'
+import StrategiesPage from './pages/StrategiesPage'
 import LeaderboardPage from './pages/LeaderboardPage'
 import SystemPage from './pages/SystemPage'
 import PlaceholderPage from './pages/PlaceholderPage'
@@ -40,6 +41,7 @@ function App() {
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/groups" element={<GroupsPage />} />
           <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/strategies" element={<StrategiesPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/system" element={<SystemPage />} />
           <Route path="/settings" element={<PlaceholderPage title="Settings" icon="⚙️" />} />

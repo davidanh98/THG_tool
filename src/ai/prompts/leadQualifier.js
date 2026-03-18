@@ -90,7 +90,7 @@ const TQ_TO_VN_REGEX = /(nhập hàng.{0,20}(trung quốc|tq|quảng châu|1688|
 const US_TO_VN_REGEX = /(gửi (hàng|đồ|quà).{0,15}(về|ve).{0,15}(việt nam|vn|quê)|ship.{0,10}(hàng|đồ).{0,10}(về|ve).{0,10}(việt|vn)|chuyển (hàng|đồ).{0,15}(từ|tu).{0,10}(mỹ|us|america).{0,10}(về|ve).{0,10}(việt|vn))/i;
 
 // Blacklist: posts from these accounts are NEVER leads (they're competitors/providers)
-const BLACKLIST_AUTHORS = ['merchize', 'bestexpressvn', 'boxmeglobal', 'printify', 'shopify', 'printful', 'amzprep', 'shiphype', 'salesupply', 'viettelpost', 'viettel post', 'saigonbay', 'ak47express', 'burgerprints', 'onospod', 'cj dropshipping', 'omega fulfillment', 'yourfulfillment', 'lizyprint', 'lizy print', 'tiximax', 'ecoli express', 'northpointe', 'northpointe logistics', 'sweats collective', 'phúc an', 'phuc an', 'nynn hoàng', 'nynn hoang', 'roxieus'];
+const BLACKLIST_AUTHORS = ['merchize', 'bestexpressvn', 'boxmeglobal', 'printify', 'shopify', 'printful', 'amzprep', 'shiphype', 'salesupply', 'viettelpost', 'viettel post', 'saigonbay', 'ak47express', 'burgerprints', 'onospod', 'cj dropshipping', 'omega fulfillment', 'yourfulfillment', 'lizyprint', 'lizy print', 'tiximax', 'ecoli express', 'northpointe', 'northpointe logistics', 'sweats collective'];
 
 // Must-have: posts without ANY business keyword are skipped (saves AI credits)
 const MUST_HAVE_KEYWORDS = /(ship|vận chuyển|fulfillment|fulfill|pod|dropship|gửi hàng|tuyến|kho|warehouse|giá|báo giá|tìm đơn vị|logistics|3pl|fba|ecommerce|e-commerce|seller|bán hàng|order|đơn hàng|tracking|inventory|supplier|basecost|print on demand|freight|cargo|express|đóng gói|cần tìm|xưởng|prep|xin|nhờ|hỏi|tìm|cần|review|recommend|line us|ddp|forwarder|thông quan|customs|lcl|fcl|cbm|pallet|container|amazon|tiktok shop|etsy|shopify|mua hàng|hàng từ|gửi về|ship về|nhờ ai|ai biết|chỗ nào|ở đâu|mua ở|đặt hàng|order hàng|mua sỉ|nhập hàng|nguồn hàng|đồ từ|hàng việt|hàng trung)/i;
@@ -221,6 +221,9 @@ function analyzeLeadIntent(content) {
     };
 }
 
+let currentModelIndex = 0;
+let consecutiveErrors = 0;
+
 // ═══════════════════════════════════════════════════════
 // Parse + enforce scoring rules
 // ═══════════════════════════════════════════════════════
@@ -328,61 +331,135 @@ async function classifySmallBatch(posts) {
     // All 3 providers failed — fallback to individual classification
     console.warn('[Classifier] ⚠️ All providers failed for batch → trying individual...');
     const individual = [];
-    for (const post of posts) { individual.push(await classifyPost(post)); await sleep(2000); }
+    for (const post of posts) { individual.push(await classifySinglePost(post)); await sleep(3000); }
     return individual;
 }
 
-// ═══════════════════════════════════════════════════════
-// Batch: split into sub-batches of BATCH_SIZE with sleep
-// ═══════════════════════════════════════════════════════
+// classifyBatch now delegates to classifySmallBatch (cascade: Ollama→Cerebras→Sambanova)
 async function classifyBatch(posts) {
-    if (posts.length <= BATCH_SIZE) return classifySmallBatch(posts);
-    const allResults = [];
-    const total = Math.ceil(posts.length / BATCH_SIZE);
-    for (let b = 0; b < total; b++) {
-        const chunk = posts.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
-        console.log(`[Classifier]   → ${(b * BATCH_SIZE) + chunk.length}/${posts.length} classified (batch ${b + 1}/${total}, provider: ${PROVIDERS[activeProviderIndex]?.name || 'None'})`);
-        const results = await classifySmallBatch(chunk);
-        allResults.push(...results);
-        // ⏱️ STRICT 10s sleep between ALL batches — prevents rate limit cascading
-        // This runs ALWAYS, even if we're on the last batch or if errors occurred
-        if (b < total - 1) {
-            console.log(`[Classifier] 💤 Sleeping ${BATCH_DELAY_MS / 1000}s before next batch...`);
-            await sleep(BATCH_DELAY_MS);
-        }
-    }
-    return allResults;
+    return classifySmallBatch(posts);
 }
 
 // ═══════════════════════════════════════════════════════
-// Single post with provider cascade
+// Single post classification using provider cascade
 // ═══════════════════════════════════════════════════════
-async function classifyPost(post) {
+async function classifySinglePost(post) {
     if (PROVIDER_REGEX.test(post.content)) {
         return { isLead: false, role: 'provider', score: 0, category: 'NotRelevant', summary: 'Provider regex match', urgency: 'low', buyerSignals: '' };
     }
-    const sPrompt = buildSystemPrompt(post.content);
-    const uPrompt = buildUserPrompt(post);
+
+    const dynamicSystemPrompt = buildSystemPrompt(post.content);
+    const userPrompt = buildUserPrompt(post);
+
     for (let i = activeProviderIndex; i < PROVIDERS.length; i++) {
         const prov = PROVIDERS[i];
         try {
-            const text = await callProvider(prov, sPrompt, uPrompt, 400);
-            const arr = parseAIResponse(text);
-            if (!arr || arr.length === 0) throw new Error('Invalid response');
+            const text = await callProvider(prov, dynamicSystemPrompt, userPrompt, 400);
+            const result = JSON.parse(text);
             consecutiveErrors = 0;
-            return parseResult(arr[0]);
+            return parseResult(result);
         } catch (err) {
             const isLimit = err.message?.includes('429') || err.message?.includes('rate_limit') || err.message?.includes('Too Many Requests');
-            if (isLimit && i < PROVIDERS.length - 1) { continue; }
+            if (isLimit && i < PROVIDERS.length - 1) {
+                console.warn(`[Classifier] ⚠️ ${prov.name} rate-limited → trying ${PROVIDERS[i + 1].name}...`);
+                continue;
+            }
+            console.warn(`[Classifier] ⚠️ ${prov.name} single-post error: ${err.message?.substring(0, 120)}`);
         }
     }
-    // All providers failed
     return makeFallback();
+}
+
+// Keep old name exported for backward compat
+const classifyPost = classifySinglePost;
+
+// ═══════════════════════════════════════════════════════
+// Gemini fallbacks (also use dynamic prompts)
+// ═══════════════════════════════════════════════════════
+async function classifyBatchWithGemini(posts) {
+    if (!geminiModel) return null;
+    try {
+        const combinedContent = posts.map(p => p.content || '').join(' ');
+        const dynamicPrompt = buildSystemPrompt(combinedContent);
+        const postsList = posts.map((p, i) =>
+            `[POST ${i + 1}] Platform: ${p.platform}\nContent: ${(p.content || '').substring(0, 600)}`
+        ).join('\n\n');
+        const prompt = dynamicPrompt + `\n\nPhân tích ${posts.length} bài. Trả về {"results": [...]}:\n\n${postsList}`;
+        const result = await geminiModel.generateContent(prompt);
+        const text = result.response.text();
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) return null;
+        const parsed = JSON.parse(jsonMatch[0]);
+        const arr = parsed.results || Object.values(parsed).find(v => Array.isArray(v));
+        if (!Array.isArray(arr)) return null;
+        return arr.map(r => parseResult(r));
+    } catch (err) {
+        // If Gemini 429, wait and retry once
+        if (err.message?.includes('429') || err.message?.includes('Too Many Requests')) {
+            console.warn('[Classifier] ⏳ Gemini 429 — waiting 60s before retry...');
+            await new Promise(r => setTimeout(r, 60000));
+            try {
+                const combinedContent = posts.map(p => p.content || '').join(' ');
+                const dynamicPrompt = buildSystemPrompt(combinedContent);
+                const postsList = posts.map((p, i) =>
+                    `[POST ${i + 1}] Platform: ${p.platform}\nContent: ${(p.content || '').substring(0, 600)}`
+                ).join('\n\n');
+                const prompt = dynamicPrompt + `\n\nPhân tích ${posts.length} bài. Trả về {"results": [...]}:\n\n${postsList}`;
+                const result = await geminiModel.generateContent(prompt);
+                const text = result.response.text();
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) return null;
+                const parsed = JSON.parse(jsonMatch[0]);
+                const arr = parsed.results || Object.values(parsed).find(v => Array.isArray(v));
+                if (!Array.isArray(arr)) return null;
+                return arr.map(r => parseResult(r));
+            } catch (retryErr) {
+                console.error('[Classifier] ❌ Gemini batch retry failed:', retryErr.message);
+                return null;
+            }
+        }
+        console.error('[Classifier] ❌ Gemini batch failed:', err.message);
+        return null;
+    }
+}
+
+async function classifyWithGemini(post) {
+    if (!geminiModel) return null;
+    try {
+        const dynamicPrompt = buildSystemPrompt(post.content);
+        const userPrompt = buildUserPrompt(post);
+        const prompt = dynamicPrompt + '\n\n' + userPrompt;
+        const result = await geminiModel.generateContent(prompt);
+        const text = result.response.text();
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) return null;
+        return parseResult(JSON.parse(jsonMatch[0]));
+    } catch (err) {
+        // If Gemini 429, wait 60s and retry once
+        if (err.message?.includes('429') || err.message?.includes('Too Many Requests')) {
+            console.warn('[Classifier] ⏳ Gemini 429 — waiting 60s...');
+            await new Promise(r => setTimeout(r, 60000));
+            try {
+                const dynamicPrompt = buildSystemPrompt(post.content);
+                const userPrompt = buildUserPrompt(post);
+                const prompt = dynamicPrompt + '\n\n' + userPrompt;
+                const result = await geminiModel.generateContent(prompt);
+                const text = result.response.text();
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) return null;
+                return parseResult(JSON.parse(jsonMatch[0]));
+            } catch { /* give up */ }
+        }
+        console.error('[Classifier] ❌ Gemini failed:', err.message);
+        return null;
+    }
 }
 
 function makeFallback() {
     return { isLead: false, score: 0, category: 'NotRelevant', summary: 'Lỗi phân tích', urgency: 'low' };
 }
+
+const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
 // ═══════════════════════════════════════════════════════
 // Main classify pipeline with memory integration
@@ -479,20 +556,6 @@ async function classifyPosts(posts) {
             continue;
         }
 
-        // ── LAYER 2e: Pricing ad — "cước 159.000đ/kg", "$2.5/kg" ──
-        if (PRICING_AD_REGEX.test(content) && spamScore >= 1) {
-            preFiltered.push({ ...post, isLead: false, role: 'provider', score: 0, category: 'NotRelevant', summary: 'Pricing ad detected', urgency: 'low', buyerSignals: '', spamScore, painScore: 0 });
-            console.log(`[Sieve] 💰 Pricing ad block: ${content.substring(0, 80)}...`);
-            continue;
-        }
-
-        // ── LAYER 2f: Company name in content — "Phúc An Logistics", "XYZ Express" ──
-        if (COMPANY_IN_CONTENT_REGEX.test(content) && (PROVIDER_REGEX.test(content) || spamScore >= 2)) {
-            preFiltered.push({ ...post, isLead: false, role: 'provider', score: 0, category: 'NotRelevant', summary: 'Provider company name in content', urgency: 'low', buyerSignals: '', spamScore, painScore: 0 });
-            console.log(`[Sieve] 🏢 Company name block: ${content.substring(0, 80)}...`);
-            continue;
-        }
-
         if (IRRELEVANT_REGEX.test(content)) {
             preFiltered.push({ ...post, ...makeFallback(), summary: 'Không liên quan', spamScore, painScore });
             continue;
@@ -534,14 +597,14 @@ async function classifyPosts(posts) {
     console.log(`[Classifier] 🔍 Pre-filter: ${preFiltered.length} posts skipped locally, ${toClassify.length} posts → AI`);
     if (intentTagged > 0) console.log(`[Classifier] 🎯 Intent detected in ${intentTagged} posts (score boost active)`);
 
-    const PIPELINE_BATCH = 5;
+    const BATCH_SIZE = 5;
     const results = [...preFiltered];
-    activeProviderIndex = 0;
+    currentModelIndex = 0;
     consecutiveErrors = 0;
     let stopEarly = false;
 
-    for (let i = 0; i < toClassify.length && !stopEarly; i += PIPELINE_BATCH) {
-        const batch = toClassify.slice(i, i + PIPELINE_BATCH);
+    for (let i = 0; i < toClassify.length && !stopEarly; i += BATCH_SIZE) {
+        const batch = toClassify.slice(i, i + BATCH_SIZE);
         try {
             const batchResults = await classifyBatch(batch);
             if (consecutiveErrors >= 5) stopEarly = true;
@@ -602,57 +665,13 @@ async function classifyPosts(posts) {
                     }
                 }
 
-                // ── POST-BOOST SAFETY NET: catch provider posts that AI wrongly scored high ──
-                const postContent = batch[j].content || '';
-                const postSpam = batch[j]._spamScore || 0;
-                if (merged.isLead) {
-                    // Re-check PROVIDER_REGEX after AI — critical for false positive prevention
-                    if (PROVIDER_REGEX.test(postContent)) {
-                        merged.isLead = false;
-                        merged.role = 'provider';
-                        merged.score = 0;
-                        merged.summary = 'Post-AI safety: provider regex match (AI false positive)';
-                        console.log(`[Classifier] 🛡️ Post-AI blocked provider: ${postContent.substring(0, 80)}`);
-                    }
-                    // Service ad with any spam signal
-                    else if (SERVICE_AD_REGEX.test(postContent) && postSpam >= 2) {
-                        merged.isLead = false;
-                        merged.role = 'provider';
-                        merged.score = 0;
-                        merged.summary = 'Post-AI safety: service ad (spamScore=' + postSpam + ')';
-                        console.log(`[Classifier] 🛡️ Post-AI blocked service ad: ${postContent.substring(0, 80)}`);
-                    }
-                    // High spam + provider keywords in bio
-                    else if (postSpam >= 4 && BIO_PROVIDER_REGEX.test(batch[j].author_bio || '')) {
-                        merged.isLead = false;
-                        merged.role = 'provider';
-                        merged.score = 0;
-                        merged.summary = 'Post-AI safety: high spam + provider bio';
-                        console.log(`[Classifier] 🛡️ Post-AI blocked spam+bio: ${postContent.substring(0, 60)}`);
-                    }
-                    // Pricing ad in content
-                    else if (PRICING_AD_REGEX.test(postContent) && postSpam >= 1) {
-                        merged.isLead = false;
-                        merged.role = 'provider';
-                        merged.score = 0;
-                        merged.summary = 'Post-AI safety: pricing ad';
-                        console.log(`[Classifier] 🛡️ Post-AI blocked pricing ad: ${postContent.substring(0, 60)}`);
-                    }
-                    // Company name + provider signals
-                    else if (COMPANY_IN_CONTENT_REGEX.test(postContent) && postSpam >= 2) {
-                        merged.isLead = false;
-                        merged.role = 'provider';
-                        merged.score = 0;
-                        merged.summary = 'Post-AI safety: company name detected';
-                        console.log(`[Classifier] 🛡️ Post-AI blocked company: ${postContent.substring(0, 60)}`);
-                    }
-                    // category NotRelevant but AI gave high score — force block
-                    else if (merged.category === 'NotRelevant') {
-                        merged.isLead = false;
-                        merged.role = 'irrelevant';
-                        merged.score = 0;
-                        merged.summary = 'Post-AI safety: NotRelevant category';
-                    }
+                // ── POST-BOOST SAFETY NET: catch service ads that slipped through AI ──
+                if (merged.isLead && merged.spamScore >= 3 && SERVICE_AD_REGEX.test(batch[j].content || '')) {
+                    merged.isLead = false;
+                    merged.role = 'provider';
+                    merged.score = 0;
+                    merged.summary = 'Post-boost safety: service ad detected (spamScore=' + merged.spamScore + ')';
+                    console.log(`[Classifier] 🛡️ Post-boost safety net caught service ad: ${(batch[j].content || '').substring(0, 60)}`);
                 }
                 delete merged._intent;
 
@@ -671,10 +690,10 @@ async function classifyPosts(posts) {
             for (const post of batch) results.push({ ...post, ...makeFallback() });
         }
 
-        const done = Math.min(i + PIPELINE_BATCH, toClassify.length);
-        console.log(`[Classifier]   → ${done}/${toClassify.length} classified (batch ${Math.ceil(done / PIPELINE_BATCH)}/${Math.ceil(toClassify.length / PIPELINE_BATCH)}, provider: ${PROVIDERS[activeProviderIndex]?.name || 'None'})`);
+        const done = Math.min(i + BATCH_SIZE, toClassify.length);
+        console.log(`[Classifier]   → ${done}/${toClassify.length} classified (batch ${Math.ceil(done / BATCH_SIZE)}/${Math.ceil(toClassify.length / BATCH_SIZE)}, provider: ${PROVIDERS[activeProviderIndex]?.name || 'None'})`);
 
-        if (i + PIPELINE_BATCH < toClassify.length && !stopEarly) await sleep(BATCH_DELAY_MS);
+        if (i + BATCH_SIZE < toClassify.length && !stopEarly) await sleep(BATCH_DELAY_MS);
     }
 
     if (stopEarly) {
