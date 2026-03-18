@@ -56,9 +56,9 @@ if (config.SAMBANOVA_API_KEY) {
 
 // Provider list for cascade (Ollama → Cerebras → Sambanova)
 const PROVIDERS = [
-    { name: 'Ollama', client: ollama, model: OLLAMA_MODEL, type: 'openai' },
-    { name: 'Cerebras', client: cerebras, model: 'llama3.1-8b', type: 'openai' },
-    { name: 'Sambanova', client: sambanova, model: 'Meta-Llama-3.3-70B-Instruct', type: 'openai' },
+    { name: 'Ollama', client: ollama, model: OLLAMA_MODEL, type: 'openai', timeout: 30000 },
+    { name: 'Cerebras', client: cerebras, model: 'llama3.1-8b', type: 'openai', timeout: 15000 },
+    { name: 'Sambanova', client: sambanova, model: 'Meta-Llama-3.3-70B-Instruct', type: 'openai', timeout: 15000 },
 ].filter(p => p.client);
 
 console.log(`[Classifier] 🔄 Provider chain: ${PROVIDERS.map(p => p.name).join(' → ')}`);
@@ -275,8 +275,17 @@ async function callProvider(provider, systemPrompt, userPrompt, maxTokens = 400)
     if (provider.type === 'openai') {
         // All providers support json_object via OpenAI-compatible API
     }
-    const response = await provider.client.chat.completions.create(params);
-    return response.choices[0].message.content;
+
+    const timeoutMs = provider.timeout || 15000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await provider.client.chat.completions.create(params, { signal: controller.signal });
+        return response.choices[0].message.content;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 function parseAIResponse(text) {
