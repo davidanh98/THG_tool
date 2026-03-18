@@ -69,13 +69,13 @@ console.log(`[OutreachGen] 🔄 Provider chain: ${PROVIDERS.map(p => p.name).joi
 // ─── THG Service Context ─────────────────────────────────────────────────────
 // ─── Agent Profiles & Contact Info ─────────────────────────────────────────────
 const AGENT_PROFILES = {
-    'Trang': 'Zalo: 0949716391\nTele: @hairypoter98',
+    'Đức Anh': 'Zalo: 0949716391\nTele: @hairypoter98',
     'Thu Nguyệt': 'Zalo: 0367689834\nTele: @Moonzzz03',
     'Khải Huyền': 'Zalo: 0965309416\nFacebook: https://www.facebook.com/hana.thgfulfill3979',
 };
 
 function getAgentContact(staffName) {
-    return AGENT_PROFILES[staffName] || AGENT_PROFILES['Trang'];
+    return AGENT_PROFILES[staffName] || AGENT_PROFILES['Đức Anh'];
 }
 
 // ─── THG Service Context ─────────────────────────────────────────────────────
@@ -284,12 +284,12 @@ function getAssetImage() {
  * Generate personalized DM outreach message for a lead
  * @param {object} lead - Lead from database (must include content, category, summary, language)
  * @param {object} opts
- * @param {string} opts.staffName - Sales staff name (default 'Trang')
+ * @param {string} opts.staffName - Sales staff name (default 'Đức Anh')
  * @param {string} opts.tone - 'friendly' | 'professional' | 'urgent'
  * @returns {{ message: string, language: string, type: string }}
  */
 async function generateDM(lead, opts = {}) {
-    const { staffName = 'Trang', tone = 'friendly' } = opts;
+    const { staffName = 'Đức Anh', tone = 'friendly' } = opts;
     const language = lead.language || 'vietnamese';
 
     const prompt = language === 'vietnamese'
@@ -312,7 +312,7 @@ async function generateDM(lead, opts = {}) {
  * @returns {{ message: string, language: string, type: string }}
  */
 async function generateComment(lead, opts = {}) {
-    const { staffName = 'Trang' } = opts;
+    const { staffName = 'Đức Anh' } = opts;
     const language = lead.language || 'vietnamese';
 
     const prompt = buildCommentPrompt(lead, staffName, language);
@@ -331,7 +331,7 @@ async function generateComment(lead, opts = {}) {
  * @returns {{ message: string, language: string, type: string }}
  */
 async function generateFollowUp(lead, previousMessage, opts = {}) {
-    const { staffName = 'Trang' } = opts;
+    const { staffName = 'Đức Anh' } = opts;
     const language = lead.language || 'vietnamese';
 
     let prompt;

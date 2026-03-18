@@ -20,7 +20,7 @@ router.post('/api/leads/:id/generate-outreach', async (req, res) => {
         const lead = database.getLeadById.get(req.params.id);
         if (!lead) return res.status(404).json({ ok: false, error: 'Lead not found' });
 
-        const { staffName = 'Trang', tone = 'friendly', type = 'dm' } = req.body;
+        const { staffName = 'Đức Anh', tone = 'friendly', type = 'dm' } = req.body;
 
         let result;
         if (type === 'comment') {
@@ -53,7 +53,7 @@ router.post('/api/leads/:id/generate-followup', async (req, res) => {
         const lead = database.getLeadById.get(req.params.id);
         if (!lead) return res.status(404).json({ ok: false, error: 'Lead not found' });
 
-        const { staffName = 'Trang', previousMessage = '' } = req.body;
+        const { staffName = 'Đức Anh', previousMessage = '' } = req.body;
         const result = await generateFollowUp(lead, previousMessage, { staffName });
 
         // Save to outreach_log
@@ -115,7 +115,7 @@ router.get('/api/leads/:id/outreach-history', (req, res) => {
 // Generate outreach messages for multiple leads
 router.post('/api/outreach/batch-generate', async (req, res) => {
     try {
-        const { leadIds = [], staffName = 'Trang', tone = 'friendly' } = req.body;
+        const { leadIds = [], staffName = 'Đức Anh', tone = 'friendly' } = req.body;
         if (!leadIds.length) {
             return res.status(400).json({ ok: false, error: 'leadIds array required' });
         }

@@ -27,7 +27,7 @@ router.post('/expert-reply/:leadId', async (req, res) => {
         const lead = database.getLeadById.get(req.params.leadId);
         if (!lead) return res.status(404).json({ ok: false, error: 'Lead not found' });
 
-        const { staffName = 'Trang' } = req.body;
+        const { staffName = 'Đức Anh' } = req.body;
         const { replyToPost } = getExpertReplier();
 
         // Draft only (no auto-posting) — sales reviews before sending
@@ -41,7 +41,7 @@ router.post('/expert-reply/:leadId', async (req, res) => {
 // POST /api/strategy/expert-reply-batch — Batch generate for hot leads
 router.post('/expert-reply-batch', async (req, res) => {
     try {
-        const { staffName = 'Trang', minScore = 70, limit = 5 } = req.body;
+        const { staffName = 'Đức Anh', minScore = 70, limit = 5 } = req.body;
         const leads = database.db.prepare(`
             SELECT * FROM leads WHERE score >= ? AND role = 'buyer' AND post_url IS NOT NULL
             AND status NOT IN ('ignored', 'converted') ORDER BY score DESC LIMIT ?
@@ -120,7 +120,7 @@ router.post('/hot-alert/:leadId', async (req, res) => {
         const lead = database.getLeadById.get(req.params.leadId);
         if (!lead) return res.status(404).json({ ok: false, error: 'Lead not found' });
 
-        const { staffName = 'Trang' } = req.body;
+        const { staffName = 'Đức Anh' } = req.body;
         const { onHotLeadDetected } = getHotLeadAlert();
         const result = await onHotLeadDetected(lead, { staffName });
 
@@ -133,7 +133,7 @@ router.post('/hot-alert/:leadId', async (req, res) => {
 // POST /api/strategy/hot-alert-all — Alert all un-alerted hot leads
 router.post('/hot-alert-all', async (req, res) => {
     try {
-        const { staffName = 'Trang', minScore = 80, limit = 10 } = req.body;
+        const { staffName = 'Đức Anh', minScore = 80, limit = 10 } = req.body;
         const { alertAllHotLeads } = getHotLeadAlert();
 
         // Return immediately, process in background

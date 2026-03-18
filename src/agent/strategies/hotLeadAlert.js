@@ -80,7 +80,7 @@ ${escape((lead.summary || '').substring(0, 200))}
  * @returns {{ sent: boolean, aiMessage: string }}
  */
 async function onHotLeadDetected(lead, opts = {}) {
-    const { staffName = 'Trang' } = opts;
+    const { staffName = 'Đức Anh' } = opts;
 
     // Check thresholds
     if (!lead || lead.score < HOT_SCORE_THRESHOLD) return { sent: false, aiMessage: '' };
@@ -151,7 +151,7 @@ async function onHotLeadDetected(lead, opts = {}) {
  * @returns {Array<{leadId, sent, score}>}
  */
 async function alertAllHotLeads(opts = {}) {
-    const { staffName = 'Trang', minScore = HOT_SCORE_THRESHOLD, limit = 10 } = opts;
+    const { staffName = 'Đức Anh', minScore = HOT_SCORE_THRESHOLD, limit = 10 } = opts;
 
     const leads = database.db.prepare(`
         SELECT l.* FROM leads l

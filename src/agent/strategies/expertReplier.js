@@ -38,7 +38,7 @@ const DELAY_BETWEEN_REPLIES_MS = 60000; // 1 min between replies
  * @returns {{ success: boolean, comment: string, error?: string }}
  */
 async function replyToPost(lead, opts = {}) {
-    const { staffName = 'Trang', page = null } = opts;
+    const { staffName = 'Đức Anh', page = null } = opts;
 
     if (!lead.post_url) {
         return { success: false, comment: '', error: 'No post_url' };

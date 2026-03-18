@@ -23,7 +23,7 @@ const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
 const geminiModel = genAI.getGenerativeModel({ model: config.GEMINI_MODEL || 'gemini-1.5-flash' });
 const groq = new Groq({ apiKey: config.GROQ_API_KEY });
 
-const SALES_TEAM = ['Trang', 'Min', 'Moon', 'Lê Huyền', 'Ngọc Huyền'];
+const SALES_TEAM = ['Đức Anh', 'Min', 'Moon', 'Lê Huyền', 'Ngọc Huyền'];
 
 // ─── Master Brain (THG Knowledge — bất biến) ──────────────────────────────
 const MASTER_BRAIN = `

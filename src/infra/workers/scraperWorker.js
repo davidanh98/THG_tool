@@ -407,7 +407,7 @@ async function runPipeline(options = {}) {
                         const leadDbId = info.lastInsertRowid;
                         const leadDb = database.getLeadById.get(leadDbId);
                         if (leadDb) {
-                            onHotLeadDetected(leadDb, { staffName: 'Trang' }).catch(err => {
+                            onHotLeadDetected(leadDb, { staffName: 'Đức Anh' }).catch(err => {
                                 console.error(`[Pipeline] ⚠️ Hot Alert failed for lead #${leadDbId}: ${err.message}`);
                             });
                         }

@@ -18,7 +18,7 @@ const database = require('../../core/data_store/database');
 const { getStyleProfile, getWritingSamples } = require('./styleExtractor');
 const { generateText } = require('../aiProvider');
 
-const SALES_TEAM = ['Trang', 'Min', 'Moon', 'Lê Huyền', 'Ngọc Huyền'];
+const SALES_TEAM = ['Đức Anh', 'Min', 'Moon', 'Lê Huyền', 'Ngọc Huyền'];
 
 // ─── Master Brain (THG Knowledge — bất biến) ──────────────────────────────
 const MASTER_BRAIN = `

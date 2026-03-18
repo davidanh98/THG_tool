@@ -254,7 +254,7 @@ async function scrapeConversation(page, convUrl, salesName) {
  * Scrape Messenger của một Sales và nạp vào chat_history.
  * Tự động trigger styleExtractor sau khi xong.
  *
- * @param {string} salesName - 'Trang' | 'Moon' | 'Min' | etc.
+ * @param {string} salesName - 'Đức Anh' | 'Moon' | 'Min' | etc.
  * @param {object} [opts]
  * @param {boolean} [opts.autoExtract] - Tự động chạy style extraction sau khi scrape
  * @param {number}  [opts.maxConversations] - Số conversation tối đa

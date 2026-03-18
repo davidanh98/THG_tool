@@ -322,7 +322,7 @@ db.exec(`
 `);
 
 // Seed 5 default profiles (INSERT OR IGNORE = safe to re-run)
-const SALES_TEAM = ['Trang', 'Min', 'Moon', 'Lê Huyền', 'Ngọc Huyền'];
+const SALES_TEAM = ['Đức Anh', 'Min', 'Moon', 'Lê Huyền', 'Ngọc Huyền'];
 const seedAgent = db.prepare(`
   INSERT OR IGNORE INTO agent_profiles (name) VALUES (?)
 `);

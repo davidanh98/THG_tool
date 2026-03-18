@@ -231,7 +231,7 @@ async function runSession() {
         logActivity(session.sessionId, 'inbox_check', 'Opening Messenger', email);
 
         // Determine which sales person this account belongs to
-        const salesName = account.sales_name || 'Trang'; // fallback
+        const salesName = account.sales_name || 'Đức Anh'; // fallback
         const inboxResult = await checkInbox(page, {
             maxConversations: sessionMgr.randInt(3, 6),
             onNewMessage: (sender, msg, url) => handleNewMessage(salesName, sender, msg, url),

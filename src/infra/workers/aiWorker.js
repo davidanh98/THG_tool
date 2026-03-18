@@ -24,13 +24,13 @@ let isProcessing = false;
 
 // ── Routing rules ──────────────────────────────────────────────────────
 const ROUTING_RULES = [
-    { pattern: /pod|print.on.demand|in.áo|in.theo|xưởng.in/i, assignTo: 'Trang' },
+    { pattern: /pod|print.on.demand|in.áo|in.theo|xưởng.in/i, assignTo: 'Đức Anh' },
     { pattern: /trung.quốc|china|tq|taobao|1688|quảng.châu|cn.→|cn\s/i, assignTo: 'Moon' },
     { pattern: /kho.mỹ|warehouse|3pl|texas|pennsylvania|pa.kho|kho.us/i, assignTo: 'Khoa' },
-    { pattern: /fulfillment|fulfill|dropship|drop.ship/i, assignTo: 'Trang' },
+    { pattern: /fulfillment|fulfill|dropship|drop.ship/i, assignTo: 'Đức Anh' },
     { pattern: /epacket|chile|colombia|mexico|saudi|uae|úc|australia/i, assignTo: 'Linh' },
 ];
-const ROUND_ROBIN_SALES = ['Trang', 'Moon', 'Khoa', 'Linh'];
+const ROUND_ROBIN_SALES = ['Đức Anh', 'Moon', 'Khoa', 'Linh'];
 let rrIdx = 0;
 
 function routeLead(content) {
