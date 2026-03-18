@@ -151,6 +151,63 @@ router.post('/hot-alert-all', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// 👀 STRATEGY 2B: Profile Engager (Organic Retargeting — FREE)
+// ═══════════════════════════════════════════════════════════════════════════════
+function getProfileEngager() { return require('../agent/strategies/profileEngager'); }
+
+// GET /api/strategy/engager-leads — Get leads ready for profile engagement
+router.get('/engager-leads', (req, res) => {
+    try {
+        const { minScore = 70, limit = 15 } = req.query;
+        const { getUnengagedLeads } = getProfileEngager();
+        const leads = getUnengagedLeads({ minScore: Number(minScore), limit: Number(limit) });
+        res.json({
+            ok: true,
+            data: leads.map(l => ({
+                id: l.id,
+                author_name: l.author_name,
+                author_url: l.author_url,
+                score: l.score,
+                category: l.category,
+                language: l.language,
+            })),
+            count: leads.length,
+        });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// GET /api/strategy/engager-stats — Engagement stats
+router.get('/engager-stats', (req, res) => {
+    try {
+        const engaged = database.db.prepare(`
+            SELECT COUNT(DISTINCT lead_id) as total_engaged FROM outreach_log WHERE channel = 'profile_engage'
+        `).get();
+
+        const recent = database.db.prepare(`
+            SELECT ol.lead_id, l.author_name, l.score, ol.message as actions, ol.created_at
+            FROM outreach_log ol LEFT JOIN leads l ON ol.lead_id = l.id
+            WHERE ol.channel = 'profile_engage'
+            ORDER BY ol.created_at DESC LIMIT 20
+        `).all();
+
+        const actionBreakdown = database.db.prepare(`
+            SELECT message, COUNT(*) as c FROM outreach_log WHERE channel = 'profile_engage' GROUP BY message
+        `).all();
+
+        res.json({
+            ok: true,
+            totalEngaged: engaged.total_engaged || 0,
+            recentEngagements: recent,
+            actionBreakdown,
+        });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // 📊 Combined Strategy Stats
 // ═══════════════════════════════════════════════════════════════════════════════
 router.get('/stats', (req, res) => {
