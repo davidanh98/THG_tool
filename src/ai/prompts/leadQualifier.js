@@ -8,59 +8,65 @@
  */
 
 const OpenAI = require('openai');
-const Groq = require('groq-sdk');
 const config = require('../../config');
 const { buildSystemPrompt, buildUserPrompt, buildBatchPrompt } = require('../agents/promptBuilder');
 const { saveClassification } = require('../agents/memoryStore');
 const { runProviderGuard, buildKnownProviderSet, buildKnownProviderNameSet } = require('../agents/providerGuard');
 
 // ═══════════════════════════════════════════════════════
-// AI Provider Chain: Cerebras → Sambanova → Groq (NO Gemini — key suspended)
+// AI Provider Chain: Ollama (local, NO limit) → Cerebras → Sambanova
+// ❌ Groq REMOVED — constantly rate limited (429)
+// ❌ Gemini REMOVED — key permanently suspended
 // ═══════════════════════════════════════════════════════
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// Provider 1: Cerebras (PRIMARY — fastest inference, free 30 RPM)
+// Provider 1: Ollama (PRIMARY — self-hosted on VPS, $0, NO rate limit!)
+let ollama = null;
+const OLLAMA_BASE_URL = config.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+const OLLAMA_MODEL = config.OLLAMA_MODEL || 'qwen2.5:3b';
+try {
+    ollama = new OpenAI({
+        apiKey: 'ollama',
+        baseURL: `${OLLAMA_BASE_URL}/v1`,
+    });
+    console.log(`[Classifier] ✅ Ollama loaded (primary — ${OLLAMA_MODEL} @ ${OLLAMA_BASE_URL})`);
+} catch (e) {
+    console.warn('[Classifier] ⚠️ Ollama not available:', e.message);
+}
+
+// Provider 2: Cerebras (FALLBACK — cloud, free 30 RPM)
 let cerebras = null;
 if (config.CEREBRAS_API_KEY) {
     cerebras = new OpenAI({
         apiKey: config.CEREBRAS_API_KEY,
         baseURL: 'https://api.cerebras.ai/v1',
     });
-    console.log('[Classifier] ✅ Cerebras loaded (primary — llama3.1-8b)');
+    console.log('[Classifier] ✅ Cerebras loaded (fallback — llama3.1-8b)');
 }
 
-// Provider 2: Sambanova (FALLBACK — free 30 RPM, 6000 RPD)
+// Provider 3: Sambanova (FALLBACK 2 — cloud, free 30 RPM)
 let sambanova = null;
 if (config.SAMBANOVA_API_KEY) {
     sambanova = new OpenAI({
         apiKey: config.SAMBANOVA_API_KEY,
         baseURL: 'https://api.sambanova.ai/v1',
     });
-    console.log('[Classifier] ✅ Sambanova loaded (fallback — Meta-Llama-3.3-70B-Instruct)');
+    console.log('[Classifier] ✅ Sambanova loaded (fallback 2 — Meta-Llama-3.3-70B-Instruct)');
 }
 
-// Provider 3: Groq (BACKUP)
-let groq = null;
-if (config.GROQ_API_KEY) {
-    groq = new Groq({ apiKey: config.GROQ_API_KEY });
-    console.log('[Classifier] ✅ Groq loaded (backup — llama-3.1-8b-instant)');
-}
-
-// ❌ Gemini REMOVED — API key permanently suspended by Google
-
-// Provider list for cascade (Cerebras → Sambanova → Groq)
+// Provider list for cascade (Ollama → Cerebras → Sambanova)
 const PROVIDERS = [
+    { name: 'Ollama', client: ollama, model: OLLAMA_MODEL, type: 'openai' },
     { name: 'Cerebras', client: cerebras, model: 'llama3.1-8b', type: 'openai' },
     { name: 'Sambanova', client: sambanova, model: 'Meta-Llama-3.3-70B-Instruct', type: 'openai' },
-    { name: 'Groq', client: groq, model: 'llama-3.1-8b-instant', type: 'groq' },
 ].filter(p => p.client);
 
-console.log(`[Classifier] 🔄 Provider chain: ${PROVIDERS.map(p => p.name).join(' → ')} (NO Gemini)`);
+console.log(`[Classifier] 🔄 Provider chain: ${PROVIDERS.map(p => p.name).join(' → ')}`);
 
 let activeProviderIndex = 0;
 let consecutiveErrors = 0;
-const BATCH_SIZE = 5; // Posts per batch (smaller = less rate limit pressure)
-const BATCH_DELAY_MS = 10000; // 10s strict sleep between ALL batches
+const BATCH_SIZE = 5; // Posts per batch
+const BATCH_DELAY_MS = 3000; // 3s sleep (Ollama = no rate limit, can be faster)
 
 const PROVIDER_REGEX = /(chúng tôi nhận gửi|quy trình gửi hàng|lợi ích khi gửi hàng với chúng tôi|nhận gửi hàng đi|chuyên tuyến việt|cước phí cạnh tranh|cam kết giao tận tay|hỗ trợ tư vấn, chăm sóc khách hàng 24\/7|we offer fulfillment|shipping services from us|dịch vụ vận chuyển uy tín|không phát sinh chi phí|bao thuế bao luật|bao thuế 2 đầu|bao thuế|nhận pick up|đóng gói miễn phí|hút chân không|lh em ngay|lh em|liên hệ em|ib em ngay|ib em|ibox em|ibox ngay|inbox em|cmt em|chấm em|check ib|check inbox|dạ em nhận|em chuyên nhận|em chuyên vận chuyển|em chuyên gửi|em nhận ship|em nhận gửi|gửi hàng đi mỹ inbox|nhận vận chuyển|zalo: 0|tham khảo ngay|viettel post|epacket|saigonbay|nhận ship hàng|dịch vụ ship|cước ship|giá ship từ|bảng giá ship|đặt ship ngay|cam kết|chuyên gửi|nhận gửi|dịch vụ gửi|giao hàng nhanh|giao tận nơi|ship cod|bên em chuyên|bên em nhận|bên em có kho|bên em sẵn|bên mình chuyên|bên mình nhận|bên mình có kho|bên mình sẵn|anh.chị.*(tham khảo|liên hệ|ib|inbox|ibox)|giải pháp gửi hàng|ready to scale|from warehousing|we ship|we offer|contact us|whatsapp|xin phép admin|seller nên biết|nhận từ 1 đơn|chỉ từ \d+k|chỉ từ \d+đ|giá tốt nhất|nếu mọi người đang tìm|nếu anh.chị.*(cần|tìm|đang)|just launched.*(fulfillment|warehouse)|moving into our new|ecoli express|free quote|get started today|our warehouse|customs clearance|nhắn em để|nhắn em ngay|inbox ngay|mở rộng sản xuất|sẵn sàng cùng seller|xưởng.*sản xuất|fulfill trực tiếp|fulfill ngay tại|giá xưởng|giá gốc|báo giá|cần thêm thông tin.*nhắn|hỗ trợ.*nhanh nhất|đánh chiếm|siêu lợi nhuận|ưu đãi.*seller|chương trình.*ưu đãi|dm\s+for|dm\s+me|message\s+us|book\s+a\s+call|schedule\s+a\s+call|sign\s+up\s+now|sẵn sàng phục vụ|phục vụ.*seller|cung cấp dịch vụ|chúng tôi cung cấp|we\s+provide|we\s+specialize|our\s+service|tele\s*:\s*@|\bpm\s+em\b|\bpm\s+mình\b|gom đồ hộ|nhận mua hộ|nhận mua và gom|đường sea chỉ từ|đường bay chỉ từ|bay cargo|cước.{0,10}\d+[eđdk]\/kg|sẵn kho ở|em sẵn kho|hỗ trợ đóng gói|hỗ trợ lưu kho|pick.?up tận nơi|pick.?up tận nhà|free nhận đồ|free nhận hàng|nhận đồ tại nhà|gom hàng|xử lý trọn gói|tận tâm trên từng|đừng chần chừ|đừng bỏ lỡ|mở ưu đãi|cước.*chỉ\s*(?:từ\s*)?\d|bay thẳng.*\d+[eđdk]|traking|tracking theo dõi)/i;
 
@@ -265,8 +271,8 @@ async function callProvider(provider, systemPrompt, userPrompt, maxTokens = 400)
         temperature: 0.1,
         max_tokens: maxTokens,
     };
-    if (provider.type === 'groq') {
-        params.response_format = { type: 'json_object' };
+    if (provider.type === 'openai') {
+        // All providers support json_object via OpenAI-compatible API
     }
     const response = await provider.client.chat.completions.create(params);
     return response.choices[0].message.content;
@@ -383,7 +389,7 @@ function makeFallback() {
 // ═══════════════════════════════════════════════════════
 async function classifyPosts(posts) {
     console.log(`[Classifier] 🧠 Classifying ${posts.length} posts (Agent-powered)...`);
-    console.log(`[Classifier] 🔄 Providers: ${PROVIDERS.map(p => p.name).join(' → ')} → Gemini`);
+    console.log(`[Classifier] 🔄 Providers: ${PROVIDERS.map(p => p.name).join(' → ')}`);
 
     const toClassify = [];
     const preFiltered = [];
@@ -666,7 +672,7 @@ async function classifyPosts(posts) {
         }
 
         const done = Math.min(i + PIPELINE_BATCH, toClassify.length);
-        console.log(`[Classifier]   → ${done}/${toClassify.length} classified (batch ${Math.ceil(done / PIPELINE_BATCH)}/${Math.ceil(toClassify.length / PIPELINE_BATCH)}, provider: ${PROVIDERS[activeProviderIndex]?.name || 'Gemini'})`);
+        console.log(`[Classifier]   → ${done}/${toClassify.length} classified (batch ${Math.ceil(done / PIPELINE_BATCH)}/${Math.ceil(toClassify.length / PIPELINE_BATCH)}, provider: ${PROVIDERS[activeProviderIndex]?.name || 'None'})`);
 
         if (i + PIPELINE_BATCH < toClassify.length && !stopEarly) await sleep(1000);
     }
