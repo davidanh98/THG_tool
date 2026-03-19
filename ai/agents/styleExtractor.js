@@ -13,8 +13,8 @@
 'use strict';
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const config = require('../backend/config');
-const database = require('../data_store/database');
+const config = require('../../backend/config');
+const database = require('../../backend/core/data_store/database');
 
 const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: config.GEMINI_MODEL || 'gemini-1.5-flash' });

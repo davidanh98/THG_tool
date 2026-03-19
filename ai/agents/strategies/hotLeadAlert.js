@@ -17,9 +17,9 @@
  */
 'use strict';
 
-const { sendMessage } = require('../../backend/core/integrations/telegramBot');
+const { sendMessage } = require('../../../backend/core/integrations/telegramBot');
 const { generateDM } = require('../../ai/outreachGenerator');
-const database = require('../../backend/core/data_store/database');
+const database = require('../../../backend/core/data_store/database');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const HOT_SCORE_THRESHOLD = 80;

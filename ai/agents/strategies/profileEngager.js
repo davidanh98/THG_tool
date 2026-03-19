@@ -25,7 +25,7 @@
 'use strict';
 
 const { humanDelay, humanScroll, humanClick } = require('../../ai/squad/core/humanizer');
-const database = require('../../backend/core/data_store/database');
+const database = require('../../../backend/core/data_store/database');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const MAX_PROFILES_PER_SESSION = 12;

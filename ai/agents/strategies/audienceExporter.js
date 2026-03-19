@@ -15,7 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const database = require('../../backend/core/data_store/database');
+const database = require('../../../backend/core/data_store/database');
 
 const EXPORT_DIR = path.join(__dirname, '..', '..', '..', 'data', 'exports');
 

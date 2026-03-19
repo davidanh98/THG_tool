@@ -21,7 +21,7 @@
 const { generateComment } = require('../../ai/outreachGenerator');
 const { sniperComment } = require('../../ai/squad/agents/sniperAgent');
 const accountManager = require('../accountManager');
-const database = require('../../backend/core/data_store/database');
+const database = require('../../../backend/core/data_store/database');
 const path = require('path');
 
 // ─── Config ──────────────────────────────────────────────────────────────────

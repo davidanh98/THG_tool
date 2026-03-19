@@ -15,7 +15,7 @@
 const chromium = require('playwright-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const accountManager = require('../accountManager');
-const { generateFingerprint } = require('../../backend/infra/proxy/fingerprint');
+const { generateFingerprint } = require('../../../backend/infra/proxy/fingerprint');
 const { generateAgentReply } = require('../personalAgent');
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ function logActivity(sessionId, action, details = '', account = '') {
 
     // Also persist to DB if available
     try {
-        const db = require('../../backend/core/data_store/database');
+        const db = require('../../../backend/core/data_store/database');
         if (db.logSocialActivity) {
             db.logSocialActivity(account, action, details, sessionId);
         }
@@ -148,7 +148,7 @@ async function handleNewMessage(accountSalesName, senderName, message, convUrl) 
 
         // Save to conversations table
         try {
-            const db = require('../../backend/core/data_store/database');
+            const db = require('../../../backend/core/data_store/database');
             db.insertConversation.run({
                 sender_id: convUrl,
                 sender_name: senderName,
@@ -244,7 +244,7 @@ async function runSession() {
 
         try {
             // A) Expert Replier (Auto-Comment)
-            const db = require('../../backend/core/data_store/database');
+            const db = require('../../../backend/core/data_store/database');
             const { batchReply } = require('../strategies/expertReplier');
 
             const hotLeads = db.db.prepare(`

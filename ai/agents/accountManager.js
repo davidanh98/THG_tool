@@ -13,7 +13,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const db = require('../data_store/database');
+const db = require('../../backend/core/data_store/database');
 
 // ─── Activity Time Window ─────────────────────────────────────────────────
 // Quét giờ seller Việt Kiều Mỹ active (23h VN → 13h VN hôm sau = 8am-10pm ET)
