@@ -259,10 +259,30 @@ async function runPipeline(options = {}) {
             'shop em.{0,20}(có sẵn|đang bán|mở bán)', 'shop mình.{0,20}(có sẵn|đang bán|mở bán)',
             'bên em.{0,20}(nhận order|gom order|nhà cung cấp)',
             'bên mình.{0,20}(nhận order|gom order|nhà cung cấp)',
-            'team em.{0,20}(nhận|cung cấp|cho thuê|sẵn sàng)',
-            // Strict English B2B exclusions
+            'team em.{0,20}(nhận|cung cấp|cho thuê|sẵn sàng|đóng gói|fulfill|ship)',
+
+            // --- Strict English B2B exclusions (Logistics/Fulfillment/Sourcing) ---
             'we support sellers', 'we support', 'our process', 'our services',
             'we can help you source', 'we provide', 'shipping agent', 'sourcing agent',
+            'we are a fulfillment', 'our fulfillment center', 'our warehouse in',
+            '3pl services', 'we can fulfill', 'ship from china', 'shipping from china',
+            'our shipping rates', 'contact us for a quote', 'dm us for rates', 'pm me for rates',
+            'we specialize in dropshipping', 'reliable supplier', 'we have a factory',
+            'our factory', 'we manufacture', 'we provide dropshipping', 'direct factory',
+            'direct manufacturer', 'door to door shipping', 'ddu/ddp', 'ddu & ddp',
+            'we help ecommerce sellers', 'we help amazon sellers', 'logistics solutions',
+            'handle your fulfillment', 'fast shipping to usa', 'delivery in \\d+-\\d+ days',
+            'global forwarding', 'dropshipping supplier', 'print provider',
+
+            // --- Strict Vietnamese B2B exclusions (Logistics/Fulfillment/Sourcing) ---
+            'nhận vận chuyển bao thuế', 'kho us sẵn sàng', 'hỗ trợ seller',
+            'xưởng in pod', 'xưởng in áo', 'xưởng may', 'gia công sll', 'nhận gia công',
+            'tuyển sỉ', 'tuyển đại lý', 'tuyển ctv', 'giá cước báo',
+            'ib nhận báo giá', 'bảng giá vận chuyển', 'gom đơn mốc', 'gom kg',
+            'vận chuyển tiểu ngạch', 'vận chuyển chính ngạch', 'giá sỉ tận xưởng',
+            'kết nối xưởng trung quốc', 'bên em nhận đóng gói', 'bên mình nhận đóng gói',
+            'bên em nhận fulfill', 'bên mình nhận fulfill', 'giá cạnh tranh nhất thị trường',
+            'cước vận chuyển rẻ', 'ưu đãi cước', 'nhà máy trực tiếp', 'xưởng sản xuất',
         ];
         const providerAdRegex = new RegExp(PROVIDER_AD_KEYWORDS.join('|'), 'i');
 
