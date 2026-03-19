@@ -196,10 +196,12 @@ Trả về JSON (object đơn, không phải array):
   "is_potential": boolean,
   "score": number (NẾU is_potential=true thì PHẢI >= 60, NẾU false thì = 0),
   "service_match": "THG Fulfillment" | "THG Express" | "THG Warehouse" | "Both" | "None",
-  "reasoning": "Giải thích ngắn gọn tại sao IS hoặc IS NOT lead",
+  "reasoning": "Giải thích ngắn gọn tại sao ĐẬU hoặc TRƯỢT (Bắt buộc).",
+  "pain_points": "NẾU LÀ LEAD: Phân tích SÂU SẮC vấn đề/vướng mắc (bottleneck) khách đang gặp phải. NẾU TRƯỢT: Để trống.",
+  "sales_angle": "NẾU LÀ LEAD: Đề xuất góc độ (Angle) tiếp cận chuyên nghiệp nhất dựa trên giải pháp THG. NẾU TRƯỢT: Để trống.",
   "urgency": "low" | "medium" | "high",
-  "profit_estimate": "Ước tính doanh số nếu là buyer (vd: ~$500, ~$2,000). Để trống nếu không phải buyer.",
-  "gap_opportunity": "Nếu khách đang phàn nàn/bức xúc đối thủ, mô tả cơ hội. Để trống nếu không có."
+  "profit_estimate": "Ước tính doanh số. Để trống nếu không phải buyer.",
+  "gap_opportunity": "Tín hiệu đào tẩu (chê đối thủ). Để trống nếu không có."
 }`;
 }
 
@@ -223,7 +225,7 @@ ${postsList}
 Trả về JSON object với key "results" là array ${posts.length} phần tử, theo đúng thứ tự:
 {
   "results": [
-    {"author_role":"...","intent":"...","is_potential":bool,"score":number,"service_match":"...","reasoning":"...","urgency":"...","profit_estimate":"...","gap_opportunity":"..."},
+    {"author_role":"...","intent":"...","is_potential":bool,"score":number,"service_match":"...","reasoning":"...","pain_points":"...","sales_angle":"...","urgency":"...","profit_estimate":"...","gap_opportunity":"..."},
     ...
   ]
 }
