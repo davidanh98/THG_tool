@@ -260,6 +260,9 @@ async function runPipeline(options = {}) {
             'bên em.{0,20}(nhận order|gom order|nhà cung cấp)',
             'bên mình.{0,20}(nhận order|gom order|nhà cung cấp)',
             'team em.{0,20}(nhận|cung cấp|cho thuê|sẵn sàng)',
+            // Strict English B2B exclusions
+            'we support sellers', 'we support', 'our process', 'our services',
+            'we can help you source', 'we provide', 'shipping agent', 'sourcing agent',
         ];
         const providerAdRegex = new RegExp(PROVIDER_AD_KEYWORDS.join('|'), 'i');
 

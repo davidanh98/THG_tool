@@ -352,8 +352,25 @@ async function _scrapeWithContext(browser, account, groups) {
                 let noGrowth = 0, prevCnt = 0;
 
                 for (let s = 0; s < 35; s++) {
-                    await page.evaluate(() => window.scrollBy(0, 2000 + Math.random() * 500));
-                    await delay(1000 + Math.random() * 1000);
+                    // 1. Click "See more" continuously as we scroll to catch long posts before they disappear from DOM
+                    try {
+                        const clicked = await page.evaluate(() => {
+                            let count = 0;
+                            const els = Array.from(document.querySelectorAll('div[role="button"], span'));
+                            for (const el of els) {
+                                const t = el.innerText?.trim()?.toLowerCase();
+                                if (t === 'see more' || t === 'xem thêm') {
+                                    try { el.click(); count++; } catch (e) { }
+                                }
+                            }
+                            return count;
+                        });
+                        if (clicked > 0) await delay(500); // allow text to expand
+                    } catch { }
+
+                    // 2. Scroll down slower to ensure quality over speed
+                    await page.evaluate(() => window.scrollBy(0, 1000 + Math.random() * 500));
+                    await delay(1200 + Math.random() * 800);
 
                     const scrollStatus = await page.evaluate((maxDays) => {
                         const feed = document.querySelector('div[role="feed"]');
@@ -408,13 +425,18 @@ async function _scrapeWithContext(browser, account, groups) {
                     prevCnt = scrollStatus.cnt;
                 }
 
-                // Click "See More" buttons to expand truncated posts
+                // Final sweep for any remaining "See More" buttons
                 try {
-                    const seeMoreBtns = await page.$$('div[role="button"]:has-text("See more"), div[role="button"]:has-text("Xem thêm")');
-                    for (const btn of seeMoreBtns.slice(0, 15)) {
-                        await btn.click().catch(() => { });
-                    }
-                    if (seeMoreBtns.length > 0) await delay(500);
+                    await page.evaluate(() => {
+                        const els = Array.from(document.querySelectorAll('div[role="button"], span'));
+                        for (const el of els) {
+                            const t = el.innerText?.trim()?.toLowerCase();
+                            if (t === 'see more' || t === 'xem thêm') {
+                                try { el.click(); } catch (e) { }
+                            }
+                        }
+                    });
+                    await delay(500);
                 } catch { }
 
                 const gPosts = await page.evaluate(({ gName, gUrl, maxAgeDays }) => {
