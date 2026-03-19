@@ -160,8 +160,23 @@ async function _scrapeWithContext(browser, account, groups) {
         if (!loaded && fs.existsSync(sessionPath)) {
             try {
                 const saved = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
-                if (saved.length > 0) { await context.addCookies(saved); loaded = true; console.log(`${tag} 📂 Session fallback (${saved.length} cookies)`); }
-            } catch { }
+                let targetCookies = [];
+                if (Array.isArray(saved) && saved[0] && saved[0].cookies) {
+                    targetCookies = saved[0].cookies;
+                } else if (saved.cookies) {
+                    targetCookies = saved.cookies;
+                } else if (Array.isArray(saved)) {
+                    targetCookies = saved;
+                }
+
+                if (targetCookies.length > 0) {
+                    await context.addCookies(targetCookies);
+                    loaded = true;
+                    console.log(`${tag} 📂 Session fallback (${targetCookies.length} cookies)`);
+                }
+            } catch (e) {
+                console.warn(`${tag} ⚠️ Session parse error: ${e.message}`);
+            }
         }
         if (!loaded) {
             const env = process.env.FB_COOKIES || '';
