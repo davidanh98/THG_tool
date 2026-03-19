@@ -8,7 +8,11 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, '..', 'data_store', 'thg_leads.db');
+const DATA_DIR = path.join(__dirname, '..', '..', 'data');
+if (!require('fs').existsSync(DATA_DIR)) {
+    require('fs').mkdirSync(DATA_DIR, { recursive: true });
+}
+const DB_PATH = path.join(DATA_DIR, 'thg_leads.db');
 
 let db;
 

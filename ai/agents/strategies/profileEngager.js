@@ -24,7 +24,7 @@
  */
 'use strict';
 
-const { humanDelay, humanScroll, humanClick } = require('../../ai/squad/core/humanizer');
+const { humanDelay, humanScroll, humanClick } = require('../../squad/core/humanizer');
 const database = require('../../../backend/core/data_store/database');
 
 // ─── Config ──────────────────────────────────────────────────────────────────

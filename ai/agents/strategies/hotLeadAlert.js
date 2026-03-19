@@ -18,7 +18,7 @@
 'use strict';
 
 const { sendMessage } = require('../../../backend/core/integrations/telegramBot');
-const { generateDM } = require('../../ai/outreachGenerator');
+const { generateDM } = require('../../outreachGenerator');
 const database = require('../../../backend/core/data_store/database');
 
 // ─── Config ──────────────────────────────────────────────────────────────────

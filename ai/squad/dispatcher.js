@@ -19,7 +19,7 @@ const { broadcastPost } = require('./agents/broadcasterAgent');
 const { canAct } = require('./core/rateLimiter');
 const squadDB = require('./core/squadDB');
 const config = require('./squadConfig');
-const accountManager = require('../../ai/agents/accountManager');
+const accountManager = require('../agents/accountManager');
 const { generateFingerprint } = require('../../backend/infra/proxy/fingerprint');
 const { isSessionHealthy } = require('../agents/fbSelfHeal');
 
