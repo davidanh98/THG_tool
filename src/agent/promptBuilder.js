@@ -8,7 +8,7 @@
  * 4. Scoring rubric
  */
 
-const config = require('../config');
+const config = require('../../config');
 const { getContextForPrompt } = require('./knowledgeBase');
 const { getFeedbackExamples, getRecentBuyers } = require('./memoryStore');
 
@@ -33,12 +33,12 @@ ${config.THG_CONTEXT}`;
 🚨 QUY TẮC SỐNG CÒN (LOẠI BỎ FALSE POSITIVE):
 1. NẾU bài viết mang tính chất QUẢNG CÁO, CHÀO MỜI dịch vụ từ các công ty vận chuyển, xưởng in, kho bãi khác -> "author_role": "logistics_agency", "intent": "offering_service", "is_potential": false.
 2. NẾU bài viết chỉ chia sẻ kiến thức, khoe đơn, không hỏi tìm đối tác -> "is_potential": false.
-3. CHỈ chọn "is_potential": true khi TÁC GIẢ là người ĐANG TÌM KIẾM giải pháp hoặc ĐANG HỎI/CẦN GIÚP ĐỖ.
+3. CHỈ chọn "is_potential": true khi TÁC GIẢ là người ĐANG TÌM KIẾM giải pháp hoặc ĐANG HỎI/CẦN GIÚP ĐỠ.
 4. ĐẶC THÙ COMMENT NGẮN: Nếu nội dung là comment ngắn dưới post logistics/fulfillment như "xin giá", "check ib", "đi line us bao lâu", "có kho PA không", "rate?", "ib em", "giá bao nhiêu?" => "is_potential": true.
 
 🛑 CÁCH PHÂN BIỆT PROVIDER vs BUYER (CỰC KỲ QUAN TRỌNG - BẮT BUỘC ĐỌC KỸ):
 - PROVIDER (NGƯỜI BÁN DỊCH VỤ - RÁC MÀ BẠN PHẢI LOẠI BỎ): 
-  Dấu hiệu nhận biết: Bài viết chứa các từ như "inb tư vấn", "inbox em", "inbox ...", "liên hệ số điện thoại", "liên hệ sđt", "hotline", "zalo", "nhận vận chuyển", "bên em chuyên/chúng tôi chuyên", "giá rẻ/bảng giá", "ưu đãi", "xin phép admin", "anh/chị seller tìm...". 
+  Dấu hiệu nhận biết: Bài viết quảng cáo dịch vụ, chứa tên công ty (VD: "Công ty TNHH", "Cổ phần"), địa chỉ văn phòng/kho, số Hotline, Zalo/WhatsApp, và thường lạm dụng nhiều emoji chức năng (✔️, 🏢, 🏡, ☎, 🔥). Chứa các cam kết như "Bao thuế nhập khẩu", "Đóng gói cẩn thận", "Tracking theo dõi", "nhận vận chuyển", "bên em chuyên/chúng tôi chuyên", "giá rẻ/bảng giá".
   -> BẤT KỲ bài nào mang góc nhìn CUNG CẤP dịch vụ, CHÀO HÀNG hoặc ĐỂ LẠI THÔNG TIN LIÊN HỆ để SALE, bạn PHẢI ĐÁNH TRƯỢT NGAY LẬP TỨC ("is_potential": false, "score": 0, "role": "provider"). Kể cả khi bài đó có keyword "order" hay "thủy/bộ".
 
 - BUYER (NGƯỜI CẦN DỊCH VỤ - LEAD CHUẨN): 
@@ -47,19 +47,25 @@ ${config.THG_CONTEXT}`;
 - NẾU TÁC GIẢ VIẾT: "Bên em nhận order..." -> 100% LÀ PROVIDER.
 - NẾU TÁC GIẢ VIẾT: "Mình cần tìm bên order..." -> 100% LÀ BUYER.
 
-🚫 TUYẾN SAI — LOẠI BỎ NGAY (CỰC KỲ QUAN TRỌNG):
-THG CHỈ phục vụ chiều ĐI: VN/CN → MỸ/Thế giới. KHÔNG phục vụ chiều VỀ hoặc nội địa.
-- BÀI VỀ NHẬP HÀNG TQ→VN (order taobao/1688 về VN, vận chuyển TQ về Việt Nam, nhập hàng TQ): → is_potential = false, score = 0, reasoning = "Sai tuyến: TQ→VN"
-- BÀI VỀ VẬN CHUYỂN NỘI ĐỊA VN (giao hàng nhanh, ship COD, chuyển phát nội tỉnh, giao toàn quốc): → is_potential = false, score = 0, reasoning = "Sai tuyến: nội địa VN"
-- BÀI VỀ GỬI HÀNG MỸ→VN (gửi đồ/quà về Việt Nam từ Mỹ): → is_potential = false, score = 0, reasoning = "Sai tuyến: US→VN"
-- KỂ CẢ khi tác giả là BUYER có nhu cầu thật, nếu tuyến KHÔNG PHẢI VN/CN→MỸ/Thế giới → vẫn PHẢI đánh trượt.
+🚫 THUẬT TOÁN TUYẾN ĐƯỜNG — LOẠI BỎ FALSE POSITIVE (CỰC KỲ QUAN TRỌNG):
+THG CHỈ phục vụ 2 chiều ĐI CHÍNH SAU ĐÂY:
+(A) Việt Nam (VN) đi Worldwide (Mỹ, Úc, EU...) NGOẠI TRỪ Trung Quốc.
+(B) Trung Quốc (CN) đi Worldwide (Mỹ, Úc, EU...) NGOẠI TRỪ Việt Nam.
+
+NẾU TÌNH HUỐNG SAU XẢY RA, PHẢI LOẠI BỎ NGAY LẬP TỨC:
+1. Từ Bất Kỳ Đâu VỀ Việt Nam: "từ Mỹ về VN", "từ Nhật về VN", "từ Alberta về Việt Nam", "từ Úc về Sài Gòn" → is_potential = false, reasoning = "Sai tuyến: World→VN"
+2. Từ Bất Kỳ Đâu VỀ Trung Quốc: "từ Mỹ về TQ", "gửi hàng về Quảng Châu" → is_potential = false, reasoning = "Sai tuyến: World→CN"
+3. Giữa VN và CN: "TQ về VN" hoặc "VN sang TQ" → is_potential = false, reasoning = "Sai tuyến: Intra-Asia"
+4. Nội Địa: "Sài Gòn đi Hà Nội", "ship COD nội thành" → is_potential = false, reasoning = "Sai tuyến: Nội địa"
+
+KỂ CẢ khi tác giả có nhu cầu thật, nếu tuyến KHÔNG PHẢI (VN/CN → Thế Giới) → vẫn PHẢI đánh trượt (score = 0).
 
 🎯 PHÂN LUỒNG 2 DỊCH VỤ THG:
-- "THG Express": DDP/line US/air/sea/LCL/FCL/kg/cbm/customs/thông quan/ISF/HS code/ship VN-CN→Mỹ → Express
+- "THG Express": DDP/line US/air/sea/LCL/FCL/kg/cbm/customs/thông quan/ISF/HS code/ship VN-CN→Mỹ/World → Express
 - "THG Warehouse": 3PL/warehouse/kho PA-TX/fulfill/fulfillment/FBA prep/ship to Amazon/returns/cross-dock → Warehouse
 - "THG Fulfillment": POD/Dropship chưa có hàng, cần xưởng in/mua hộ và ship.
 - "Both": Có cả tín hiệu Express + Warehouse/Fulfillment
-- "None": Không khớp hoặc là bài quảng cáo.
+- "None": Không khớp tuyến đường hoặc là quảng cáo.
 
 📊 THANG ĐIỂM SCORE (0-100):
 
@@ -73,11 +79,11 @@ score 0-39 = Không phải buyer HOẶC không liên quan
 - Nếu is_potential = false → score PHẢI = 0. Không có ngoại lệ.
 
 🔴 QUY TẮC CHỐNG FALSE POSITIVE (CỰC KỲ QUAN TRỌNG):
+- Bài chia sẻ kiến thức, hướng dẫn nhập môn, cách làm, tip về mô hình POD/Dropship (VD: "hướng dẫn AI vào mô hình POD") → KHÔNG liên quan logistics, ĐÁNH TRƯỢT NGAY → is_potential = false, score = 0
 - Bài hỏi về sản phẩm Amazon KHÔNG LIÊN QUAN đến shipping/logistics/fulfillment → is_potential = false, score = 0
-- Bài hỏi về nhập hàng Macy's, Target, Costco hoặc mua hàng nội địa Mỹ → is_potential = false, score = 0  
+- Bài hỏi về nhập hàng mua sắm cá nhân (Macy's, Target, Costco) hoặc mua hàng nội địa Mỹ → is_potential = false, score = 0  
 - Bài hỏi về listing, SEO, PPC, quảng cáo → is_potential = false, score = 0
 - Bài về tìm việc, tuyển dụng, HR → is_potential = false, score = 0
-- Bài chia sẻ kiến thức, hướng dẫn, tip → is_potential = false, score = 0
 - CHỈ is_potential = true khi bài viết RÕ RÀNG cần dịch vụ: vận chuyển, fulfillment, kho bãi, POD, dropship, hoặc tìm nguồn hàng TQ để ship đi Mỹ/EU`;
 
     // 5. Few-shot examples
@@ -106,20 +112,37 @@ score 0-39 = Không phải buyer HOẶC không liên quan
 - [COMMENT] "rate?" (parent: bài về ship hàng Mỹ) → is_potential:true, score:65, THG Express
 
 🚫 SAI TUYẾN (is_potential: false, score: 0):
-- "mình ở Cali cần gửi đồ về VN cho gia đình, ai biết dịch vụ nào tốt" → is_potential:false, score:0 (US→VN = sai tuyến)
-- "cần ship hàng từ Quảng Châu về Việt Nam, ai nhận?" → is_potential:false, score:0 (TQ→VN = sai tuyến)
-- "ai biết chỗ nào order taobao về VN uy tín?" → is_potential:false, score:0 (TQ→VN = sai tuyến)
-- "cần giao hàng nhanh nội thành HCM" → is_potential:false, score:0 (nội địa VN = sai tuyến)
-- "nhập hàng 1688 về kho Hà Nội, giá bao nhiêu?" → is_potential:false, score:0 (TQ→VN = sai tuyến)
+- "cần chuyển gấp kiện hàng từ Alberta về Việt Nam" → is_potential:false, score:0 (World→VN = sai tuyến)
+- "mình ở Cali cần gửi đồ về VN cho gia đình, ai biết dịch vụ nào tốt" → is_potential:false, score:0 (World→VN = sai tuyến)
+- "cần ship hàng từ Quảng Châu về Việt Nam, ai nhận?" → is_potential:false, score:0 (Intra-Asia = sai tuyến)
+- "ai biết chỗ nào order taobao về VN uy tín?" → is_potential:false, score:0 (Intra-Asia = sai tuyến)
+- "cần giao hàng nhanh nội thành HCM" → is_potential:false, score:0 (Nội địa = sai tuyến)
+- "nhập hàng 1688 về kho Hà Nội, giá bao nhiêu?" → is_potential:false, score:0 (Intra-Asia = sai tuyến)
 
-❌ KHÔNG LIÊN QUAN (is_potential: false, score: 0 — FALSE POSITIVE CẦN TRÁNH):
+❌ KHÔNG LIÊN QUAN / CHIA SẺ KIẾN THỨC (is_potential: false, score: 0):
+- "Hướng dẫn sử dụng AI vào mô hình POD 2026 chi tiết" → Chia sẻ kiến thức, KHÔNG CẦN ship → score: 0
 - "Cho hỏi liệt kê sản phẩm trên Amazon mà không có giá" → KHÔNG liên quan logistics. Buyer đang hỏi Amazon listing/SEO, KHÔNG cần ship/fulfill → score: 0
 - "Ai biết cách nhận chấp thuận cho hàng hóa nguy hiểm?" → Hỏi về compliance/regulation, KHÔNG cần dịch vụ logistics → score: 0
 - "Đang tìm nhập hàng từ Macy's/Target/Costco" → Mua hàng nội địa Mỹ, KHÔNG phải tuyến THG (VN/CN→US) → score: 0
 - "Cho hỏi về lời khuyên liệt kê sản phẩm Amazon" → Hỏi listing/SEO tip, KHÔNG cần ship/fulfill → score: 0
 - "Tìm inf LTD Hong Kong chính chủ" → Tìm công ty/giấy phép, KHÔNG cần logistics → score: 0
 - "Ai biết chỗ bán buôn quần áo giá rẻ?" → Tìm nguồn hàng nội địa, KHÔNG đề cập ship quốc tế → score: 0
-- "Giúp mình review sản phẩm trên Amazon" → Hỏi review/marketing, KHÔNG liên quan logistics → score: 0`;
+- "Giúp mình review sản phẩm trên Amazon" → Hỏi review/marketing, KHÔNG liên quan logistics → score: 0
+
+🚫 QUẢNG CÁO DỊCH VỤ (TUYỆT ĐỐI KHÔNG PHẢI LEAD — BẮT BUỘC score: 0):
+- "Công ty TNHH PT Thiên Long Phát Express | Hotline: 036xxx" → PROVIDER (có công ty, hotline, quảng cáo lộ liễu)
+- "Bao thuế nhập khẩu 100%, có tracking theo dõi đơn hàng ✔️" → PROVIDER (cam kết, emoji chức năng phổ biến của agency)
+- "Bên em cho thuê tài khoản TikTok Shop US, cam kết uy tín, inbox em" → PROVIDER (cho thuê dịch vụ + CTA inbox)
+- "Bên mình cung cấp sản phẩm với giao hàng nhanh và giá thấp" → PROVIDER (cung cấp + giá/giao hàng = quảng cáo)
+- "Shop mình có sẵn hàng mỹ phẩm, order từ 1 đơn, ib em" → PROVIDER (có sẵn hàng + CTA ibem)
+- "Chúng tôi cho thuê kho tại PA, chất lượng cao, liên hệ ngay" → PROVIDER (cho thuê kho + CTA liên hệ)
+- "Team em nhận order hàng từ TQ, gom hàng ship US, inbox ngay" → PROVIDER (nhận order + gom hàng = dịch vụ)
+- "Bên mình chuyên bán nguyên liệu in áo, giá gốc xưởng" → PROVIDER (chuyên bán nguyên liệu = quảng cáo)
+- "Em có xưởng sản xuất tại VN, nhận đơn từ 50 cái, zalo em" → PROVIDER (có xưởng + nhận đơn + CTA)
+
+⚠️ CHÚ Ý PHÂN BIỆT — BUYER đang TÌM KIẾM vs PROVIDER đang CHÀO HÀNG:
+- "Có bác nào cho thuê tài khoản quảng cáo không ạ?" → BUYER (đang HỎI TÌM, không phải chào bán) → CÓ THỂ là lead nếu đi kèm tín hiệu POD/ecom
+- "Bên em cho thuê acc TikTok, inbox em nhé" → PROVIDER (đang CHÀO BÁN dịch vụ) → score: 0`;
 
     // Combine all parts
     return [base, kbContext, feedbackSection, rules, examples,
@@ -173,10 +196,13 @@ Trả về JSON (object đơn, không phải array):
   "is_potential": boolean,
   "score": number (NẾU is_potential=true thì PHẢI >= 60, NẾU false thì = 0),
   "service_match": "THG Fulfillment" | "THG Express" | "THG Warehouse" | "Both" | "None",
-  "reasoning": "Giải thích ngắn gọn tại sao IS hoặc IS NOT lead",
+  "reasoning": "Giải thích ngắn gọn tại sao ĐẬU hoặc TRƯỢT (Bắt buộc).",
+  "pain_points": "NẾU LÀ LEAD: Phân tích SÂU SẮC vấn đề/vướng mắc (bottleneck) khách đang gặp phải. NẾU TRƯỢT: Để trống.",
+  "customer_persona": "NẾU LÀ LEAD: Bắt mạch tâm lý/tính cách khách qua văn phong (vd: Đang bức xúc/nóng tính, Cẩn thận/hỏi kỹ, Newbie cần dìu dắt, Thực tế/thích số liệu).",
+  "sales_angle": "NẾU LÀ LEAD: Phác thảo kịch bản (Angle) tiếp cận GÃI ĐÚNG CHỖ NGỨA kết hợp Giải pháp THG + Tâm lý khách. Gợi ý luôn câu mở lời. NẾU TRƯỢT: Để trống.",
   "urgency": "low" | "medium" | "high",
-  "profit_estimate": "Ước tính doanh số nếu là buyer (vd: ~$500, ~$2,000). Để trống nếu không phải buyer.",
-  "gap_opportunity": "Nếu khách đang phàn nàn/bức xúc đối thủ, mô tả cơ hội. Để trống nếu không có."
+  "profit_estimate": "Ước tính doanh số. Để trống nếu không phải buyer.",
+  "gap_opportunity": "Tín hiệu đào tẩu (chê đối thủ). Để trống nếu không có."
 }`;
 }
 
@@ -200,7 +226,7 @@ ${postsList}
 Trả về JSON object với key "results" là array ${posts.length} phần tử, theo đúng thứ tự:
 {
   "results": [
-    {"author_role":"...","intent":"...","is_potential":bool,"score":number,"service_match":"...","reasoning":"...","urgency":"...","profit_estimate":"...","gap_opportunity":"..."},
+    {"author_role":"...","intent":"...","is_potential":bool,"score":number,"service_match":"...","reasoning":"...","pain_points":"...","customer_persona":"...","sales_angle":"...","urgency":"...","profit_estimate":"...","gap_opportunity":"..."},
     ...
   ]
 }
@@ -227,7 +253,7 @@ module.exports = {
  * @returns {{ system: string, user: string }}
  */
 function buildAgentReply(lead, agentProfile) {
-    const config = require('../config');
+    const config = require('../../config');
     const { getContextForPrompt } = require('./knowledgeBase');
 
     const toneGuide = {

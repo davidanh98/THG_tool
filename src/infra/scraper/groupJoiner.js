@@ -18,7 +18,7 @@ async function autoJoinGroups(groups = null, account = null) {
     let targetGroups = groups;
     if (!targetGroups || targetGroups.length === 0) {
         try {
-            const groupDiscovery = require('../../ai/agents/groupDiscovery');
+            const groupDiscovery = require('../../agent/groupDiscovery');
             targetGroups = groupDiscovery.getScanRotationList(200);
         } catch { }
     }

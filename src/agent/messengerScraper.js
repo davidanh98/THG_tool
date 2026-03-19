@@ -26,7 +26,7 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const fs = require('fs');
 const path = require('path');
 const accountManager = require('./accountManager');
-const database = require('../data_store/database');
+const database = require('../../core/data_store/database');
 
 chromium.use(StealthPlugin());
 

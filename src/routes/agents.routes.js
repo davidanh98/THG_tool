@@ -5,13 +5,13 @@ const router = require('express').Router();
 const express = require('express');
 const database = require('../core/data_store/database');
 const logger = require('../logger');
-const knowledgeBase = require('../ai/agents/knowledgeBase');
-const { buildAgentReply } = require('../ai/agents/promptBuilder');
+const knowledgeBase = require('../agent/knowledgeBase');
+const { buildAgentReply } = require('../agent/promptBuilder');
 
 // ── GET /api/agent/stats — Agent memory statistics ──────────────────────────
 router.get('/api/agent/stats', (req, res) => {
     try {
-        const memoryStore = require('../ai/agents/memoryStore');
+        const memoryStore = require('../agent/memoryStore');
         const memoryStats = memoryStore.getMemoryStats();
         const kbChunks = knowledgeBase.getChunkCount();
         res.json({
@@ -27,7 +27,7 @@ router.get('/api/agent/stats', (req, res) => {
 // ── GET /api/agent/feedback-log — Recent feedback entries ───────────────────
 router.get('/api/agent/feedback-log', (req, res) => {
     try {
-        const memoryStore = require('../ai/agents/memoryStore');
+        const memoryStore = require('../agent/memoryStore');
         const limit = parseInt(req.query.limit) || 50;
         const raw = memoryStore.getRecentFeedback(limit);
         const formatted = raw.map(f => ({
@@ -102,8 +102,8 @@ router.post('/api/agents/:name', express.json(), (req, res) => {
 
 // ── Try to load Personal Agent + Messenger modules ──────────────────────────
 try {
-    const personalAgent = require('../ai/agents/personalAgent');
-    const styleExtractor = require('../ai/agents/styleExtractor');
+    const personalAgent = require('../agent/personalAgent');
+    const styleExtractor = require('../agent/styleExtractor');
 
     // GET /api/agents — List all agents + status
     router.get('/api/agents', (req, res) => {
@@ -216,8 +216,8 @@ try {
 
 // ── Messenger Scraper (learn from Messenger) ────────────────────────────────
 try {
-    const accountManager = require('../ai/agents/accountManager');
-    const messengerScraper = require('../ai/agents/messengerScraper');
+    const accountManager = require('../agent/accountManager');
+    const messengerScraper = require('../agent/messengerScraper');
 
     // POST /api/agents/:name/learn-messenger
     router.post('/api/agents/:name/learn-messenger', async (req, res) => {
@@ -295,7 +295,7 @@ try {
     const { chromium } = require('playwright-extra');
     const StealthPlugin = require('puppeteer-extra-plugin-stealth');
     chromium.use(StealthPlugin());
-    const accountManager = require('../ai/agents/accountManager');
+    const accountManager = require('../agent/accountManager');
     const fs = require('fs');
     const path = require('path');
 

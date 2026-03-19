@@ -8,7 +8,7 @@
 
 const config = require('../../config');
 const fbScraper = require('../scraper');
-const { contentHash } = require('../../ai/agents/memoryStore');
+const { contentHash } = require('../../agent/memoryStore');
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -39,7 +39,7 @@ async function scrapeFacebook(_keywords, maxPosts = 30, options = {}) {
         // Load groups: groups.db (source of truth) > config fallback
         let groups = config.FB_TARGET_GROUPS;
         try {
-            const groupDiscovery = require('../../ai/agents/groupDiscovery');
+            const groupDiscovery = require('../../agent/groupDiscovery');
             const dbGroups = groupDiscovery.getScanRotationList(200);
             if (dbGroups.length > 0) {
                 groups = dbGroups;

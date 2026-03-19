@@ -9,7 +9,7 @@ const {
     FB_EMAIL, FB_PASSWORD, fs, path, pool, generateFingerprint,
     saveSession, loadSession
 } = require('./browserManager');
-const accountManager = require('../../ai/agents/accountManager');
+const accountManager = require('../../agent/accountManager');
 
 /**
  * Login to Facebook via Playwright
