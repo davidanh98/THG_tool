@@ -113,27 +113,31 @@ function buildPromptVN(lead, staffName, tone) {
         urgent: 'Khẩn trương nhưng không push bán. Nhấn mạnh thời gian là cơ hội.',
     };
 
-    return `Bạn là ${staffName}, Sales của THG Fulfill. Khách hàng vừa đăng bài trong group Facebook:
+    return `Bạn là ${staffName}, chuyên viên Sales của THG Fulfill. Một khách hàng sộp vừa đăng bài trong group Facebook:
 
 ━━━ BÀI POST CỦA KHÁCH ━━━
 "${(lead.content || '').substring(0, 500)}"
 
-━━━ PHÂN TÍCH AI ━━━
-• Category: ${lead.category || 'General'}
-• Pain point: ${lead.summary || 'Chưa xác định'}
+━━━ HỒ SƠ TÂM LÝ & CHIẾN LƯỢC CHỐT SALE ━━━
+• Tâm lý & Nỗi đau (Pain points): ${lead.buyer_signals || 'Chưa xác định'}
+• Góc độ chốt Sale (Sales Angle): ${lead.summary || 'Chưa xác định'}
 
-━━━ FORM MẪU BẮT BUỘC ━━━
-Mở đầu: Hãy viết 1-2 câu ĐẦU TIÊN thật tự nhiên, reference trực tiếp đến bài đăng hoặc hình ảnh ảnh tìm hàng của khách (ví dụ: "Chào bạn, thấy bạn đang tìm xưởng POD...").
-Phần giữa: Trình bày form thông tin dịch vụ sau một cách tự nhiên hoặc giữ nguyên:
+━━━ YÊU CẦU ━━━
+Dựa TRỰC TIẾP vào "Hồ Sơ Tâm Lý" bên trên, hãy viết 1 tin nhắn tư vấn GÃI ĐÚNG CHỖ NGỨA của khách.
+
+CẤU TRÚC BẮT BUỘC:
+1. Mở đầu: Viết 1-2 câu ĐẦU TIÊN thật tự nhiên, ĐÁNH TRÚNG VÀO NỖI ĐAU của khách (không chào hỏi sáo rỗng kiểu bot).
+2. Phần giữa: Trình bày form thông tin dịch vụ sau một cách tự nhiên (bạn có thể điều chỉnh văn phong cho hợp tâm lý khách, nhưng phải giữ nguyên ý chính):
 ${THG_CONTEXT}
-Phần cuối: Kết luận mời gọi liên hệ và BẮT BUỘC chèn thông tin liên hệ của bạn như sau:
+3. Phần cuối: CTA kêu gọi hành động dựa theo Góc độ chốt Sale (Angle) phía trên.
+
+GIỌNG VĂN: ${toneGuide[tone] || toneGuide.friendly}. Hãy tỏ ra là một Sale người thật cực kỳ nhanh nhạy.
+
+BẮT BUỘC CHÈN NGUYÊN BẢN ĐOẠN CONTACT NÀY TẠI CUỐI TIN NHẮN (KHÔNG ĐƯỢC CHẾ THÊM HAY SỬA ĐỔI):
 Nếu mình đang kinh doanh POD/Dropship, cứ liên hệ em để được hỗ trợ nhé!
 ${getAgentContact(staffName)}
 
-━━━ YÊU CẦU ━━━
-Viết TIN NHẮN MESSENGER DM hoặc COMMENT trọn vẹn. 
-Giọng văn: ${toneGuide[tone] || toneGuide.friendly}
-KHÔNG giải thích thêm, CHỈ trả về nội dung tin nhắn hoàn chỉnh.`;
+CHỈ trả về nội dung tin nhắn hoàn chỉnh, tuyệt đối không có <think> hay giải thích.`;
 }
 
 /**
@@ -151,28 +155,26 @@ function buildPromptEN(lead, staffName, tone) {
 ━━━ CUSTOMER'S POST ━━━
 "${(lead.content || '').substring(0, 500)}"
 
-━━━ AI ANALYSIS ━━━
-• Category: ${lead.category || 'General'}
-• Pain point: ${lead.summary || 'Not determined'}
-• Score: ${lead.score || 0}/100
-• Buyer signals: ${lead.buyer_signals || 'N/A'}
+━━━ PSYCHOLOGICAL PROFILE & SALES STRATEGY ━━━
+• Psychology & Pain points: ${lead.buyer_signals || 'Not determined'}
+• Pitch Angle: ${lead.summary || 'Not determined'}
 
 ━━━ THG SERVICES ━━━
 ${THG_CONTEXT_EN}
 
 ━━━ REQUIREMENTS ━━━
-Write a MESSENGER DM outreach message. Must:
-1. OPEN by directly referencing the SPECIFIC issue in their post (NO generic greeting)
-2. Provide a THG solution MATCHING their specific need
-3. Tone: ${toneGuide[tone] || toneGuide.friendly}
-4. End with soft CTA (ask about details, invite to chat)
-5. Length: 3-5 sentences, natural and concise
+Write a highly persuasive outreach message directly utilizing the Psychological Profile above.
+
+Must:
+1. OPEN by addressing the EXACT pain point mentioned in the profile.
+2. Structure the pitch based on the "Pitch Angle" suggestion.
+3. Subtly weave in the THG Services context as the perfect solution.
+4. Tone: ${toneGuide[tone] || toneGuide.friendly}
 
 DO NOT:
-- Use generic pitches like "we specialize in..."
-- Copy-paste templates  
-- Quote specific prices
-- Be spammy
+- Use generic greetings like "Hello dear" or "I saw your post".
+- Copy-paste robotic templates.
+- Be overly pushy if the customer profile indicates caution.
 
 Return ONLY the message content, no explanations.`;
 }
@@ -182,18 +184,30 @@ Return ONLY the message content, no explanations.`;
  */
 function buildCommentPrompt(lead, staffName, language) {
     if (language === 'vietnamese') {
-        return `Bạn là ${staffName} (THG Fulfill). Khách đăng bài:
+        return `Bạn là ${staffName} (Sale tại THG Fulfill). Khách hàng vừa đăng bài:
 "${(lead.content || '').substring(0, 300)}"
 
-Viết COMMENT REPLY (3-4 câu) phản hồi trực tiếp vấn đề khách nêu, và giới thiệu khéo léo form dịch vụ THG Fulfill, kèm theo contact của bạn ở cuối:
+━━━ INSIGHT BẮT MẠCH ━━━
+• Tâm lý & Vấn đề: ${lead.buyer_signals || ''}
+• Gợi ý chốt: ${lead.summary || ''}
+
+YÊU CẦU:
+Viết 1 COMMENT REPLY (khoảng 3-4 câu) ĐÁNH TRÚNG TÂM LÝ khách hàng dựa trên "Insight Bắt Mạch" phía trên.
+Đọc vị xem họ cần gì, bức xúc gì để Comment cho mượt mà (chứ không phải 1 cái bot spam).
+Giới thiệu khéo léo dịch vụ THG Fulfill và kèm y chang contact của bạn ở dưới cùng:
+Nếu mình đang kinh doanh POD/Dropship, cứ liên hệ em để được hỗ trợ nhé!
 ${getAgentContact(staffName)}
 
-CHỈ trả về nội dung comment (bớt form cứng nhắc lại, nói tự nhiên như reviewer).`;
+CHỈ trả về nội dung text của comment.`;
     }
-    return `You are ${staffName} (THG Fulfill). Customer posted:
+    return `You are ${staffName} (Sales rep at THG Fulfill). Customer posted:
 "${(lead.content || '').substring(0, 300)}"
 
-Write a comment reply addressing their issue naturally, briefly mentioning THG Fulfill's POD services, ending with your contact detail.
+━━━ INSIGHT PROFILE ━━━
+• Psychology & Pain points: ${lead.buyer_signals || ''}
+• Pitch Angle: ${lead.summary || ''}
+
+Write a natural 3-4 sentence comment reply. Address their psychological state directly based on the insight profile, then casually pitch THG Fulfill's POD services.
 Return ONLY the comment text.`;
 }
 
