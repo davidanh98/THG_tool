@@ -78,7 +78,7 @@ function ensureAccountsTable() {
 
     // --- Load Scraper Accounts from JSON (since .env is Git ignored) ---
     try {
-        const scrapersPath = path.join(__dirname, '..', 'config', 'scraper_accounts.json');
+        const scrapersPath = path.join(__dirname, '..', '..', 'backend', 'config', 'scraper_accounts.json');
         if (fs.existsSync(scrapersPath)) {
             const scraperAccs = JSON.parse(fs.readFileSync(scrapersPath, 'utf8'));
             for (const acct of scraperAccs) {
