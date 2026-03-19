@@ -16,6 +16,7 @@ const database = require('../core/data_store/database');
 function getExpertReplier() { return require('../../ai/agents/strategies/expertReplier'); }
 function getAudienceExporter() { return require('../../ai/agents/strategies/audienceExporter'); }
 function getHotLeadAlert() { return require('../../ai/agents/strategies/hotLeadAlert'); }
+function getFanpageSharer() { return require('../../ai/agents/strategies/fanpageSharer'); }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🏆 STRATEGY 1: Expert Reply
@@ -202,6 +203,31 @@ router.get('/engager-stats', (req, res) => {
             recentEngagements: recent,
             actionBreakdown,
         });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🚜 STRATEGY 4: Fanpage Auto-Sharer (Account Farming)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// POST /api/strategy/fanpage-share — Trigger account farming (share Fanpage post)
+router.post('/fanpage-share', async (req, res) => {
+    try {
+        const { runFanpageFarm } = getFanpageSharer();
+
+        // Return immediately, process in background to prevent timeout
+        res.json({ ok: true, message: 'Đã ra lệnh cho 1 Tài Khoản VIP đi Share bài Fanpage (Farming)...' });
+
+        runFanpageFarm().then(result => {
+            if (result.success) {
+                console.log(`[StrategyAPI] ✅ Farmed successfully on ${result.email} with caption: "${result.caption}"`);
+            } else {
+                console.error(`[StrategyAPI] ❌ Farm failed: ${result.reason}`);
+            }
+        }).catch(err => console.error(err));
+
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });
     }

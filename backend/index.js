@@ -67,6 +67,14 @@ async function main() {
         console.log(`[Cron] ✅ Scan job enqueued. Worker will pick it up.`);
     });
 
+    // ═══ Strategy: Fanpage Sharer (Account Farming) ═══
+    // Run at 15:00 every 2 days to automate the 4 VIP accounts visiting and sharing the THG Fanpage
+    cron.schedule('0 15 */2 * *', () => {
+        console.log(`[Cron] 🚜 Khởi động chiến dịch Nuôi Nick (Fanpage Sharer)...`);
+        const { runFanpageFarm } = require('../ai/agents/strategies/fanpageSharer');
+        runFanpageFarm().catch(console.error);
+    });
+
     // Enqueue initial scan on startup
     console.log('[Main] 🚀 Enqueueing initial scan...');
     database.enqueueScan('FULL_SCAN', {

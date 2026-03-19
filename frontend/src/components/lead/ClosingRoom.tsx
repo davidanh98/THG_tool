@@ -218,7 +218,7 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
                 ))}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 'var(--space-xl)' }}>
+            <div className="closing-room-grid">
                 {/* LEFT: Lead info */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
                     {/* Author card */}

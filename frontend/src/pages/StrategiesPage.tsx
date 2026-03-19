@@ -165,6 +165,30 @@ export default function StrategiesPage() {
                         {actionLoading === 'alert_all' ? '⏳ Sending...' : '📢 Alert All Hot Leads (80+)'}
                     </button>
                 </div>
+
+                {/* Account Farming (Fanpage Sharer) */}
+                <div className="strategy-card" style={{ borderTop: '4px solid #10b981' }}>
+                    <div className="strategy-header">
+                        <div className="strategy-title" style={{ color: '#10b981' }}>🚜 Nuôi Nick (Farm)</div>
+                        <div className="strategy-stat">1 share/2 ngày</div>
+                    </div>
+                    <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', margin: '0 0 var(--space-md)' }}>
+                        AI tự chôm bài từ Fanpage cty mang về tường Facebook cá nhân để tăng Trust.
+                    </p>
+                    <button
+                        className="btn btn-sm"
+                        style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}
+                        disabled={actionLoading === 'farm_account'}
+                        onClick={async () => {
+                            setActionLoading('farm_account')
+                            try { await apiPost('/api/strategy/fanpage-share', {}) } catch { }
+                            setActionLoading(null)
+                            fetchData()
+                        }}
+                    >
+                        {actionLoading === 'farm_account' ? '⏳ Đang đi share...' : '🚜 Gọi 1 Acc Đi Share Bài Mới'}
+                    </button>
+                </div>
             </div>
 
             {/* Activity Timeline */}

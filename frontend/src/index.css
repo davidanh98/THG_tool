@@ -1154,30 +1154,172 @@ select:focus {
   transform: translateY(-4px);
 }
 
+/* Closing Room Layout */
+.closing-room-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--space-xl);
+}
+
+@media (max-width: 1024px) {
+  .closing-room-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .app-sidebar {
     display: none;
   }
 
+  /* Fixed Bottom Navigation App Style */
   .mobile-nav {
     display: block;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+    background: rgba(26, 26, 36, 0.85);
+    /* Glassmorphism dark */
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .mobile-nav-items {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    height: var(--mobile-nav-height);
+  }
+
+  .mobile-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    padding: 6px 12px;
+  }
+
+  .mobile-nav-item:hover,
+  .mobile-nav-item:active {
+    color: var(--text-primary);
+  }
+
+  .mobile-nav-item--active {
+    color: var(--accent);
+  }
+
+  .mobile-nav-item-icon {
+    font-size: 1.25rem;
+    filter: grayscale(100%) opacity(0.7);
+    transition: all 0.2s ease;
+  }
+
+  .mobile-nav-item--active .mobile-nav-item-icon {
+    filter: none;
+    transform: translateY(-2px);
   }
 
   .app-content {
     padding: var(--space-md);
-    padding-bottom: calc(var(--mobile-nav-height) + var(--space-md) + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--mobile-nav-height) + var(--space-xl) + env(safe-area-inset-bottom));
   }
 
   .topbar-search {
     max-width: none;
   }
 
-  .lead-table thead th:nth-child(5),
-  .lead-table tbody td:nth-child(5),
-  .lead-table thead th:nth-child(7),
-  .lead-table tbody td:nth-child(7) {
+  /* Transform Lead Table into Mobile Cards */
+  .lead-table,
+  .lead-table thead,
+  .lead-table tbody,
+  .lead-table th,
+  .lead-table td,
+  .lead-table tr {
+    display: block;
+  }
+
+  .lead-table thead {
     display: none;
+    /* Hide table headers completely on mobile */
+  }
+
+  .lead-table tbody tr {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-md);
+    padding: var(--space-md);
+    position: relative;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Reset padding and borders from desktop table layout */
+  .lead-table tbody td {
+    padding: 4px 0;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Make profile name stand out */
+  .lead-table tbody td:nth-child(2) {
+    font-size: 1.1rem;
+    font-weight: bold;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 8px;
+  }
+
+  /* Shift Score & Lang Pills to Top Right Corner */
+  .lead-table tbody td:nth-child(4) {
+    position: absolute;
+    top: var(--space-md);
+    right: var(--space-md);
+    padding: 0;
+  }
+
+  /* Date at bottom right */
+  .lead-table tbody td:nth-child(1) {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    justify-content: space-between;
+  }
+
+  /* Summary Text truncated cleanly */
+  .lead-table tbody td:nth-child(3) {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  /* Agents Badges */
+  .lead-table tbody td:nth-child(5),
+  .lead-table tbody td:nth-child(6),
+  .lead-table tbody td:nth-child(7) {
+    display: inline-flex;
+    /* Show them inline at the bottom */
+    margin-top: 4px;
+  }
+
+  /* Hide raw table layout flex wrap fix */
+  .truncate {
+    max-width: 100% !important;
+    white-space: normal !important;
   }
 }
 

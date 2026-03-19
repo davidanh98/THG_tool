@@ -81,7 +81,7 @@ function getAgentContact(staffName) {
 // ─── THG Service Context ─────────────────────────────────────────────────────
 const THG_CONTEXT = `
 THG Fulfill hỗ trợ in ấn – đóng gói – xử lý đơn POD/Dropship cho nhiều dòng sản phẩm hot như phonecase, sweater, ornament và các sản phẩm custom khác.
-👉 Xem catalog tại website: https://www.thgfulfill.com/catalog
+👉 Website chính thức: ${config.THG_WEBSITE || 'https://www.thgfulfill.com/'}
 Hiện THG có:
 ✅ Basecost tốt, sản xuất trực tiếp US – dễ scale
 ✅ In nhanh, giao US chỉ 2–5 ngày
@@ -92,7 +92,7 @@ Hiện THG có:
 
 const THG_CONTEXT_EN = `
 THG Fulfill supports printing, packaging, and processing POD/Dropship orders for hot products like phone cases, sweaters, ornaments, and custom products.
-👉 Catalog: https://www.thgfulfill.com/catalog
+👉 Official Website: ${config.THG_WEBSITE || 'https://www.thgfulfill.com/'}
 We offer:
 ✅ Great base cost, direct US production - easy to scale
 ✅ Fast printing, US delivery in just 2-5 days

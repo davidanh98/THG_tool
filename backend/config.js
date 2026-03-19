@@ -127,9 +127,15 @@ module.exports = {
   //   Instagram:      ~24 cr
   //   TỔNG:          ~184 cr ✅ (< 200 cr/ngày budget)
   // ════════════════════════════════════════════════════
+  // COMPANY LINKS (For AI Context & Account Farming)
+  // ════════════════════════════════════════════════════
+  THG_WEBSITE: 'https://www.thgfulfill.com/thgfulfill',
+  THG_FANPAGE: 'https://www.facebook.com/THGFulfill',
+  THG_TIKTOK: 'https://www.tiktok.com/@thgfulfillment',
 
   THG_CONTEXT: `
 THG là công ty logistics thương mại điện tử, chuyên phục vụ SELLER (POD, Dropship, Fulfillment, Amazon FBA).
+Website công ty: https://www.thgfulfill.com/thgfulfill
 Khách hàng mục tiêu: SELLER đang bán trên Amazon, TikTok Shop, Etsy, Shopify, eBay cần:
 - In ấn sản phẩm (POD/Print on Demand)
 - Tìm nguồn hàng từ Trung Quốc (1688, Taobao, xưởng TQ) để ship đi phương Tây
