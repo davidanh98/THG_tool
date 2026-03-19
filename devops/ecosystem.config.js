@@ -19,8 +19,8 @@ module.exports = {
         // ── API Server (Lightweight) ─────────────────────────────────────
         {
             name: 'thg-api',
-            script: 'src/index.js',
-            cwd: __dirname,
+            script: 'backend/index.js',
+            cwd: require('path').join(__dirname, '..'),
 
             exec_mode: 'fork',
             instances: 1,
@@ -60,8 +60,8 @@ module.exports = {
         // ── Scraper Worker (Playwright — Heavy) ──────────────────────────
         {
             name: 'thg-scraper',
-            script: 'src/infra/workers/scraperWorker.js',
-            cwd: __dirname,
+            script: 'backend/infra/workers/scraperWorker.js',
+            cwd: require('path').join(__dirname, '..'),
 
             exec_mode: 'fork',
             instances: 1,
@@ -100,8 +100,8 @@ module.exports = {
         // ── AI Worker (Classification — I/O-bound) ───────────────────────
         {
             name: 'thg-ai-worker',
-            script: 'src/infra/workers/aiWorker.js',
-            cwd: __dirname,
+            script: 'backend/infra/workers/aiWorker.js',
+            cwd: require('path').join(__dirname, '..'),
 
             exec_mode: 'fork',
             instances: 1,
@@ -136,8 +136,8 @@ module.exports = {
         // ── Social Worker 24/7 (Browser Automation) ─────────────────────────
         {
             name: 'thg-social-worker',
-            script: 'src/infra/workers/socialWorker.js',
-            cwd: __dirname,
+            script: 'backend/infra/workers/socialWorker.js',
+            cwd: require('path').join(__dirname, '..'),
 
             exec_mode: 'fork',
             instances: 1,
