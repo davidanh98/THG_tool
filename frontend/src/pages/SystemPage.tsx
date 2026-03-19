@@ -2,7 +2,7 @@ export default function SystemPage() {
     const TOOLS = [
         {
             icon: '🤖', name: 'CrawBot (Facebook Scraper)', sub: 'Playwright + Stealth Mode', color: '#60a5fa', border: 'rgba(59,130,246,0.2)',
-            features: ['Vào 50+ group Facebook mỗi 10 phút, quét bài + comment', 'Vượt qua bảo mật nền tảng (Fingerprint bypass)', 'Đọc Messenger Sales → học văn phong mỗi đêm 2AM'],
+            features: ['Vào 50+ group Facebook mỗi 1 tiếng, quét bài + comment', 'Vượt qua bảo mật nền tảng (Fingerprint bypass)', 'Đọc Messenger Sales → học văn phong mỗi đêm 2AM'],
             note: 'Thay thế hoàn toàn SociaVault — tiết kiệm 100% chi phí API'
         },
         {
@@ -18,7 +18,7 @@ export default function SystemPage() {
     ]
 
     const PIPELINE = [
-        { icon: '🔍', label: 'SĂN LEAD', detail: '50+ groups • 10 phút', color: '#60a5fa' },
+        { icon: '🔍', label: 'SĂN LEAD', detail: '50+ groups • 1 tiếng', color: '#60a5fa' },
         { icon: '🧹', label: 'LỌC RÁC', detail: 'Regex + Guard', color: '#fbbf24' },
         { icon: '🧠', label: 'PHÂN LOẠI', detail: 'Gemini 0–100', color: '#4ade80' },
         { icon: '📬', label: 'SALES NHẬN', detail: 'Dashboard', color: '#f87171' },

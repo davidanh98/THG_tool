@@ -125,7 +125,7 @@ async function notifyScanSummary(stats) {
 ${platformLines}
 ⏱️ <b>Thời gian xử lý:</b> ${stats.duration}s
 🏆 <b>Tổng lead mới:</b> ${stats.totalLeads}
-${stats.totalLeads > 0 ? '\n⬇️ Chi tiết từng lead sẽ được gửi bên dưới...' : '\n😴 Không có lead mới lần này. Hệ thống sẽ quét lại sau 30 phút.'}
+${stats.totalLeads > 0 ? '\n⬇️ Chi tiết từng lead sẽ được gửi bên dưới...' : '\n😴 Không có lead mới lần này. Hệ thống sẽ quét lại sau 1 tiếng.'}
   `.trim();
 
     return sendMessage(message);

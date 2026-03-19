@@ -30,10 +30,10 @@ module.exports = {
   FB_COOKIES: process.env.FB_COOKIES || '',  // Facebook session cookies for self-hosted mode
 
   // ════════════════════════════════════════════════════
-  // SCAN SCHEDULE — 2h interval (quality over quantity)
-  // Scan every 2 hours during active hours (12 scans/day)
+  // SCAN SCHEDULE — 1h interval (optimized for 2 clone accounts)
+  // Scan every 1 hour during active hours (24 scans/day)
   // ════════════════════════════════════════════════════
-  CRON_UNIFIED_SCAN: '0 0,2,4,6,8,10,12,14,16,18,20,22 * * *',  // Every 2 hours
+  CRON_UNIFIED_SCAN: '0 * * * *',  // Every hour exactly on the hour
   MAX_POSTS_PER_SCAN: parseInt(process.env.MAX_POSTS_PER_SCAN || '200'),  // AGGRESSIVE: 200 max
 
   // Campaign: 200 leads by Mar 10 → 28 scans × ~40 credits = ~1120/day
