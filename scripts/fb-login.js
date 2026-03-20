@@ -126,6 +126,9 @@ async function loginAndSave(email, password, accName) {
             await page.waitForTimeout(5000);
         }
 
+        console.log('⏳ Waiting 6s for Facebook React app to load...');
+        await page.waitForTimeout(6000);
+
         // Step 4: Check for 2FA / Checkpoint
         const currentUrl = page.url();
 
