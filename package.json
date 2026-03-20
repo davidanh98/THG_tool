@@ -39,9 +39,10 @@
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1",
     "openai": "^6.31.0",
-    "otplib": "^13.3.0",
+    "otplib": "^13.4.0",
     "playwright": "^1.58.2",
     "playwright-extra": "^4.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "totp-generator": "^2.0.1"
   }
 }
