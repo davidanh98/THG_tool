@@ -145,15 +145,39 @@ async function loginAndSave(email, password, accName) {
             try {
                 if (pageContent.includes('Try Another Way') || pageContent.includes('Thử cách khác') || pageContent.includes('Another Way')) {
                     console.log('🔄 Bypassing "Check another device" -> Clicking "Try Another Way"...');
-                    await page.click('text="Try Another Way", text="Thử cách khác"').catch(() => { });
+                    await page.evaluate(() => {
+                        const els = Array.from(document.querySelectorAll('div, span, a'));
+                        for (const el of els) {
+                            const txt = el.innerText?.trim()?.toLowerCase() || '';
+                            if (txt === 'try another way' || txt === 'thử cách khác') {
+                                el.click(); break;
+                            }
+                        }
+                    });
                     await page.waitForTimeout(3000);
 
                     console.log('🔄 Selecting "Authentication app"...');
-                    await page.locator('text=/Authentication App/i, text=/Ứng dụng xác thực/i').first().click().catch(() => { });
+                    await page.evaluate(() => {
+                        const els = Array.from(document.querySelectorAll('div, span'));
+                        for (const el of els) {
+                            const txt = el.innerText?.trim()?.toLowerCase() || '';
+                            if (txt.includes('authentication app') || txt.includes('ứng dụng xác thực')) {
+                                el.click(); break;
+                            }
+                        }
+                    });
                     await page.waitForTimeout(1500);
 
                     console.log('🔄 Clicking Continue...');
-                    await page.click('button:has-text("Continue"), button:has-text("Tiếp tục"), div[role="button"]:has-text("Continue")').catch(() => { });
+                    await page.evaluate(() => {
+                        const els = Array.from(document.querySelectorAll('button, div[role="button"]'));
+                        for (const el of els) {
+                            const txt = el.innerText?.trim()?.toLowerCase() || '';
+                            if (txt === 'continue' || txt === 'tiếp tục') {
+                                el.click(); break;
+                            }
+                        }
+                    });
                     await page.waitForTimeout(4000); // Wait for the input field to render
                 }
             } catch (bypassErr) {
