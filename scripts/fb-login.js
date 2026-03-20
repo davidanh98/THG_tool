@@ -141,10 +141,29 @@ async function loginAndSave(email, password, accName) {
             // Try to detect what type of checkpoint
             const pageContent = await page.textContent('body');
 
+            // --- FIX FOR "Check your notifications on another device" ---
+            try {
+                if (pageContent.includes('Try Another Way') || pageContent.includes('Thử cách khác') || pageContent.includes('Another Way')) {
+                    console.log('🔄 Bypassing "Check another device" -> Clicking "Try Another Way"...');
+                    await page.click('text="Try Another Way", text="Thử cách khác"').catch(() => { });
+                    await page.waitForTimeout(3000);
+
+                    console.log('🔄 Selecting "Authentication app"...');
+                    await page.locator('text=/Authentication App/i, text=/Ứng dụng xác thực/i').first().click().catch(() => { });
+                    await page.waitForTimeout(1500);
+
+                    console.log('🔄 Clicking Continue...');
+                    await page.click('button:has-text("Continue"), button:has-text("Tiếp tục"), div[role="button"]:has-text("Continue")').catch(() => { });
+                    await page.waitForTimeout(4000); // Wait for the input field to render
+                }
+            } catch (bypassErr) {
+                console.log('⚠️ Bypass Try Another Way failed (ignoring):', bypassErr.message);
+            }
+
             if (pageContent.includes('code') || pageContent.includes('mã') ||
                 pageContent.includes('SMS') || pageContent.includes('authenticator') ||
                 pageContent.includes('2-step') || pageContent.includes('two-factor') ||
-                pageContent.includes('2 factor')) {
+                pageContent.includes('2 factor') || pageContent.includes('Another Way')) {
                 console.log('\n🔢 Facebook is asking for a verification code.');
                 const code = await askQuestion('Enter 2FA code (or press Enter to skip): ');
 
