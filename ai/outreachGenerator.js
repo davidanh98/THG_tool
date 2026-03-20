@@ -273,24 +273,76 @@ async function generateWithCascade(prompt) {
     }
 }
 
-// ─── Asset Image Selector ────────────────────────────────────────────────────
+// ─── Smart Contextual Asset Selector ─────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
 
-function getAssetImage() {
+const ASSETS_BASE = path.join(__dirname, '..', 'data', 'assets');
+const IMAGES_BASE = path.join(ASSETS_BASE, 'images');
+let _assetTags = null;
+
+function loadAssetTags() {
+    if (_assetTags) return _assetTags;
     try {
-        const assetsDir = path.join(__dirname, '..', '..', 'data', 'assets', 'images');
-        if (!fs.existsSync(assetsDir)) return null;
+        _assetTags = JSON.parse(fs.readFileSync(path.join(ASSETS_BASE, 'asset_tags.json'), 'utf8'));
+        return _assetTags;
+    } catch { return { categories: {} }; }
+}
 
-        const files = fs.readdirSync(assetsDir).filter(f => f.match(/\.(jpg|jpeg|png|gif|webp)$/i));
-        if (files.length === 0) return null;
+/**
+ * Pick the best matching asset image based on lead content
+ * @param {object} lead - Lead object with content, buyer_signals, summary
+ * @returns {string|null} Absolute path to image or null
+ */
+function getContextualAsset(lead = {}) {
+    try {
+        const tags = loadAssetTags();
+        const text = [
+            lead.content || '', lead.buyer_signals || '', lead.summary || ''
+        ].join(' ').toLowerCase();
 
-        const randomFile = files[Math.floor(Math.random() * files.length)];
-        return path.join(assetsDir, randomFile);
+        // Score each category by keyword matches
+        let bestCat = 'general';
+        let bestScore = 0;
+        for (const [cat, info] of Object.entries(tags.categories)) {
+            if (!info.keywords || info.keywords.length === 0) continue;
+            let score = 0;
+            for (const kw of info.keywords) {
+                if (text.includes(kw.toLowerCase())) score++;
+            }
+            if (score > bestScore) { bestScore = score; bestCat = cat; }
+        }
+
+        console.log(`[AssetPicker] 🎯 Category: ${bestCat} (score: ${bestScore})`);
+
+        // Get images from the matched category folder
+        const catDir = path.join(IMAGES_BASE, bestCat);
+        if (!fs.existsSync(catDir)) {
+            // Fallback to general
+            const generalDir = path.join(IMAGES_BASE, 'general');
+            if (!fs.existsSync(generalDir)) return null;
+            const files = fs.readdirSync(generalDir).filter(f => f.match(/\.(jpg|jpeg|png|gif|webp)$/i));
+            return files.length > 0 ? path.join(generalDir, files[Math.floor(Math.random() * files.length)]) : null;
+        }
+
+        const files = fs.readdirSync(catDir).filter(f => f.match(/\.(jpg|jpeg|png|gif|webp)$/i));
+        if (files.length === 0) {
+            // Fallback to general
+            const generalDir = path.join(IMAGES_BASE, 'general');
+            if (!fs.existsSync(generalDir)) return null;
+            const gFiles = fs.readdirSync(generalDir).filter(f => f.match(/\.(jpg|jpeg|png|gif|webp)$/i));
+            return gFiles.length > 0 ? path.join(generalDir, gFiles[Math.floor(Math.random() * gFiles.length)]) : null;
+        }
+
+        return path.join(catDir, files[Math.floor(Math.random() * files.length)]);
     } catch (e) {
+        console.warn(`[AssetPicker] ⚠️ ${e.message}`);
         return null;
     }
 }
+
+// Backward-compatible alias
+function getAssetImage() { return getContextualAsset(); }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -314,7 +366,7 @@ async function generateDM(lead, opts = {}) {
 
     // Clean up AI quirks
     message = cleanMessage(message);
-    const imagePath = getAssetImage();
+    const imagePath = getContextualAsset(lead);
 
     return { message, imagePath, language, type: 'dm' };
 }
@@ -332,7 +384,7 @@ async function generateComment(lead, opts = {}) {
     const prompt = buildCommentPrompt(lead, staffName, language);
     let message = await generateWithCascade(prompt);
     message = cleanMessage(message);
-    const imagePath = getAssetImage();
+    const imagePath = getContextualAsset(lead);
 
     return { message, imagePath, language, type: 'comment' };
 }

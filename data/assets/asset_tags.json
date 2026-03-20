@@ -1,0 +1,97 @@
+{
+    "categories": {
+        "warehouse": {
+            "keywords": [
+                "kho",
+                "warehouse",
+                "kho hàng",
+                "fulfillment center",
+                "storage",
+                "lưu kho",
+                "kho mỹ",
+                "kho us",
+                "us warehouse",
+                "china warehouse",
+                "kho trung"
+            ],
+            "description": "Ảnh kho hàng US/CN"
+        },
+        "shipping": {
+            "keywords": [
+                "ship",
+                "shipping",
+                "vận chuyển",
+                "giao hàng",
+                "delivery",
+                "tracking",
+                "express",
+                "chuyển phát",
+                "gửi hàng",
+                "ship mỹ",
+                "ship us",
+                "cn to us",
+                "timeline",
+                "thời gian"
+            ],
+            "description": "Quy trình ship, timeline giao hàng"
+        },
+        "pricing": {
+            "keywords": [
+                "giá",
+                "price",
+                "bảng giá",
+                "pricing",
+                "cost",
+                "chi phí",
+                "phí",
+                "fee",
+                "báo giá",
+                "quote",
+                "rẻ",
+                "cheap",
+                "tốt nhất",
+                "best price"
+            ],
+            "description": "Bảng giá, so sánh giá dịch vụ"
+        },
+        "products": {
+            "keywords": [
+                "pod",
+                "print on demand",
+                "dropship",
+                "sản phẩm",
+                "product",
+                "áo",
+                "mug",
+                "phone case",
+                "tshirt",
+                "t-shirt",
+                "poster",
+                "sticker",
+                "custom",
+                "in ấn"
+            ],
+            "description": "Ảnh sản phẩm POD mẫu"
+        },
+        "reviews": {
+            "keywords": [
+                "review",
+                "đánh giá",
+                "feedback",
+                "testimonial",
+                "khách hàng",
+                "customer",
+                "5 sao",
+                "star",
+                "rating",
+                "nhận xét",
+                "trải nghiệm"
+            ],
+            "description": "Reviews, testimonials từ khách hàng"
+        },
+        "general": {
+            "keywords": [],
+            "description": "Logo THG, banner chung — fallback mặc định"
+        }
+    }
+}

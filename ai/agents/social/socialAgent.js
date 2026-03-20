@@ -214,6 +214,19 @@ async function runSession() {
             return;
         }
 
+        // 3.5 PROFILE SETUP (one-time) — bio, cover photo
+        try {
+            const { ensureProfileSetup } = require('../strategies/profileBuilder');
+            console.log(`${tag} 🎨 Phase 0: Profile Check`);
+            const profileResult = await ensureProfileSetup(page, account);
+            if (!profileResult.skipped) {
+                logActivity(session.sessionId, 'profile_setup',
+                    `Bio: ${profileResult.bioUpdated ? '✅' : '❌'}, Cover: ${profileResult.coverUpdated ? '✅' : '❌'}`, email);
+            }
+        } catch (e) {
+            console.warn(`${tag} ⚠️ Profile setup skipped: ${e.message}`);
+        }
+
         // 4. WARM-UP — scroll feed, like, stories (2-5 min)
         console.log(`${tag} 🌅 Phase 1: Warm-up`);
         logActivity(session.sessionId, 'warm_up', 'Starting feed browse', email);
