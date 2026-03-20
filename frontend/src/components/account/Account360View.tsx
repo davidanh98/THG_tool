@@ -42,6 +42,21 @@ export default function Account360View({ account, onClose }: Account360Props) {
                             Mark Replied
                         </button>
                     )}
+                    {status === 'replied' && (
+                        <button className="btn btn-primary" onClick={() => handleSaveStatus('booked_call')} disabled={loading} style={{ background: '#f59e0b', borderColor: '#f59e0b' }}>
+                            Booked Call 📅
+                        </button>
+                    )}
+                    {status === 'booked_call' && (
+                        <button className="btn btn-primary" onClick={() => handleSaveStatus('pilot')} disabled={loading} style={{ background: '#8b5cf6', borderColor: '#8b5cf6' }}>
+                            Start Pilot 🚀
+                        </button>
+                    )}
+                    {status === 'pilot' && (
+                        <button className="btn btn-primary" onClick={() => handleSaveStatus('active_customer')} disabled={loading} style={{ background: '#ec4899', borderColor: '#ec4899' }}>
+                            Won Deal 🏆
+                        </button>
+                    )}
                 </div>
             </div>
 

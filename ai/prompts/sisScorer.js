@@ -25,7 +25,10 @@ Bạn PHẢI TRẢ VỀ KẾT QUẢ DƯỚI DẠNG CHUỖI JSON HỢP LỆ (KHÔ
   "urgency_score": <số từ 0-100: 100 = Cần gấp trong tuần này, khẩn cấp>,
   "summary": "<1 câu tóm tắt chính xác cực ngắn về tình trạng của lead>",
   "category": "<VD: POD / Dropship / Fashion / Home Decor / Unknown>",
-  "suggested_action": "<sales_now / automated_outreach / nurture / watchlist>"
+  "suggested_action": "<sales_now / automated_outreach / nurture / watchlist>",
+  "extracted_identities": [ // Danh sách các SĐT, Email, Link Web xuất hiện trong bài viết (nếu có)
+     { "type": "phone" | "email" | "domain" | "zalo" | "whatsapp" | "other", "value": "giá trị" }
+  ]
 }`;
 
 /**

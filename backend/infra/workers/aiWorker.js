@@ -164,6 +164,15 @@ async function processBatch() {
                 status: 'qualified'
             });
 
+            // Ghi nhận Identities được LLM bóc tách (LLM Enrichment)
+            if (sisScores.extracted_identities && Array.isArray(sisScores.extracted_identities)) {
+                for (const identity of sisScores.extracted_identities) {
+                    if (identity.type && identity.value && identity.value !== 'giá trị') {
+                        database.insertIdentity(accountId, identity.type, identity.value, 'SIS LLM Scorer');
+                    }
+                }
+            }
+
             // Ghi nhận Action nếu cần (Optional)
             if (sisScores.suggested_action === 'sales_now') {
                 database.logSISAction({
