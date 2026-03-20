@@ -131,9 +131,16 @@ function isInActiveWindow() {
 }
 
 const SCRAPER_ONLY_EMAILS = [
-    'thacher8agqa@hotmail.com',
-    'guntar_geoffry460.jared@hotmail.com'
+    '61578035714423',
+    '61577985616724',
+    '61578369357348',
+    '61578198966061'
 ];
+
+// Clean up old banned clones from the database so they never run again
+try {
+    db.db.prepare("DELETE FROM fb_accounts WHERE email IN ('thacher8agqa@hotmail.com', 'guntar_geoffry460.jared@hotmail.com')").run();
+} catch (err) { }
 
 /**
  * Lấy tài khoản tốt nhất để sử dụng ngay bây giờ.
