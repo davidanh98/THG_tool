@@ -59,6 +59,12 @@ jobs:
           fi
           echo "🔑 API keys updated in .env"
 
+          # Update NGINX config to support new Domains
+          echo "🌐 Reloading NGINX configuration..."
+          sudo cp -f /root/THG_tool/nginx/thg-lead-gen.conf /etc/nginx/sites-available/thg-lead-gen 2>/dev/null || true
+          sudo ln -sf /etc/nginx/sites-available/thg-lead-gen /etc/nginx/sites-enabled/thg-lead-gen 2>/dev/null || true
+          sudo nginx -t && sudo systemctl reload nginx || echo "⚠️ NGINX reload failed or NGINX not installed natively"
+
       - name: Install Dependencies
         run: |
           cd /root/THG_tool
