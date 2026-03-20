@@ -69,7 +69,8 @@ let server = null;
 app.set('trust proxy', 1);
 
 // ── Global Middleware ────────────────────────────────────────────────────────
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 
 // ── Static files — React frontend (production) ──────────────────────────────

@@ -58,10 +58,10 @@ try {
 const OLLAMA_MODEL = config.OLLAMA_MODEL || 'qwen2.5:3b';
 
 const PROVIDERS = [
-    { name: 'Ollama', client: ollamaClient, model: OLLAMA_MODEL, type: 'openai', timeout: 30000 },
-    { name: 'Cerebras', client: cerebras, model: 'llama-3.3-70b', type: 'openai', timeout: 15000 },
-    { name: 'Sambanova', client: sambanova, model: 'Meta-Llama-3.3-70B-Instruct', type: 'openai', timeout: 15000 },
-    { name: 'Groq', client: groq, model: 'llama-3.1-8b-instant', type: 'groq', timeout: 15000 },
+    { name: 'Ollama', client: ollamaClient, model: OLLAMA_MODEL, type: 'openai', timeout: 90000 },
+    { name: 'Cerebras', client: cerebras, model: 'llama-3.3-70b', type: 'openai', timeout: 30000 },
+    { name: 'Sambanova', client: sambanova, model: 'Meta-Llama-3.3-70B-Instruct', type: 'openai', timeout: 30000 },
+    { name: 'Groq', client: groq, model: 'llama-3.1-8b-instant', type: 'groq', timeout: 30000 },
 ].filter(p => p.client);
 
 console.log(`[OutreachGen] 🔄 Provider chain: ${PROVIDERS.map(p => p.name).join(' → ')}`);
