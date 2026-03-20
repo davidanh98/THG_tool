@@ -18,6 +18,7 @@ src/data/*.db-journal
 # Facebook cookies & sessions (sensitive!)
 data/fb_cookies_*.json
 data/sessions/
+data/fb_sessions/
 *.png.json
 
 # Exported data files

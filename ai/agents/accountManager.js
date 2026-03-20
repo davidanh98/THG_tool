@@ -47,33 +47,50 @@ function ensureAccountsTable() {
     // FB_EMAIL, FB_PASSWORD (cũ — compat)
     const accountsToSeed = [];
 
+    // Migration to ensure sales_name column exists before we insert VIPs
+    try { db.db.exec(`ALTER TABLE fb_accounts ADD COLUMN sales_name TEXT DEFAULT ''`); } catch { }
+
     // Multi-account format: FB_ACCOUNT_1_EMAIL, FB_ACCOUNT_2_EMAIL, ...
     let i = 1;
     while (process.env[`FB_ACCOUNT_${i}_EMAIL`]) {
+        const email = process.env[`FB_ACCOUNT_${i}_EMAIL`];
+        const accName = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '_');
+        const proxyUrl = process.env[`PROXY_${accName}`] || process.env[`PROXY_${email.split('@')[0]}`] || '';
+
         accountsToSeed.push({
             id: `account_${i}`,
-            email: process.env[`FB_ACCOUNT_${i}_EMAIL`],
+            email: email,
             password: process.env[`FB_ACCOUNT_${i}_PASSWORD`] || '',
+            proxy_url: proxyUrl,
+            sales_name: 'Đức Anh'
         });
         i++;
     }
 
     // Legacy single-account format (backwards compat)
     if (accountsToSeed.length === 0 && process.env.FB_EMAIL) {
+        const email = process.env.FB_EMAIL;
+        const accName = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '_');
+        const proxyUrl = process.env[`PROXY_${accName}`] || process.env[`PROXY_${email.split('@')[0]}`] || '';
         accountsToSeed.push({
             id: 'default',
-            email: process.env.FB_EMAIL,
+            email: email,
             password: process.env.FB_PASSWORD || '',
+            proxy_url: proxyUrl,
+            sales_name: 'Đức Anh'
         });
     }
 
     for (const acct of accountsToSeed) {
         const sessionPath = path.join(SESSIONS_DIR, `${acct.email.replace(/[^a-z0-9]/gi, '_')}.json`);
         db.db.prepare(`
-            INSERT OR IGNORE INTO fb_accounts (id, email, password, proxy_url, session_path)
-            VALUES (?, ?, ?, ?, ?)
-        `).run(acct.id, acct.email, acct.password, '', sessionPath);
-        console.log(`[AccountManager] 📋 Seeded: ${acct.email}`);
+            INSERT INTO fb_accounts (id, email, password, proxy_url, session_path, sales_name)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET 
+                proxy_url = excluded.proxy_url,
+                sales_name = excluded.sales_name
+        `).run(acct.id, acct.email, acct.password, acct.proxy_url, sessionPath, acct.sales_name);
+        console.log(`[AccountManager] 📋 Seeded & Mapped VIP: ${acct.email} ➡️ Agent ${acct.sales_name}`);
     }
 
     // --- Load Scraper Accounts from JSON (since .env is Git ignored) ---

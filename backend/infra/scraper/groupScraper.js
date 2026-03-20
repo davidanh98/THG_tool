@@ -185,11 +185,28 @@ async function _getGroupPostsInner(groupUrl, groupName, account = null) {
             for (const unit of units) {
                 try {
                     let content = '';
-                    const dirAutos = unit.querySelectorAll('div[dir="auto"]');
-                    for (const da of dirAutos) {
-                        const t = (da.innerText || '').trim();
-                        if (t.length > 15 && t.length > content.length && !t.includes('\n\n\n')) content = t;
+
+                    // 1. Try robust selector first
+                    const messageEl = unit.querySelector('div[data-ad-preview="message"]');
+                    if (messageEl) {
+                        content = (messageEl.innerText || '').trim();
+                    } else {
+                        // 2. Fallback to longest dir="auto"
+                        const dirAutos = unit.querySelectorAll('div[dir="auto"]');
+                        for (const da of dirAutos) {
+                            const t = (da.innerText || '').trim();
+                            if (t.length > 15 && t.length > content.length && !t.includes('\n\n\n')) {
+                                content = t;
+                            }
+                        }
                     }
+
+                    // 3. Filter out garbage "Facebook" strings
+                    if (content) {
+                        const cleaned = content.replace(/facebook|log in|messenger|\n|\s/gi, '');
+                        if (cleaned.length < 5) content = '';
+                    }
+
                     if (!content || content.length < 15) continue;
                     const hash = content.substring(0, 80);
                     if (seenTexts.has(hash)) continue;
