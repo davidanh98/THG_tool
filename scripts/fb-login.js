@@ -150,7 +150,8 @@ async function loginAndSave(email, password, accName) {
                         for (const el of els) {
                             const txt = el.innerText?.trim()?.toLowerCase() || '';
                             if (txt === 'try another way' || txt === 'thử cách khác') {
-                                el.click(); break;
+                                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                break;
                             }
                         }
                     });
@@ -162,11 +163,12 @@ async function loginAndSave(email, password, accName) {
                         for (const el of els) {
                             const txt = el.innerText?.trim()?.toLowerCase() || '';
                             if (txt.includes('authentication app') || txt.includes('ứng dụng xác thực')) {
-                                el.click(); break;
+                                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                break;
                             }
                         }
                     });
-                    await page.waitForTimeout(1500);
+                    await page.waitForTimeout(2000);
 
                     console.log('🔄 Clicking Continue...');
                     await page.evaluate(() => {
@@ -174,11 +176,12 @@ async function loginAndSave(email, password, accName) {
                         for (const el of els) {
                             const txt = el.innerText?.trim()?.toLowerCase() || '';
                             if (txt === 'continue' || txt === 'tiếp tục') {
-                                el.click(); break;
+                                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                break;
                             }
                         }
                     });
-                    await page.waitForTimeout(4000); // Wait for the input field to render
+                    await page.waitForTimeout(5000); // Wait for the input field to render
                 }
             } catch (bypassErr) {
                 console.log('⚠️ Bypass Try Another Way failed (ignoring):', bypassErr.message);
