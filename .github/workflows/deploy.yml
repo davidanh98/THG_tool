@@ -76,6 +76,8 @@ jobs:
         run: |
           cd /root/THG_tool
           docker compose down --timeout 5 2>/dev/null || true
+          docker stop $(docker ps -q --filter "publish=3000") 2>/dev/null || true
+          docker rm $(docker ps -aq --filter "publish=3000") 2>/dev/null || true
           echo "✅ Docker stopped (or was not running)"
 
       - name: Ensure Ollama is Running
