@@ -40,6 +40,18 @@ async function sniperComment(page, postUrl, opts = {}) {
         // 2. Simulate reading — scroll through the post
         await humanScroll(page, 2);
 
+        // 2.5: AUTO-JOIN CHECK (If account is not a member of the group, comment box will be hidden)
+        try {
+            const joinBtn = await page.$('div[role="button"]:has-text("Join"), div[role="button"]:has-text("Tham gia"), div[role="button"]:has-text("Join group"), div[role="button"]:has-text("Tham gia nhóm")');
+            if (joinBtn) {
+                console.log(`[Sniper] 🤝 Chưa tham gia group này! Đang tự động bấm Join...`);
+                await humanDelay(1000, 2000);
+                await joinBtn.click();
+                await humanDelay(3000, 5000); // Wait for join to process (if public, comment box appears instantly)
+                console.log(`[Sniper] ✅ Đã gửi yêu cầu tham gia group!`);
+            }
+        } catch (e) { /* ignore */ }
+
         // 3. Find comment box (multi-selector for language stability)
         let commentBox = null;
         for (const sel of config.SELECTORS.COMMENT_BOX) {
