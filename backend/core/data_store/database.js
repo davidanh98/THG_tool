@@ -584,7 +584,15 @@ const insertLead = {
       return /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(text);
     };
     const lang = lead.language || (isVietnamese(lead.content) ? 'vietnamese' : 'foreign');
-    return _insertLeadStmt.run({ ...lead, language: lang });
+    const safeLead = {
+      ...lead,
+      language: lang,
+      author_avatar: lead.author_avatar || '',
+      score: lead.score || 0,
+      pain_score: lead.pain_score || 0,
+      spam_score: lead.spam_score || 0
+    };
+    return _insertLeadStmt.run(safeLead);
   }
 };
 
