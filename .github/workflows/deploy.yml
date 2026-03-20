@@ -31,6 +31,7 @@ jobs:
           cp -f ${{ github.workspace }}/data/prod_groups.json /root/THG_tool/data/prod_groups.json 2>/dev/null || true
           cp -f ${{ github.workspace }}/data/fb_cookies_*.json /root/THG_tool/data/ 2>/dev/null || true
           cp -f ${{ github.workspace }}/data/recovery_codes_*.json /root/THG_tool/data/ 2>/dev/null || true
+          cp -f ${{ github.workspace }}/data/ua_*.txt /root/THG_tool/data/ 2>/dev/null || true
 
           echo "✅ Code synced!"
 
