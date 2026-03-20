@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AppLayout from './components/layout/AppLayout'
 import LoginPage from './pages/LoginPage'
-import LeadsPage from './pages/LeadsPage'
+import AccountsPage from './pages/AccountsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import InboxPage from './pages/InboxPage'
 import GroupsPage from './pages/GroupsPage'
@@ -36,7 +36,7 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/" element={<LeadsPage />} />
+          <Route path="/" element={<AccountsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/groups" element={<GroupsPage />} />

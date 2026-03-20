@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { useLeadStore } from '../../store/leadStore'
+import { useAccountStore } from '../../store/accountStore'
 import { apiPost, apiGet } from '../../api/client'
 import { useState, useEffect } from 'react'
 
@@ -7,7 +7,7 @@ type NavItem = { section: string } | { to: string; icon: string; label: string; 
 
 const NAV_ITEMS: NavItem[] = [
     { section: 'Pipeline' },
-    { to: '/', icon: '🎯', label: 'Leads' },
+    { to: '/', icon: '🏢', label: 'Accounts' },
     { to: '/analytics', icon: '📊', label: 'Analytics' },
     { section: 'Channels' },
     { to: '/inbox', icon: '💬', label: 'Inbox' },
@@ -23,7 +23,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function Sidebar() {
     const location = useLocation()
-    const leadCount = useLeadStore((s) => s.leads.length)
+    const accountCount = useAccountStore((s) => s.accounts.length)
     const [scanning, setScanning] = useState(false)
 
     const triggerScan = async () => {
@@ -63,8 +63,8 @@ export default function Sidebar() {
                             <div className={`sidebar-item ${isActive ? 'sidebar-item--active' : ''}`}>
                                 <span className="sidebar-item-icon">{item.icon}</span>
                                 <span>{item.label}</span>
-                                {item.to === '/' && leadCount > 0 ? (
-                                    <span className="sidebar-item-badge">{leadCount}</span>
+                                {item.to === '/' && accountCount > 0 ? (
+                                    <span className="sidebar-item-badge">{accountCount}</span>
                                 ) : null}
                                 {item.badge && (
                                     <span className="sidebar-item-badge" style={
