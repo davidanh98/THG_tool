@@ -1,12 +1,10 @@
 import { useEffect } from 'react'
 import { useAccountStore } from '../store/accountStore'
-import { useNavigate } from 'react-router-dom'
 import AccountTable from '../components/account/AccountTable'
 import Account360View from '../components/account/Account360View'
 
 export default function AccountsPage() {
     const { accounts, loading, selectedAccountId, loadAccounts, selectAccount, statusFilter, setStatusFilter } = useAccountStore()
-    const navigate = useNavigate()
 
     useEffect(() => {
         loadAccounts()
