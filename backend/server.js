@@ -32,6 +32,7 @@ const activityRoutes = require('./routes/activity.routes');
 const dataRoutes = require('./routes/data.routes');
 const devRoutes = require('./routes/dev.routes');
 const webhookRoutes = require('./routes/webhook.routes');
+const sisRoutes = require('./routes/sis.routes');
 
 // ╔═══════════════════════════════════════════════════════════╗
 // ║  IN-MEMORY LOG CAPTURE (for Dev Dashboard)                ║
@@ -149,6 +150,7 @@ app.use(workerRoutes);
 app.use(dataRoutes);
 app.use(devRoutes);
 app.use(webhookRoutes);
+app.use(sisRoutes); // Seller Intelligence System (Accounts/Identities)
 app.use('/api/social', socialRoutes);
 app.use(outreachRoutes);
 app.use('/api/strategy', strategyRoutes);

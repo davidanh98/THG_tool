@@ -17,6 +17,7 @@
  */
 const config = require('../../config');
 const database = require('../../core/data_store/database');
+const { generateSISScore } = require('../../../ai/prompts/sisScorer');
 
 const POLL_INTERVAL = 3000; // 3 seconds
 const BATCH_SIZE = 20;
@@ -90,7 +91,7 @@ function scoreLead(content, topCommentsJson) {
 }
 
 /**
- * Process a batch of PENDING raw_leads with Hardcoded algorithm
+ * Process a batch of PENDING raw_leads with Hardcoded algorithm + SIS AI Evaluation
  */
 async function processBatch() {
     if (isProcessing) return;
@@ -103,13 +104,13 @@ async function processBatch() {
 
         if (batch.length === 0) return;
 
-        console.log(`[AIWorker] 📋 Processing ${batch.length} leads with HARDCODED classification...`);
+        console.log(`[AIWorker] 📋 Processing ${batch.length} leads with SIS architecture...`);
 
         for (const row of batch) {
             // Mark as PROCESSING
             database.db.prepare(`UPDATE raw_leads SET status='PROCESSING' WHERE id=?`).run(row.id);
 
-            // Hardcode parsing (Quét post + comments)
+            // Job 2: Fast Filter (Quét post + comments) - GIỮ LẠI LÀM LỌC RÁC
             const result = scoreLead(row.content, row.top_comments || '[]');
 
             if (!result.pass) {
@@ -120,33 +121,87 @@ async function processBatch() {
                 continue;
             }
 
-            // Lead xịn -> Save
-            const score = result.score;
+            console.log(`[AIWorker] 🎯 PASS FAST FILTER: ${row.author} - Đang chuyển qua SIS AI Scoring...`);
+
+            // Job 4: SIS AI Scoring 
+            const sisScores = await generateSISScore(row.content, row.top_comments);
+
+            // Job 3: Identity & Entity Resolution
+            let accountId = null;
+            if (row.author_url) {
+                // Thử tìm Identity xem đã tồn tại chưa
+                const existingAccount = database.findAccountByIdentity('fb_profile', row.author_url);
+                if (existingAccount) {
+                    accountId = existingAccount.id;
+                    console.log(`[AIWorker] 🔄 Map vào Account cũ: ID #${accountId}`);
+                }
+            }
+
+            if (!accountId) {
+                // Tạo Account mới
+                accountId = database.insertAccount({
+                    brand_name: row.author,
+                    category: sisScores.category,
+                    platform: row.platform,
+                    market: 'Global'
+                });
+                console.log(`[AIWorker] 🆕 Tạo Account mới: ID #${accountId} - ${row.author}`);
+
+                // Tạo Identity link với Account
+                if (row.author_url) {
+                    database.insertIdentity(accountId, 'fb_profile', row.author_url, 'Facebook Scraper');
+                }
+            }
+
+            // Cập nhật điểm cho Account
+            database.updateAccountScores(accountId, {
+                pain_score: sisScores.pain_score,
+                revenue_score: sisScores.revenue_score,
+                contactability_score: sisScores.contactability_score, // Phụ thuộc vào Bio sau này (Job 5)
+                switching_score: sisScores.switching_score,
+                urgency_score: sisScores.urgency_score,
+                priority_score: sisScores.priority_score,
+                status: 'qualified'
+            });
+
+            // Ghi nhận Action nếu cần (Optional)
+            if (sisScores.suggested_action === 'sales_now') {
+                database.logSISAction({
+                    account_id: accountId,
+                    action_type: 'Sales_Evaluation_Needed',
+                    owner: 'System',
+                    status: 'pending'
+                });
+            }
+
             const assignedTo = routeLead(row.content);
 
-            // Save to leads table (INSERT OR IGNORE dedup by post_url)
+            // Save to leads table (lúc này là SIGNALS table trong bản chất)
             database.db.prepare(`
                 INSERT OR IGNORE INTO leads
                   (platform, author_name, author_url, content, post_url, post_created_at,
-                   item_type, group_name, score, summary, status, tags, response_draft, assigned_sales)
-                VALUES (?, ?, ?, ?, ?, ?, 'post', ?, ?, ?, 'new', ?, ?, ?)
+                   item_type, group_name, score, summary, status, tags, response_draft, assigned_sales, account_id)
+                VALUES (?, ?, ?, ?, ?, ?, 'post', ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 row.platform, row.author, row.author_url, row.content,
                 row.url, row.scraped_at, row.group_name,
-                score, result.summary,
+                sisScores.priority_score,
+                sisScores.summary,
+                sisScores.suggested_action === 'sales_now' ? 'hot' : 'new',
                 JSON.stringify(['#POD', '#Dropship']),
                 '', // no response draft generated yet
                 assignedTo,
+                accountId
             );
 
             database.db.prepare(
                 `UPDATE raw_leads SET status='QUALIFIED', score=?, assigned_to=? WHERE id=?`
-            ).run(score, assignedTo, row.id);
+            ).run(sisScores.priority_score, assignedTo, row.id);
 
             // Invalidate stats cache
             database.invalidateStatsCache();
 
-            console.log(`[AIWorker] 🔥 LEAD ${score}đ → ${assignedTo}: ${row.author || 'Unknown'}`);
+            console.log(`[AIWorker] 🔥 SIS SCORED [P:${sisScores.pain_score} / R:${sisScores.revenue_score}] -> TỔNG ĐIỂM PRIORITY: ${sisScores.priority_score}đ → ${assignedTo}`);
         }
         console.log(`[AIWorker] ✅ Batch done.`);
     } catch (err) {

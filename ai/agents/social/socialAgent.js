@@ -262,8 +262,8 @@ async function runSession() {
 
             const hotLeads = db.db.prepare(`
                 SELECT * FROM leads 
-                WHERE score >= 70 AND role = 'buyer' AND post_url IS NOT NULL 
-                AND status NOT IN ('ignored', 'converted', 'contacted') 
+                WHERE score >= 60 AND post_url IS NOT NULL 
+                AND status IN ('new', 'hot') 
                 ORDER BY score DESC LIMIT 3
             `).all();
 

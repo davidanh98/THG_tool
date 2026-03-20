@@ -45,6 +45,62 @@ db.exec(`
     error TEXT
   );
 
+  -- =========================================
+  -- 🚀 SIS (Seller Intelligence System) Tables
+  -- =========================================
+  
+  CREATE TABLE IF NOT EXISTS accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    brand_name TEXT,
+    primary_domain TEXT,
+    primary_email TEXT,
+    category TEXT,
+    platform TEXT,
+    market TEXT,
+    maturity_stage TEXT,
+    estimated_volume_band TEXT,
+    contactability_score INTEGER DEFAULT 0,
+    pain_score INTEGER DEFAULT 0,
+    revenue_score INTEGER DEFAULT 0,
+    switching_score INTEGER DEFAULT 0,
+    urgency_score INTEGER DEFAULT 0,
+    priority_score INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'new',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS identities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    value TEXT NOT NULL,
+    confidence_score INTEGER DEFAULT 100,
+    discovered_from TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,
+    action_type TEXT,
+    channel TEXT,
+    template_used TEXT,
+    owner TEXT,
+    status TEXT,
+    scheduled_at TEXT,
+    executed_at TEXT,
+    response_result TEXT
+  );
+\`);
+
+// Safely alter existing leads table (acting as raw_signals) to support accounts relation
+try {
+  db.exec(\`ALTER TABLE leads ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE;\`);
+} catch (e) {
+  // ignore if column already exists
+}
+
+db.exec(\`
   CREATE TABLE IF NOT EXISTS sv_credit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     endpoint TEXT,
@@ -902,6 +958,95 @@ db.exec(`
 // Pipeline stage on leads
 try { db.exec(`ALTER TABLE leads ADD COLUMN pipeline_stage TEXT DEFAULT 'new'`); } catch { }
 
+// ─── SIS (Seller Intelligence System) Methods ─────────────────────────────
+
+const insertAccount = (account) => {
+  const rs = db.prepare(`
+    INSERT INTO accounts (brand_name, primary_domain, primary_email, category, platform, market)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    account.brand_name || 'Unknown',
+    account.primary_domain || '',
+    account.primary_email || '',
+    account.category || '',
+    account.platform || '',
+    account.market || ''
+  );
+  return rs.lastInsertRowid;
+};
+
+const updateAccountScores = (id, scores) => {
+  return db.prepare(`
+    UPDATE accounts SET
+      pain_score = ?,
+      revenue_score = ?,
+      contactability_score = ?,
+      switching_score = ?,
+      urgency_score = ?,
+      priority_score = ?,
+      status = ?,
+      updated_at = datetime('now')
+    WHERE id = ?
+  `).run(
+    scores.pain_score || 0,
+    scores.revenue_score || 0,
+    scores.contactability_score || 0,
+    scores.switching_score || 0,
+    scores.urgency_score || 0,
+    scores.priority_score || 0,
+    scores.status || 'new',
+    id
+  );
+};
+
+const getAccounts = (limit = 100, status = null) => {
+  let query = `SELECT * FROM accounts`;
+  if (status) query += ` WHERE status = '${status}'`;
+  query += ` ORDER BY priority_score DESC, created_at DESC LIMIT ?`;
+  return db.prepare(query).all(limit);
+};
+
+const getAccountById = (id) => {
+  const account = db.prepare(`SELECT * FROM accounts WHERE id = ?`).get(id);
+  if (account) {
+    account.identities = db.prepare(`SELECT * FROM identities WHERE account_id = ?`).all(id);
+    account.signals = db.prepare(`SELECT * FROM leads WHERE account_id = ? ORDER BY created_at DESC`).all(id);
+  }
+  return account;
+};
+
+const insertIdentity = (accountId, type, value, discoveredFrom = '') => {
+  // Check if exists first
+  const existing = db.prepare(`SELECT id FROM identities WHERE type = ? AND value = ?`).get(type, value);
+  if (existing) return existing.id;
+
+  const rs = db.prepare(`
+    INSERT INTO identities (account_id, type, value, discovered_from)
+    VALUES (?, ?, ?, ?)
+  `).run(accountId, type, value, discoveredFrom);
+  return rs.lastInsertRowid;
+};
+
+const findAccountByIdentity = (type, value) => {
+  const rel = db.prepare(`SELECT account_id FROM identities WHERE type = ? AND value = ?`).get(type, value);
+  return rel ? getAccountById(rel.account_id) : null;
+};
+
+const logSISAction = (action) => {
+  const rs = db.prepare(`
+    INSERT INTO actions (account_id, action_type, channel, template_used, owner, status, executed_at)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+  `).run(
+    action.account_id,
+    action.action_type || '',
+    action.channel || '',
+    action.template_used || '',
+    action.owner || 'System',
+    action.status || 'completed'
+  );
+  return rs.lastInsertRowid;
+};
+
 module.exports = {
   db,
   insertLead,
@@ -952,4 +1097,12 @@ module.exports = {
   // Social Agent
   logSocialActivity,
   getSocialActivityLog,
+  // SIS Methods
+  insertAccount,
+  updateAccountScores,
+  getAccounts,
+  getAccountById,
+  insertIdentity,
+  findAccountByIdentity,
+  logSISAction
 };
