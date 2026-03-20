@@ -117,6 +117,9 @@ jobs:
 
           # Ensure PM2 is installed
           which pm2 || npm install -g pm2
+          
+          # CRITICAL: Force Github Actions to use the root PM2 daemon
+          export PM2_HOME=/root/.pm2
 
           # Full stop — kill ALL PM2 processes AND any orphaned node process on port 3000
           pm2 kill 2>/dev/null || true
