@@ -189,7 +189,7 @@ function startServer() {
     const MAX_RETRIES = 10;
 
     function doListen() {
-        httpServer.listen({ port, host: '::', ipv6Only: false }, () => {
+        httpServer.listen({ port, host: '0.0.0.0' }, () => {
             server = httpServer;
             logger.info('Server', `Dashboard: http://localhost:${port}`);
             logger.info('Server', `Webhook:   http://localhost:${port}/webhook`);
