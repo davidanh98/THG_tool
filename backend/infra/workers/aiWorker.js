@@ -43,26 +43,54 @@ function routeLead(content) {
     return sales;
 }
 
-// ── Regex pre-filters (mirrors leadQualifier.js) ─────────────────────
-const PROVIDER_RE = /(chúng tôi nhận|bên em nhận|bên em chuyên|bên mình chuyên|bên mình nhận|dịch vụ vận chuyển|nhận gửi hàng|nhận ship|offering fulfillment|we ship|we offer|lh em|ib em|inbox em|liên hệ em|zalo:|chỉ từ \d+k|giải pháp gửi hàng|giải pháp ship|giải pháp vận chuyển|xin phép admin|cam kết giao|cước phí cạnh tranh|liên hệ ngay|tham khảo ngay|đăng ký ngay|nhận từ 1 đơn|dạ em nhận|em chuyên nhận|chúng tôi chuyên|seller nên biết.*:|seller cần biết.*:|ready to scale|just launched|free quote|get started today|contact us.*whatsapp|nhắn em để|nhắn em ngay|inbox ngay|mở rộng sản xuất|sẵn sàng cùng seller|xưởng.*sản xuất|fulfill trực tiếp|fulfill ngay tại|giá xưởng|giá gốc|báo giá|cần thêm thông tin.*nhắn|hỗ trợ.*nhanh nhất|đánh chiếm|siêu lợi nhuận|ưu đãi.*seller|chương trình.*ưu đãi|dm\s+for|dm\s+me|message\s+us|book\s+a\s+call|schedule\s+a\s+call|sign\s+up\s+now|sẵn sàng phục vụ|phục vụ.*seller|cung cấp dịch vụ|chúng tôi cung cấp|we\s+provide|we\s+specialize|our\s+service)/i;
-const SERVICE_AD_RE = /((bên em|bên mình|chúng tôi|chúng mình|shop em|shop mình|team em|team mình).{0,30}(cho thuê|cung cấp|nhận làm|sẵn kho|sẵn sàng|có sẵn|chuyên bán|chuyên cung|nhận order|gom order|nhà cung cấp|mở bán|đang bán|bán sỉ|bán lẻ|sỉ lẻ)|(cho thuê|cung cấp|nhận làm|sẵn kho|chuyên bán|chuyên cung|nhà cung cấp|mở bán|bán sỉ|sỉ lẻ).{0,30}(inbox em|ib em|liên hệ em|nhắn em|zalo em|lh em|check ib|inbox ngay|liên hệ ngay)|(bên em|bên mình|chúng tôi).{0,20}(cho thuê tài khoản|cho thuê acc|cho thuê shop|cho thuê kho|cho thuê dịch vụ)|(bên em|bên mình|chúng tôi|em).{0,15}(có|cung cấp|chuyên).{0,20}(sản phẩm|nguyên liệu|vật tư|hàng hóa).{0,20}(giá thấp|giá tốt|giá rẻ|giá cạnh tranh|giá gốc|chất lượng cao|giao nhanh))/i;
-const WRONG_ROUTE_RE = /(giao hàng nhanh nội|ship cod toàn|vận chuyển nội địa|gửi.*về việt nam|order.*về vn|nhập hàng.*về vn|ship.*từ mỹ.*về)/i;
-const VAT_RE = /(thuế nhập khẩu|thuế vat|vat refund|ioss|eori|tariff|biểu thuế|customs duty|duty rate|khai báo hải quan|luật nhập khẩu|tax compliance|anti.?dumping)/i;
-const KNOWLEDGE_RE = /(chia sẻ kinh nghiệm|chia sẻ kiến thức|bài viết tổng hợp|tutorial|step.by.step|how to.*guide|tip.*seller|tips.*cho|mẹo.*bán hàng)/i;
-const MUST_HAVE_RE = /(ship|vận chuyển|fulfillment|fulfill|pod|dropship|gửi hàng|kho|warehouse|giá|tìm|cần|logistics|3pl|fba|ecommerce|seller|tracking|forwarder|express|freight|order|tìm đơn vị)/i;
+const SPAM_AD_RE = /(bên em|bên mình|inb em|check ib|nhận gửi|nhận vận chuyển|hệ thống tracking|liên hệ e|zalo:|lh em|inbox ngay|liên hệ ngay|doanh thu|lợi nhuận|roi|tối ưu chi phí|giảm cost|vít ad|scale[^A-Za-z]|max camp|case study|win camp|idea design|chia sẻ tut|hướng dẫn bán|học bán|dạy bán)/i;
+const RETAIL_RE = /(gửi 1 cái|gửi 1 đôi|ship 1kg|gửi đồ ăn|gửi mỹ phẩm|mua hộ|order taobao|gom order|nhận order)/i;
+const OUT_OF_BOUNDS_WH_RE = /(úc|australia|châu âu|eu|can\b|canada|nhật|japan|hàn|korea|đức|germany|pháp|france|sing|đài loan|taiwan|mexico|chile|colombia|saudi|uae|tây ban nha|nhập hàng về|ship về vn|order về vn)/i;
 
-function preFilter(content) {
-    if (PROVIDER_RE.test(content)) return { pass: false, reason: 'Provider/quảng cáo' };
-    if (SERVICE_AD_RE.test(content)) return { pass: false, reason: 'Quảng cáo dịch vụ (provider context)' };
-    if (WRONG_ROUTE_RE.test(content)) return { pass: false, reason: 'Sai tuyến (nội địa/nhập về VN)' };
-    if (VAT_RE.test(content)) return { pass: false, reason: 'VAT/Tax/Compliance (không phải lead)' };
-    if (KNOWLEDGE_RE.test(content)) return { pass: false, reason: 'Bài chia sẻ kiến thức (không phải lead)' };
-    if (!MUST_HAVE_RE.test(content)) return { pass: false, reason: 'Không có từ khóa kinh doanh' };
-    return { pass: true };
+const POD_CORE_RE = /(pod|print on demand|dropship|fulfillment|fulfill|fulfiller)/i;
+const SUPPORT_NEED_RE = /(tìm đơn vị|cần tìm|tìm kho|cần ship|báo giá|shipping|vận chuyển|gửi hàng|áo tee|mug|phone case|ornament|canvas)/i;
+
+/**
+ * Phân tích và chấm điểm Lead hoàn toàn bằng Hardcoded String Matching (Thay thế AI)
+ */
+function scoreLead(content, topCommentsJson) {
+    let fullText = (content || '').toLowerCase();
+
+    // Ghép comment vào text để quét (người bán hay để số/thông tin dưới comment)
+    if (topCommentsJson) {
+        try {
+            const comments = JSON.parse(topCommentsJson);
+            if (Array.isArray(comments)) {
+                fullText += ' ' + comments.map(c => (c.text || '')).join(' ').toLowerCase();
+            }
+        } catch (e) { }
+    }
+
+    // 1. Hard Filters - Loại bỏ rác, đối thủ, ads, đơn lẻ
+    if (SPAM_AD_RE.test(fullText)) return { pass: false, reason: 'Quảng cáo/Chuyên gia dỏm (doanh thu/case study/inb)' };
+    if (RETAIL_RE.test(fullText)) return { pass: false, reason: 'Đi lẻ/Mua hộ/Đồ ăn (Không phải B2B POD)' };
+    if (OUT_OF_BOUNDS_WH_RE.test(fullText)) return { pass: false, reason: 'Kho/Tuyến ngoại lệ (Chỉ chấp nhận US/VN/CN)' };
+
+    // 2. Chấm điểm - Bắt buộc phải là POD/Dropship cần dịch vụ
+    if (POD_CORE_RE.test(fullText) || SUPPORT_NEED_RE.test(fullText)) {
+        // Cộng điểm
+        let score = 50;
+        if (POD_CORE_RE.test(fullText) && SUPPORT_NEED_RE.test(fullText)) score += 30; // 80 points
+        if (fullText.includes('usa') || fullText.includes('mỹ') || fullText.includes('us')) score += 10;
+
+        // Phải có ít nhất Core HOẶC Need và vượt qua bộ lọc khắt khe trên
+        if (score >= 60) {
+            // Tóm tắt ngắn để UI đẹp hơn
+            const summaryText = content ? content.substring(0, 60).replace(/\n/g, ' ') + '...' : 'Tìm kiếm dịch vụ vận chuyển';
+            return { pass: true, score: score, summary: summaryText };
+        }
+    }
+
+    return { pass: false, reason: 'Không nhắc đến nhu cầu POD/Dropship shipping' };
 }
 
 /**
- * Process a batch of PENDING raw_leads
+ * Process a batch of PENDING raw_leads with Hardcoded algorithm
  */
 async function processBatch() {
     if (isProcessing) return;
@@ -75,80 +103,51 @@ async function processBatch() {
 
         if (batch.length === 0) return;
 
-        console.log(`[AIWorker] 📋 Processing batch: ${batch.length} pending raw_leads...`);
-
-        // Lazy-load classifyPost (avoids loading AI SDK until needed)
-        const { classifyPost } = require('../../../ai/prompts/leadQualifier');
+        console.log(`[AIWorker] 📋 Processing ${batch.length} leads with HARDCODED classification...`);
 
         for (const row of batch) {
             // Mark as PROCESSING
             database.db.prepare(`UPDATE raw_leads SET status='PROCESSING' WHERE id=?`).run(row.id);
 
-            // Pre-filter (free, instant)
-            const pf = preFilter(row.content);
-            if (!pf.pass) {
+            // Hardcode parsing (Quét post + comments)
+            const result = scoreLead(row.content, row.top_comments || '[]');
+
+            if (!result.pass) {
                 database.db.prepare(
                     `UPDATE raw_leads SET status='REJECTED', reject_reason=? WHERE id=?`
-                ).run(pf.reason, row.id);
+                ).run(result.reason, row.id);
+                console.log(`[AIWorker] 🚫 DROP [${result.reason}]: ${(row.content || '').substring(0, 40)}...`);
                 continue;
             }
 
-            // AI Classify
-            try {
-                const post = {
-                    platform: row.platform,
-                    author_name: row.author,
-                    author_url: row.author_url,
-                    content: row.content,
-                    post_url: row.url,
-                    post_created_at: row.scraped_at,
-                    item_type: 'post',
-                    group_name: row.group_name,
-                };
-                const result = await classifyPost(post);
-                const score = result?.score || 0;
-                const threshold = config.LEAD_SCORE_THRESHOLD || 60;
+            // Lead xịn -> Save
+            const score = result.score;
+            const assignedTo = routeLead(row.content);
 
-                if (score >= threshold) {
-                    const assignedTo = routeLead(row.content);
+            // Save to leads table (INSERT OR IGNORE dedup by post_url)
+            database.db.prepare(`
+                INSERT OR IGNORE INTO leads
+                  (platform, author_name, author_url, content, post_url, post_created_at,
+                   item_type, group_name, score, summary, status, tags, response_draft, assigned_sales)
+                VALUES (?, ?, ?, ?, ?, ?, 'post', ?, ?, ?, 'new', ?, ?, ?)
+            `).run(
+                row.platform, row.author, row.author_url, row.content,
+                row.url, row.scraped_at, row.group_name,
+                score, result.summary,
+                JSON.stringify(['#POD', '#Dropship']),
+                '', // no response draft generated yet
+                assignedTo,
+            );
 
-                    // Save to leads table (INSERT OR IGNORE dedup by post_url)
-                    database.db.prepare(`
-                        INSERT OR IGNORE INTO leads
-                          (platform, author_name, author_url, content, post_url, post_created_at,
-                           item_type, group_name, score, summary, status, tags, response_draft, assigned_sales)
-                        VALUES (?, ?, ?, ?, ?, ?, 'post', ?, ?, ?, 'new', ?, ?, ?)
-                    `).run(
-                        row.platform, row.author, row.author_url, row.content,
-                        row.url, row.scraped_at, row.group_name,
-                        score, result?.summary || '',
-                        JSON.stringify(result?.tags || []),
-                        result?.response_draft || '',
-                        assignedTo,
-                    );
+            database.db.prepare(
+                `UPDATE raw_leads SET status='QUALIFIED', score=?, assigned_to=? WHERE id=?`
+            ).run(score, assignedTo, row.id);
 
-                    database.db.prepare(
-                        `UPDATE raw_leads SET status='QUALIFIED', score=?, assigned_to=? WHERE id=?`
-                    ).run(score, assignedTo, row.id);
+            // Invalidate stats cache
+            database.invalidateStatsCache();
 
-                    // Invalidate stats cache
-                    database.invalidateStatsCache();
-
-                    console.log(`[AIWorker] 🔥 LEAD ${score}đ → ${assignedTo}: ${row.author}`);
-                } else {
-                    database.db.prepare(
-                        `UPDATE raw_leads SET status='REJECTED', score=?, reject_reason=? WHERE id=?`
-                    ).run(score, `AI score ${score} < ${threshold}`, row.id);
-                }
-            } catch (aiErr) {
-                // Put back to PENDING for retry
-                database.db.prepare(
-                    `UPDATE raw_leads SET status='PENDING', reject_reason=? WHERE id=?`
-                ).run('AI error: ' + aiErr.message, row.id);
-                console.warn(`[AIWorker] ⚠️ AI error for row ${row.id}: ${aiErr.message}`);
-            }
+            console.log(`[AIWorker] 🔥 LEAD ${score}đ → ${assignedTo}: ${row.author || 'Unknown'}`);
         }
-
         console.log(`[AIWorker] ✅ Batch done.`);
     } catch (err) {
         console.error(`[AIWorker] ❌ Batch error:`, err.message);
