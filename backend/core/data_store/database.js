@@ -91,16 +91,15 @@ db.exec(`
     executed_at TEXT,
     response_result TEXT
   );
-\`);
+`);
 
 // Safely alter existing leads table (acting as raw_signals) to support accounts relation
 try {
-  db.exec(\`ALTER TABLE leads ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE;\`);
+  db.exec(`ALTER TABLE leads ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE;`);
 } catch (e) {
   // ignore if column already exists
 }
-
-db.exec(\`
+db.exec(`
   CREATE TABLE IF NOT EXISTS sv_credit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     endpoint TEXT,
@@ -1104,5 +1103,6 @@ module.exports = {
   getAccountById,
   insertIdentity,
   findAccountByIdentity,
-  logSISAction
+  logSISAction,
+  _db: db
 };

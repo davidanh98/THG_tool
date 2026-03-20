@@ -1,6 +1,7 @@
 'use strict';
 
 const { generateText } = require('../aiProvider');
+const predictiveScoring = require('../agents/enrichment/predictiveScoring');
 
 const SIS_PROMPT = `Bạn là hệ thống Seller Intelligence chuyên đánh giá khách hàng thương mại điện tử (POD/Dropship).
 Nhiệm vụ của bạn là phân tích văn bản (bài đăng/bình luận của khách hàng trên mạng xã hội Facebook) và chấm điểm hành vi theo 5 trục để phục vụ việc chốt Sale.
@@ -48,14 +49,8 @@ async function generateSISScore(content, comments) {
         if (match) {
             const parsed = JSON.parse(match[0]);
 
-            // Calculate a weighted priority score
-            const p = parsed;
-            parsed.priority_score = Math.round(
-                (p.pain_score * 0.4) +
-                (p.revenue_score * 0.3) +
-                (p.urgency_score * 0.2) +
-                (p.switching_score * 0.1)
-            );
+            // Calculate a weighted priority score using Auto-Tuned weights
+            parsed.priority_score = predictiveScoring.calculatePriorityScore(parsed);
 
             return parsed;
         }

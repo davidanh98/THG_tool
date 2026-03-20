@@ -13,6 +13,8 @@ const cron = require('node-cron');
 const config = require('./config');
 const database = require('./core/data_store/database');
 const { startServer } = require('./server');
+const websiteScanner = require('../ai/agents/enrichment/websiteScanner');
+const predictiveScoring = require('../ai/agents/enrichment/predictiveScoring');
 
 /**
  * Main entry point — API server + cron scheduler
@@ -73,6 +75,20 @@ async function main() {
         console.log(`[Cron] 🚜 Khởi động chiến dịch Nuôi Nick (Fanpage Sharer)...`);
         const { runFanpageFarm } = require('../ai/agents/strategies/fanpageSharer');
         runFanpageFarm().catch(console.error);
+    });
+
+    // ═══ SIS Phase 3: Growth OS & Deep Enrichment ═══
+
+    // 1. Website Deep Scanner: Chạy mỗi 2 tiếng để mò vào các Domain cào email và Tech Stack
+    cron.schedule('0 */2 * * *', () => {
+        console.log(`[Cron] 🕵️ Khởi động Sát thủ Công nghệ (Website Deep Scanner)...`);
+        websiteScanner.enrichAccountsQueue().catch(console.error);
+    });
+
+    // 2. Predictive Scoring (Tuning Loop): Chạy lúc 1:00 AM mỗi ngày để học máy từ các "Won Deals"
+    cron.schedule('0 1 * * *', () => {
+        console.log(`[Cron] 🧠 Khởi động Vòng lặp Học Máy (Predictive Weights Tuning)...`);
+        predictiveScoring.runTuningLoop();
     });
 
     // Enqueue initial scan on startup
