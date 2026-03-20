@@ -279,14 +279,9 @@ async function loginAccount(index, email, password, totpSecret) {
                     await page.keyboard.type(code, { delay: 80 });
                 }
 
-                // Submit
-                const submitBtn = await page.$('button[type="submit"], input[type="submit"], button[name="submit[Continue]"]');
-                if (submitBtn) {
-                    await submitBtn.click();
-                    console.log(`${tag} ⚡ Submitted code!`);
-                } else {
-                    await page.keyboard.press('Enter');
-                }
+                // Submit — always use keyboard Enter (submit button is often hidden on mobile FB)
+                await page.keyboard.press('Enter');
+                console.log(`${tag} ⚡ Submitted code via Enter!`);
                 await sleep(8000);
 
                 // Handle "Save Browser" / "This was me"
