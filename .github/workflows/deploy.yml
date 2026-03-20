@@ -122,7 +122,8 @@ jobs:
           # Force kill anything still holding port 3000
           fuser -k 3000/tcp 2>/dev/null || true
           pkill -f 'node backend/' 2>/dev/null || true
-          sleep 2
+          killall -9 node 2>/dev/null || true
+          sleep 4
 
           # Fresh start
           pm2 start devops/ecosystem.config.js
