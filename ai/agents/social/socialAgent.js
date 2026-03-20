@@ -12,7 +12,7 @@
  * 
  * @module agent/social/socialAgent
  */
-const chromium = require('playwright-extra');
+const { chromium } = require('playwright-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const accountManager = require('../accountManager');
 const { generateFingerprint } = require('../../../backend/infra/proxy/fingerprint');
