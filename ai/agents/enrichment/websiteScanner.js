@@ -117,28 +117,28 @@ class WebsiteScanner {
                 if (result) {
                     // Update category/platform cho Account
                     if (result.platform !== 'Unknown') {
-                        let newCat = acc.category ?\`\${acc.category} (\${result.platform})\` : result.platform;
+                        let newCat = acc.category ? `${acc.category} (${result.platform})` : result.platform;
                         // Avoid duplication
                         if (!acc.category || !acc.category.includes(result.platform)) {
-                            db.prepare(\`UPDATE accounts SET category = ? WHERE id = ?\`).run(newCat, acc.id);
+                            db.prepare(`UPDATE accounts SET category = ? WHERE id = ?`).run(newCat, acc.id);
                         }
                     }
 
                     // Lưu Emails nhặt được
                     for (const em of result.emails) {
                         try {
-                            db.prepare(\`
+                            db.prepare(`
                                 INSERT OR IGNORE INTO identities (account_id, type, value, discovered_from) 
                                 VALUES (?, 'email', ?, 'WebsiteScanner')
-                            \`).run(acc.id, em);
-                        } catch(e){} // Ignore constraint
+                            `).run(acc.id, em);
+                        } catch (e) { } // Ignore constraint
                     }
                 }
-                
+
                 // Sleep 2s to not get blocked
                 await new Promise(r => setTimeout(r, 2000));
             }
-        } catch(e) {
+        } catch (e) {
             console.error('[WebsiteScanner] Lỗi chạy Queue:', e);
         }
     }
