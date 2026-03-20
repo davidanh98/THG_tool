@@ -121,10 +121,20 @@ jobs:
           # Full stop — kill ALL PM2 processes AND any orphaned node process on port 3000
           pm2 kill 2>/dev/null || true
           sleep 1
-          # Force kill anything still holding port 3000
+          # Force kill anything still holding port 3000 using ultimate lsof nuke
           fuser -k 3000/tcp 2>/dev/null || true
           pkill -f 'node backend/' 2>/dev/null || true
           killall -9 node 2>/dev/null || true
+          # Find EXACT PID holding port 3000 and blast it
+          PORT_PID=$(lsof -t -i:3000 2>/dev/null)
+          if [ ! -z "$PORT_PID" ]; then
+            echo "⚠️ Found stubborn process $PORT_PID holding Port 3000. Forcing kill..."
+            kill -9 $PORT_PID 2>/dev/null || true
+          fi
+          
+          # Also nuke any docker container named thg just in case
+          docker stop $(docker ps -q --filter "name=thg") 2>/dev/null || true
+          docker rm $(docker ps -aq --filter "name=thg") 2>/dev/null || true
           sleep 4
 
           # Fresh start
