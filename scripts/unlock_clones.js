@@ -3,6 +3,7 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 chromium.use(StealthPlugin());
 
 const fs = require('fs');
+const path = require('path');
 const readline = require('readline');
 
 const rl = readline.createInterface({
@@ -71,11 +72,16 @@ rl.question('\n👉 Bạn muốn giải cứu Nick số mấy? (0-3): ', async (
                     const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ');
 
                     console.log(`\n================================================================`);
-                    console.log(`📋 COOKIE MỚI HOÀN CHỈNH CHO FILE scraper_accounts.json:`);
+                    console.log(`📋 COOKIE MỚI HOÀN CHỈNH ĐÃ ĐƯỢC TỰ ĐỘNG LƯU VÀO scraper_accounts.json!`);
                     console.log(`================================================================`);
-                    console.log(cookieStr);
-                    console.log(`================================================================\n`);
-                    console.log(`👉 Bạn chỉ cần copy chuỗi Cookie chữ xanh đỏ loằng ngoằng ở trên, dán đè vào trường "cookieStr" của acc ${target.email} trong file config là xong!`);
+
+                    // Auto-save the new cookie to the JSON file
+                    const accountsPath = path.join(__dirname, '..', 'backend', 'config', 'scraper_accounts.json');
+                    const allAccounts = JSON.parse(fs.readFileSync(accountsPath, 'utf8'));
+                    allAccounts[idx].cookieStr = cookieStr;
+                    fs.writeFileSync(accountsPath, JSON.stringify(allAccounts, null, 4));
+
+                    console.log(`\n👉 Đã lưu! Bạn không cần copy dán tay nữa. Bạn có thể tiếp tục chạy cho con khác!`);
 
                     await browser.close();
                     process.exit(0);
