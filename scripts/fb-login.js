@@ -118,13 +118,18 @@ async function loginAndSave(email, password, accName) {
         }
 
         // Step 3: Wait for redirect
-        console.log('⏳ Waiting for login result (30s)...');
-        await page.waitForTimeout(8000);
+        console.log('⏳ Waiting for login result (up to 20s)...');
+        // Wait dynamically for 2FA or home page, fallback to 15s timeout
+        try {
+            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 });
+        } catch {
+            await page.waitForTimeout(5000);
+        }
 
         // Step 4: Check for 2FA / Checkpoint
         const currentUrl = page.url();
 
-        if (currentUrl.includes('checkpoint') || currentUrl.includes('two_step')) {
+        if (currentUrl.includes('checkpoint') || currentUrl.includes('two_step') || currentUrl.includes('two_factor')) {
             console.log('\n⚠️  2FA/Checkpoint detected!');
             const ssPath = path.join(SESSIONS_DIR, `${accName}_checkpoint.png`);
             await page.screenshot({ path: ssPath, fullPage: true });
@@ -134,7 +139,9 @@ async function loginAndSave(email, password, accName) {
             const pageContent = await page.textContent('body');
 
             if (pageContent.includes('code') || pageContent.includes('mã') ||
-                pageContent.includes('SMS') || pageContent.includes('authenticator')) {
+                pageContent.includes('SMS') || pageContent.includes('authenticator') ||
+                pageContent.includes('2-step') || pageContent.includes('two-factor') ||
+                pageContent.includes('2 factor')) {
                 console.log('\n🔢 Facebook is asking for a verification code.');
                 const code = await askQuestion('Enter 2FA code (or press Enter to skip): ');
 
