@@ -93,6 +93,9 @@ function ensureAccountsTable() {
         console.log(`[AccountManager] 📋 Seeded & Mapped VIP: ${acct.email} ➡️ Agent ${acct.sales_name}`);
     }
 
+    // Migration: link FB account role
+    try { db.db.exec(`ALTER TABLE fb_accounts ADD COLUMN role TEXT DEFAULT 'any'`); } catch { }
+
     // --- Load Scraper Accounts from JSON (since .env is Git ignored) ---
     try {
         const scrapersPath = path.join(__dirname, '..', '..', 'backend', 'config', 'scraper_accounts.json');
@@ -100,11 +103,16 @@ function ensureAccountsTable() {
             const scraperAccs = JSON.parse(fs.readFileSync(scrapersPath, 'utf8'));
             for (const acct of scraperAccs) {
                 const sessionPath = path.join(SESSIONS_DIR, `${acct.email.replace(/[^a-z0-9]/gi, '_')}.json`);
+                const role = acct.role || 'any';
 
                 db.db.prepare(`
-                    INSERT OR IGNORE INTO fb_accounts (id, email, password, proxy_url, session_path)
-                    VALUES (?, ?, ?, ?, ?)
-                `).run(`acc_${acct.email}`, acct.email, acct.password, acct.proxyUrl || '', sessionPath);
+                    INSERT OR IGNORE INTO fb_accounts (id, email, password, proxy_url, session_path, role)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `).run(`acc_${acct.email}`, acct.email, acct.password, acct.proxyUrl || '', sessionPath, role);
+
+                // Sync updates to role and proxy if changed in JSON
+                db.db.prepare(`UPDATE fb_accounts SET role = ?, proxy_url = ? WHERE email = ?`)
+                    .run(role, acct.proxyUrl || '', acct.email);
 
                 // Auto-generate Playwright session file if missing
                 if (!fs.existsSync(sessionPath) && acct.cookieStr) {
@@ -113,7 +121,7 @@ function ensureAccountsTable() {
                         return { name, value: val.join('='), domain: ".facebook.com", path: "/", expires: Date.now() / 1000 + 31536000, httpOnly: ['xs', 'c_user', 'datr', 'fr'].includes(name), secure: true, sameSite: "None" };
                     });
                     fs.writeFileSync(sessionPath, JSON.stringify([{ cookies: pwCookies, origins: [{ origin: "https://www.facebook.com", localStorage: [] }] }]));
-                    console.log(`[AccountManager] 🍪 Generated session for scraper: ${acct.email}`);
+                    console.log(`[AccountManager] 🍪 Generated session for clone [${role}]: ${acct.email}`);
                 }
             }
         }
@@ -147,18 +155,6 @@ function isInActiveWindow() {
     return vnHour >= ACTIVE_HOUR_START || vnHour <= ACTIVE_HOUR_END;
 }
 
-const SCRAPER_ONLY_EMAILS = [
-    '61578035714423',
-    '61577985616724',
-    '61578369357348',
-    '61578198966061'
-];
-
-// Clean up old banned clones from the database so they never run again
-try {
-    db.db.prepare("DELETE FROM fb_accounts WHERE email IN ('thacher8agqa@hotmail.com', 'guntar_geoffry460.jared@hotmail.com')").run();
-} catch (err) { }
-
 /**
  * Lấy tài khoản tốt nhất để sử dụng ngay bây giờ.
  * Ưu tiên: trust_score cao → ít dùng gần đây → proxy sẵn sàng
@@ -166,17 +162,15 @@ try {
  * @returns {object|null} account row or null
  */
 function getNextAccount(options = {}) {
-    // Nếu ĐANG THỰC HIỆN COMMENT/SALES (forScraping = false), 
-    // không được dùng 2 acc clone cùi này để tránh spam.
-    const excludeScrapers = !options.forScraping
-        ? `AND email NOT IN (${SCRAPER_ONLY_EMAILS.map(e => `'${e}'`).join(',')})`
-        : '';
+    const roleFilter = options.forScraping
+        ? `AND (role = 'scraper' OR role = 'any')`
+        : `AND (role = 'social' OR role = 'any')`;
 
     const account = db.db.prepare(`
         SELECT * FROM fb_accounts
         WHERE status = 'active'
           AND trust_score > 20
-          ${excludeScrapers}
+          ${roleFilter}
         ORDER BY trust_score DESC, last_used ASC
         LIMIT 1
     `).get();
@@ -187,7 +181,7 @@ function getNextAccount(options = {}) {
             SELECT * FROM fb_accounts
             WHERE status = 'resting'
               AND datetime(last_used) < datetime('now', '-4 hours')
-              ${excludeScrapers}
+              ${roleFilter}
             LIMIT 1
         `).get();
 
@@ -197,13 +191,13 @@ function getNextAccount(options = {}) {
             return resting;
         }
 
-        console.log('[AccountManager] ❌ Không có tài khoản nào sẵn sàng!');
+        console.log('[AccountManager] ❌ Không có tài khoản nào sẵn sàng cho role yêu cầu!');
         return null;
     }
 
     // Đánh dấu tài khoản đang được dùng
     db.db.prepare(`UPDATE fb_accounts SET last_used=datetime('now') WHERE id=?`).run(account.id);
-    console.log(`[AccountManager] ✅ Dùng tài khoản: ${account.email} (trust=${account.trust_score}, proxy=${account.proxy_url || 'none'})`);
+    console.log(`[AccountManager] ✅ Dùng tài khoản [${account.role}]: ${account.email} (trust=${account.trust_score}, proxy=${account.proxy_url || 'none'})`);
     return account;
 }
 
@@ -332,15 +326,15 @@ function shouldRest(accountId) {
  * @returns {object[]} array of active account rows
  */
 function getActiveAccounts(options = {}) {
-    const excludeScrapers = !options.forScraping
-        ? `AND email NOT IN (${SCRAPER_ONLY_EMAILS.map(e => `'${e}'`).join(',')})`
-        : `AND email IN (${SCRAPER_ONLY_EMAILS.map(e => `'${e}'`).join(',')})`;
+    const roleFilter = options.forScraping
+        ? `AND (role = 'scraper' OR role = 'any')`
+        : `AND (role = 'social' OR role = 'any')`;
 
     const accounts = db.db.prepare(`
         SELECT * FROM fb_accounts
         WHERE status = 'active'
           AND trust_score > 20
-          ${excludeScrapers}
+          ${roleFilter}
         ORDER BY trust_score DESC
     `).all();
 
@@ -349,7 +343,7 @@ function getActiveAccounts(options = {}) {
         SELECT * FROM fb_accounts
         WHERE status = 'resting'
           AND datetime(last_used) < datetime('now', '-4 hours')
-          ${excludeScrapers}
+          ${roleFilter}
     `).all();
 
     for (const acc of resting) {
