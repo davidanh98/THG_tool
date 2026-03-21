@@ -63,7 +63,7 @@ function ensureAccountsTable() {
             password: process.env[`FB_ACCOUNT_${i}_PASSWORD`] || '',
             proxy_url: proxyUrl,
             sales_name: 'Đức Anh',
-            role: 'social'
+            role: 'scraper'
         });
         i++;
     }
@@ -79,7 +79,7 @@ function ensureAccountsTable() {
             password: process.env.FB_PASSWORD || '',
             proxy_url: proxyUrl,
             sales_name: 'Đức Anh',
-            role: 'social'
+            role: 'scraper'
         });
     }
 

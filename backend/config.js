@@ -2,25 +2,28 @@ require('dotenv').config();
 
 module.exports = {
   // ════════════════════════════════════════════════════
-  // API KEYS & AI PROVIDERS
-  // ════════════════════════════════════════════════════
-  // Ollama (self-hosted, PRIMARY — no rate limit)
-  OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
-  OLLAMA_MODEL: process.env.OLLAMA_MODEL || 'qwen2.5:3b',
-  // Cloud fallbacks
-  CEREBRAS_API_KEY: process.env.CEREBRAS_API_KEY,
-  SAMBANOVA_API_KEY: process.env.SAMBANOVA_API_KEY,
-  // Legacy (kept for reference, NOT used in cascade)
-  GROQ_API_KEY: process.env.GROQ_API_KEY,
-  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
-  TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
+  // Server config
+  PORT: process.env.PORT || 3000,
+  NODE_ENV: process.env.NODE_ENV || 'development',
+
+  // Dashboard Admin
+  DEV_PASSWORD: process.env.DEV_PASSWORD || 'thg@dev2024',
+  ADMIN_EMAIL: process.env.ADMIN_EMAIL || 'admin@THGfullfil.com',
+  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'ITdev2026',
+  ADMIN_NAME: process.env.ADMIN_NAME || 'Admin THG',
+
+  // JWT Config
+  JWT_SECRET: process.env.JWT_SECRET || 'thg-super-secret-jwt-key-2024',
+  JWT_EXPIRATION: '24h',
+
+  // AI Config
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
 
   // ════════════════════════════════════════════════════
   // SYSTEM CONFIG
   // ════════════════════════════════════════════════════
   LEAD_SCORE_THRESHOLD: 60,
-  PORT: process.env.PORT || 3000,
+  // PORT: process.env.PORT || 3000, // This was moved up
   ENABLED_PLATFORMS: (process.env.ENABLED_PLATFORMS || 'facebook').split(',').map(s => s.trim()),  // FB-only — override via env var
 
   // ════════════════════════════════════════════════════

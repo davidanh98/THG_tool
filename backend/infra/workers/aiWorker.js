@@ -175,6 +175,35 @@ async function processBatch() {
 
             const assignedTo = routeLead(row.content);
 
+            // Layer F: Sales Copilot Generation (gpt-4o)
+            // Chỉ chạy mô hình đắt tiền với những Account ngon (priority_score >= 60)
+            let copilotDraft = "";
+            let categoryLabel = sisScores.category || 'Unknown';
+            let sellerTypeLabel = sisScores.seller_type || 'noise';
+
+            if (sisScores.priority_score >= 60 && ['seller', 'newbie'].includes(sellerTypeLabel)) {
+                console.log(`[AIWorker] 🌟 Kích hoạt gpt-4o Sales Copilot cho Lead: ${row.author}...`);
+                const copilotSysPrompt = `Bạn là Chuyên gia Sales B2B Ecommerce. Phân tích ngữ cảnh khách hàng và soạn draft.
+Ngữ cảnh (Lead):
+${row.content}
+Comments: ${row.top_comments}
+
+Hãy soạn 1 đoạn JSON Output:
+{
+  "mini_audit": "Phân tích 2 câu sắc bén vì sao nên tiếp cận ông này",
+  "next_best_action": "Đề xuất hành động tiếp theo cho team Sales",
+  "opener": "1 đoạn tin nhắn mở đầu (Opener) thật tự nhiên, cá nhân hóa để Sales copy và gửi qua Fanpage Inbox."
+}`;
+                try {
+                    const aiProvider = require('../../../ai/aiProvider');
+                    const draftRaw = await aiProvider.generateText(copilotSysPrompt, "Tạo Sales Copilot Draft", { model: 'gpt-4o', maxTokens: 400, jsonMode: true });
+                    const draftJson = JSON.parse(draftRaw.match(/\{([\s\S]*)\}/)[0]);
+                    copilotDraft = `[MINI AUDIT] ${draftJson.mini_audit}\n[ACTION] ${draftJson.next_best_action}\n[OPENER]\n${draftJson.opener}`;
+                } catch (e) {
+                    console.log("[AIWorker] ⚠️ Copilot gpt-4o failed:", e.message);
+                }
+            }
+
             // Save to leads table (lúc này là SIGNALS table trong bản chất)
             database.db.prepare(`
                 INSERT OR IGNORE INTO leads
@@ -187,8 +216,8 @@ async function processBatch() {
                 sisScores.priority_score,
                 sisScores.summary,
                 sisScores.suggested_action === 'sales_now' ? 'hot' : 'new',
-                JSON.stringify(['#POD', '#Dropship']),
-                '', // no response draft generated yet
+                JSON.stringify(sisScores.pain_tags || []),
+                copilotDraft,
                 assignedTo,
                 accountId
             );
@@ -204,7 +233,7 @@ async function processBatch() {
         }
         console.log(`[AIWorker] ✅ Batch done.`);
     } catch (err) {
-        console.error(`[AIWorker] ❌ Batch error:`, err.message);
+        console.error(`[AIWorker] ❌ Batch error: `, err.message);
     } finally {
         isProcessing = false;
     }
