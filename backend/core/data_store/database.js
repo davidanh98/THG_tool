@@ -1484,6 +1484,12 @@ module.exports = {
   insertScanLog,
   updateScanLog,
   getRecentScans,
+  // Scan Queue (IPC)
+  enqueueScan,
+  claimNextScan,
+  completeScan,
+  failScan,
+  getScanQueueStatus,
   // Conversations
   insertConversation,
   getConversations,
