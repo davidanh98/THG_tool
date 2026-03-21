@@ -133,8 +133,6 @@ app.use(scanRoutes);
 app.use(devRoutes);
 app.use(webhookRoutes);
 app.use(sisRoutes); // Seller Intelligence System (SIS v2)
-app.use('/api/social', socialRoutes);
-app.use(outreachRoutes);
 
 // ── Initialize Group Discovery DB ───────────────────────────────────────────
 try {
