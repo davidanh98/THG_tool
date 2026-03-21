@@ -11,9 +11,11 @@ interface SISState {
     }
     summary: SISSummary | null
     loading: boolean
+    activeTab: 'resolved' | 'partial' | 'anonymous' | 'competitor'
 
     loadLanes: () => Promise<void>
     loadSummary: () => Promise<void>
+    setActiveTab: (tab: 'resolved' | 'partial' | 'anonymous' | 'competitor') => void
 }
 
 export const useSISStore = create<SISState>((set) => ({
@@ -25,6 +27,9 @@ export const useSISStore = create<SISState>((set) => ({
     },
     summary: null,
     loading: false,
+    activeTab: 'resolved',
+
+    setActiveTab: (tab) => set({ activeTab: tab }),
 
     loadLanes: async () => {
         set({ loading: true })
