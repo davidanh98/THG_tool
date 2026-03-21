@@ -62,7 +62,7 @@ export default function StrategiesPage() {
             <div className="page-header">
                 <h2 className="page-title">🎯 Strategies</h2>
                 <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', margin: 0 }}>
-                    Điều khiển 3 marketing strategies — mọi hoạt động hiển thị real-time
+                    Giám sát các chiến dịch tự động 24/7 — Nhấn nút để ép AI chạy ngay lập tức (Manual Override)
                 </p>
             </div>
 
@@ -98,7 +98,7 @@ export default function StrategiesPage() {
                         <div className="strategy-stat">{summary?.replies || 0} hôm nay</div>
                     </div>
                     <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', margin: '0 0 var(--space-md)' }}>
-                        AI viết comment hữu ích trên bài post lead — lead thấy → inbox hỏi
+                        AI tự động phân tích và viết comment/inbox hữu ích cho khách theo kịch bản Sales.
                     </p>
                     <button
                         className="btn btn-primary btn-sm"
@@ -117,11 +117,11 @@ export default function StrategiesPage() {
                 {/* Profile Engager */}
                 <div className="strategy-card strategy-card--blue">
                     <div className="strategy-header">
-                        <div className="strategy-title">👀 Profile Engager</div>
+                        <div className="strategy-title">👀 Auto Engager (24/7)</div>
                         <div className="strategy-stat">{summary?.engagements || 0} engaged</div>
                     </div>
                     <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', margin: '0 0 var(--space-md)' }}>
-                        Organic retargeting — visit profile, like chọn lọc, react story
+                        Cỗ máy chạy ngầm: Tự động dùng Clone đi Thả Tim, React Story khách hàng cũ báo thù.
                     </p>
                     {engagerLeads.length > 0 && (
                         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-sm)' }}>
@@ -149,7 +149,7 @@ export default function StrategiesPage() {
                         <div className="strategy-stat">{summary?.alerts || 0} alerts</div>
                     </div>
                     <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', margin: '0 0 var(--space-md)' }}>
-                        Telegram alert real-time + AI tin nhắn sẵn cho lead score 80+
+                        Bắn thông báo qua Telegram cho Sale ngay khi có Lead điểm tuyệt đối (80+).
                     </p>
                     <button
                         className="btn btn-sm"
@@ -169,11 +169,11 @@ export default function StrategiesPage() {
                 {/* Account Farming (Fanpage Sharer) */}
                 <div className="strategy-card" style={{ borderTop: '4px solid #10b981' }}>
                     <div className="strategy-header">
-                        <div className="strategy-title" style={{ color: '#10b981' }}>🚜 Nuôi Nick (Farm)</div>
-                        <div className="strategy-stat">1 share/2 ngày</div>
+                        <div className="strategy-title" style={{ color: '#10b981' }}>🚜 Nuôi Trust & Clone</div>
+                        <div className="strategy-stat">Auto 24/7</div>
                     </div>
                     <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', margin: '0 0 var(--space-md)' }}>
-                        AI tự chôm bài từ Fanpage cty mang về tường Facebook cá nhân để tăng Trust.
+                        Hệ thống đã TỰ ĐỘNG lướt Feed ngầm. Nút này dùng để ÉP 1 nick đi Share bài Fanpage ngay lập tức.
                     </p>
                     <button
                         className="btn btn-sm"
