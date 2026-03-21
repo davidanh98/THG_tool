@@ -62,7 +62,8 @@ function ensureAccountsTable() {
             email: email,
             password: process.env[`FB_ACCOUNT_${i}_PASSWORD`] || '',
             proxy_url: proxyUrl,
-            sales_name: 'Đức Anh'
+            sales_name: 'Đức Anh',
+            role: 'social'
         });
         i++;
     }
@@ -77,20 +78,22 @@ function ensureAccountsTable() {
             email: email,
             password: process.env.FB_PASSWORD || '',
             proxy_url: proxyUrl,
-            sales_name: 'Đức Anh'
+            sales_name: 'Đức Anh',
+            role: 'social'
         });
     }
 
     for (const acct of accountsToSeed) {
         const sessionPath = path.join(SESSIONS_DIR, `${acct.email.replace(/[^a-z0-9]/gi, '_')}.json`);
         db.db.prepare(`
-            INSERT INTO fb_accounts (id, email, password, proxy_url, session_path, sales_name)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO fb_accounts (id, email, password, proxy_url, session_path, sales_name, role)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET 
                 proxy_url = excluded.proxy_url,
-                sales_name = excluded.sales_name
-        `).run(acct.id, acct.email, acct.password, acct.proxy_url, sessionPath, acct.sales_name);
-        console.log(`[AccountManager] 📋 Seeded & Mapped VIP: ${acct.email} ➡️ Agent ${acct.sales_name}`);
+                sales_name = excluded.sales_name,
+                role = excluded.role
+        `).run(acct.id, acct.email, acct.password, acct.proxy_url, sessionPath, acct.sales_name, acct.role);
+        console.log(`[AccountManager] 📋 Seeded & Mapped VIP: ${acct.email} ➡️ Agent ${acct.sales_name} [${acct.role}]`);
     }
 
     // Migration: link FB account role
