@@ -89,9 +89,11 @@ Nội dung bài viết trên Fanpage:
 
             let caption = "Dịch vụ Fulfillment chuẩn chỉ cho ae seller đây!";
             try {
-                const aiResponse = await aiProvider.analyzePost(aiPrompt);
-                // Reuse analyzePost just to pass prompt through to LLM for a free-form text response
-                if (aiResponse && aiResponse.raw) caption = aiResponse.raw.trim().replace(/^"|"$/g, '');
+                const aiResponse = await aiProvider.generateText('', aiPrompt, {
+                    model: 'gpt-4o-mini',
+                    maxTokens: 100
+                });
+                if (aiResponse) caption = aiResponse.trim().replace(/^"|"$/g, '');
             } catch (e) {
                 console.log(`[FanpageSharer] ⚠️ Lỗi AI, dùng caption mặc định: ${caption}`);
             }

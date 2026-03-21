@@ -1711,3 +1711,201 @@ select:focus {
   background: var(--text-muted);
   animation: none;
 }
+
+/* SIS v2 Command Center Styles */
+.sis-dashboard {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 100px);
+    overflow: hidden;
+    padding: var(--space-md);
+}
+
+.sis-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-lg);
+    background: rgba(255, 255, 255, 0.03);
+    padding: var(--space-md) var(--space-lg);
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sis-stats-lite {
+    display: flex;
+    gap: var(--space-lg);
+}
+
+.sis-stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.sis-stat-item .label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.sis-stat-item .val {
+    font-size: 1.5rem;
+    font-weight: 800;
+}
+
+.color-resolved { color: #3b82f6; }
+.color-partial { color: #f59e0b; }
+.color-anonymous { color: #94a3b8; }
+
+.sis-board {
+    display: flex;
+    gap: var(--space-md);
+    flex: 1;
+    overflow-x: auto;
+    padding-bottom: var(--space-md);
+}
+
+.sis-lane {
+    min-width: 320px;
+    width: 320px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.lane-header {
+    padding: var(--space-md);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.lane-header h3 {
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.lane-header .badge {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+}
+
+.lane-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-sm);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.signal-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    border: 1px solid var(--border);
+    transition: transform 0.2s, border-color 0.2s;
+    cursor: pointer;
+}
+
+.signal-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary);
+}
+
+.signal-card.has-strategy {
+    border-left: 3px solid #6366f1;
+}
+
+.card-top {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--space-sm);
+}
+
+.platform-tag {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.author {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.signal-content {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+    margin-bottom: var(--space-md);
+}
+
+.metrics-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: var(--space-md);
+}
+
+.metric {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.65rem;
+}
+
+.metric-label { width: 40px; color: var(--text-muted); }
+.metric-bar-bg {
+    flex: 1;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.metric-bar-fill { height: 100%; border-radius: 2px; }
+.metric-val { width: 20px; text-align: right; font-weight: 700; }
+
+.card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    padding-top: var(--space-sm);
+}
+
+.priority {
+    font-size: 0.7rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.priority .dot {
+    width: 6px;
+    height: 6px;
+    background: #6366f1;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #6366f1;
+}
+
+.btn-view-strategy {
+    font-size: 0.65rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: var(--text-muted);
+}
+

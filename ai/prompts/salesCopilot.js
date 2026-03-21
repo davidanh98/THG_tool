@@ -1,202 +1,140 @@
 /**
- * salesCopilot.js — THG AI Sales Assistant
+ * SIS v2 Sales Copilot — The Strategic Brain
  * 
- * Combines:
- * - Sales Copilot (Messenger reply drafting)
- * - Lead Response Generator (Comment/DM response)
- * - Intent Classifier (lightweight)
- * 
- * Uses shared AI Provider cascade: Cerebras → Sambanova → Groq → Gemini
+ * Functions:
+ * 1. SYNTHESIZE: High-resolution 'Lead Cards' from raw signals + clues.
+ * 2. AUDIT: Automated pain analysis (Mini Audit).
+ * 3. STRATEGIZE: Next Best Action & Objection Prevention.
+ * 4. DRAFT: Context-aware openers (Suggested Opener).
  */
 
-const config = require('../../backend/config');
-const { generateText } = require('../aiProvider');
-
-// ╔═══════════════════════════════════════════════════════════╗
-// ║  COPILOT — Draft replies for Messenger                    ║
-// ╚═══════════════════════════════════════════════════════════╝
-
-const COPILOT_SYSTEM = `Bạn là AI Trợ lý Sales xuất sắc của THG Logistics — công ty chuyên fulfillment cho e-commerce seller bán hàng sang Mỹ.
-
-${config.THG_CONTEXT}
-
-Dịch vụ chính:
-1. THG Fulfillment (POD/Dropship) — Seller gửi thiết kế hoặc link SP, THG lo từ sản xuất → đóng gói → ship
-2. THG Express — Tuyến vận chuyển riêng VN/CN → Mỹ, giá tốt, tracking đáp ứng policy TikTok/Amazon
-3. THG Warehouse — Kho tại Pennsylvania & North Carolina, ship nội địa Mỹ 2-5 ngày
-
-Quy tắc soạn tin nhắn:
-- Viết thân thiện, chuyên nghiệp, không pushy
-- Xưng hô "em" (THG) và "anh/chị" (khách)
-- Nếu khách hỏi giá → nói "giá phụ thuộc volume, em gửi bảng giá chi tiết ngay ạ"
-- Nếu khách hỏi chung chung → giới thiệu ngắn gọn 3 dịch vụ trên
-- Nếu khách gửi spam/không liên quan → trả lời lịch sự ngắn gọn
-- Độ dài: 3-5 câu, tự nhiên như chat Messenger
-- CHỈ trả về nội dung tin nhắn, KHÔNG giải thích thêm`;
+const aiProvider = require('../aiProvider');
+const { buildAgentReply } = require('../agents/promptBuilder');
+const database = require('../../backend/core/data_store/database');
 
 /**
- * Generate AI Copilot reply — routes through PersonalAgent if agent is active.
- * @param {string} customerMessage 
- * @param {object} context - { senderName, platform, salesName, leadId, leadSummary }
+ * Generate a Strategic Lead Card for a commercial signal
+ * @param {number} rawPostId - The ID of physics/signal in raw_posts
  */
-async function generateCopilotReply(customerMessage, context = {}) {
-    // ── Personal Agent Route (khi agent đã bật active mode) ──
-    const salesName = context.salesName;
-    if (salesName) {
+async function generateLeadCard(rawPostId) {
+    console.log(`[SalesCopilot] 🧠 Synthesizing Lead Card for Signal #${rawPostId}...`);
+
+    try {
+        // 1. Fetch Context
+        const rawPost = database._db.prepare(`SELECT * FROM raw_posts WHERE id = ?`).get(rawPostId);
+        const classification = database._db.prepare(`SELECT * FROM post_classifications WHERE raw_post_id = ?`).get(rawPostId);
+
+        if (!rawPost || !classification) {
+            console.warn(`[SalesCopilot] ⚠️ Missing context for Lead Card (RawPost: ${!!rawPost}, Cls: ${!!classification})`);
+            return null;
+        }
+
+        // 2. Fetch Account/Clues if any
+        const account = database.findAccountByIdentity('fb_profile', rawPost.author_profile_url);
+        const identities = account ? database._db.prepare(`SELECT * FROM identities WHERE account_id = ?`).all(account.id) : [];
+
+        // 3. Build Strategic Prompt
+        const sysPrompt = `Bạn là Trợ lý Chiến lược Sales cấp cao tại THG Logistics. 
+Nhiệm vụ của bạn là phân tích một tín hiệu thương mại (commercial signal) và soạn thảo "Lead Card" để nhân viên Sales có thể chốt đơn ngay lập tức.
+
+DỮ LIỆU THG:
+- USP: Fulfillment US (kho Pennsylvania/Texas), Ship nội địa 2-5 ngày, Xưởng in POD/Dropship tại VN/CN/US.
+- Đối tượng: Seller POD, Dropship, Amazon FBA, Tiktok Shop US.
+
+YÊU CẦU OUTPUT (JSON):
+{
+  "strategic_summary": "Phân tích Mini Audit về Pain của khách (VD: Margin thấp do ship đắt, hoặc delay do ship từ TQ)",
+  "suggested_opener": "Câu chào cá nhân hóa, đánh thẳng vào Pain (không dùng văn mẫu)",
+  "objection_prevention": "Dự đoán 1 phản bác lớn nhất của khách và cách xử lý",
+  "next_best_action": "Hành động tối ưu (VD: DM Page, Comment bài viết, hoặc Gọi điện nếu có số)",
+  "sales_priority_score": 0-100
+}`;
+
+        const usrPrompt = `
+TÍN HIỆU: "${rawPost.post_text}"
+RUBRIC: 
+- Thể loại: ${classification.entity_type}
+- Pain Score: ${classification.pain_score}
+- Intent Score: ${classification.intent_score}
+- Resolution Confidence: ${classification.resolution_confidence}%
+- Pain Tags: ${classification.pain_tags}
+
+DANH TÍNH ĐÃ BIẾT (Clues):
+${identities.map(i => `- ${i.type}: ${i.value}`).join('\n')}
+
+Hãy soạn Lead Card chiến lược:`;
+
+        // 4. Call AI (GPT-4o for strategy, fallback to mini)
+        let response = null;
         try {
-            const database = require('../../backend/core/data_store/database');
-            const agentRow = database.getAgentProfile(salesName);
-            if (agentRow && agentRow.mode === 'active') {
-                const personalAgent = require('../agents/personalAgent');
-                const reply = await personalAgent.generateAgentReply(salesName, customerMessage, {
-                    leadId: context.leadId,
-                    leadSummary: context.leadSummary,
-                    platform: context.platform,
-                    senderName: context.senderName,
-                });
-                if (reply) return reply;
-            }
-        } catch (e) {
-            console.warn('[Copilot] ⚠️ PersonalAgent unavailable, dùng generic:', e.message);
+            response = await aiProvider.generateText(sysPrompt, usrPrompt, {
+                model: 'gpt-4o',
+                jsonMode: true
+            });
+        } catch (aiErr) {
+            console.warn(`[SalesCopilot] ⚠️ GPT-4o failed, falling back to Mini: ${aiErr.message}`);
         }
-    }
 
-    // ── Generic fallback (learning mode hoặc không có salesName) ──
-    const prompt = `${COPILOT_SYSTEM}
-
-Khách hàng vừa nhắn tin vào Fanpage THG:
-"${customerMessage}"
-
-${context.senderName ? `Tên khách: ${context.senderName}` : ''}
-${context.platform ? `Platform: ${context.platform}` : 'Platform: Facebook Messenger'}
-
-Soạn câu trả lời phù hợp:`;
-
-    try {
-        const reply = await generateText(
-            COPILOT_SYSTEM,
-            `Khách hàng vừa nhắn tin vào Fanpage THG:\n"${customerMessage}"\n\n${context.senderName ? `Tên khách: ${context.senderName}` : ''}\n${context.platform ? `Platform: ${context.platform}` : 'Platform: Facebook Messenger'}\n\nSoạn câu trả lời phù hợp:`,
-            { maxTokens: 300, temperature: 0.3 }
-        );
-        if (reply) {
-            console.log(`[Copilot] ✅ Generic reply: ${reply.substring(0, 80)}...`);
-            return reply.trim();
+        if (!response) {
+            response = await aiProvider.generateText(sysPrompt, usrPrompt, {
+                model: 'gpt-4o-mini',
+                jsonMode: true
+            });
         }
-        return '⚠️ AI đang bận, Sale vui lòng tự reply khách nhé!';
+
+        if (!response) {
+            console.error('[SalesCopilot] ❌ AI returned null response');
+            return null;
+        }
+
+        const cardData = JSON.parse(response);
+
+        // 5. Save to DB
+        const cardId = database.insertLeadCard({
+            raw_post_id: rawPostId,
+            account_id: account ? account.id : null,
+            lane: classification.recommended_lane,
+            strategic_summary: cardData.strategic_summary,
+            suggested_opener: cardData.suggested_opener,
+            objection_prevention: cardData.objection_prevention,
+            next_best_action: cardData.next_best_action,
+            sales_priority_score: cardData.sales_priority_score || classification.intent_score
+        });
+
+        console.log(`[SalesCopilot] ✅ Lead Card Generated: #${cardId} (Priority: ${cardData.sales_priority_score})`);
+        return cardId;
+
     } catch (err) {
-        console.error('[Copilot] ✗ AI error:', err.message);
-        return '⚠️ AI đang bận, Sale vui lòng tự reply khách nhé!';
+        console.error(`[SalesCopilot] ❌ Synthesis failed for Signal #${rawPostId}:`, err.message);
+        return null;
     }
 }
 
 /**
- * Classify intent of incoming message (lightweight, uses provider cascade)
- */
-async function classifyIntent(message) {
-    try {
-        const result = await generateText(
-            'Bạn là AI phân loại tin nhắn. Chỉ trả về 1 từ duy nhất.',
-            `Phân loại tin nhắn sau thành 1 trong: "price_inquiry", "service_inquiry", "urgent_need", "general", "spam"\nTin nhắn: "${message.substring(0, 200)}"\nChỉ trả về 1 từ duy nhất.`,
-            { maxTokens: 10, temperature: 0 }
-        );
-        return result ? result.trim().toLowerCase() : 'general';
-    } catch {
-        return 'general';
-    }
-}
-
-// ╔═══════════════════════════════════════════════════════════╗
-// ║  RESPONDER — Generate comment/DM responses for leads      ║
-// ╚═══════════════════════════════════════════════════════════╝
-
-const RESPONSE_TEMPLATES = {
-    POD: `Chào bạn! Mình thấy bạn đang tìm giải pháp Print on Demand. Bên mình là THG — chuyên fulfillment POD cho seller bán hàng sang Mỹ. Mình có xưởng in riêng tại VN, CN và US, seller chỉ cần gửi file thiết kế, mình lo từ in ấn đến ship tận tay khách Mỹ. Bạn có thể inbox mình để trao đổi thêm nhé!`,
-    Dropship: `Hi bạn! Mình thấy bạn đang quan tâm đến dropship. THG có dịch vụ dropship từ Taobao/1688 sang Mỹ — bạn chỉ cần gửi link sản phẩm, mình lo từ mua hàng, đóng gói đến ship sang Mỹ. Có kho tại CN xử lý nhanh. Inbox mình để biết thêm chi tiết nhé!`,
-    Fulfillment: `Chào bạn! THG chuyên cung cấp dịch vụ fulfillment cho e-commerce seller. Mình có kho tại Pennsylvania và North Carolina, hệ thống OMS/WMS tracking real-time, ship nội địa Mỹ 2-5 ngày. Bạn muốn tìm hiểu thêm không?`,
-    Express: `Hi bạn! Mình thấy bạn đang cần ship hàng từ VN/CN sang Mỹ. THG có tuyến bay riêng, giá tốt hơn DHL/FedEx, tracking rõ ràng (đáp ứng policy TikTok/Amazon). Inbox mình để báo giá cụ thể nhé!`,
-    Warehouse: `Chào bạn! Nếu bạn muốn stock hàng sẵn tại Mỹ để ship nhanh cho khách, THG có kho fulfillment ở Pennsylvania và North Carolina. Nhập hàng trước → khi có đơn ship nội địa 2-5 ngày. Rất phù hợp để cạnh tranh trên Amazon. Inbox mình nhé!`,
-    General: `Hi bạn! Mình là THG, chuyên hỗ trợ seller e-commerce bán hàng sang Mỹ. Mình có dịch vụ POD, dropship, fulfillment, và vận chuyển quốc tế. Bạn đang cần hỗ trợ gì cụ thể thì inbox mình nhé!`,
-};
-
-/**
- * Generate a personalized response for a lead using Gemini 1.5 Flash
- */
-async function generateResponse(lead) {
-    try {
-        const template = RESPONSE_TEMPLATES[lead.category] || RESPONSE_TEMPLATES.General;
-        const isTikTok = lead.platform === 'tiktok';
-
-        const lenRule = isTikTok
-            ? "- ĐỘ DÀI: Cực kỳ ngắn, DƯỚI 15 TỪ. Văn phong Gen Z, nhanh gọn."
-            : "- Độ dài: 2-3 câu ngắn gọn.";
-
-        const toneRule = isTikTok
-            ? "- KHÔNG dạ vâng dài dòng. Mục tiêu duy nhất là kéo khách check tin nhắn (VD: 'Bạn check inbox THG hỗ trợ ngay nhé!', 'Bên mình có kho PA ạ, b check ib nhé')."
-            : "- Viết tự nhiên, không quá bán hàng (không pushy). Trả lời thẳng vào vấn đề họ đang hỏi.";
-
-        const prompt = `Bạn là sales representative của THG. Nhiệm vụ: viết một comment/message phản hồi lại bài đăng/bình luận của khách hàng trên ${lead.platform}.
-
-${config.THG_CONTEXT}
-
-Quy tắc:
-${lenRule}
-${toneRule}
-- Đề cập đúng nhu cầu của họ (dựa trên nội dung post)
-- Kết thúc bằng CTA nhẹ nhàng (inbox, liên hệ, check DMs)
-- Ngôn ngữ: sử dụng cùng ngôn ngữ với bài đăng gốc (tiếng Anh thì rep tiếng Anh, tiếng Việt thì rep tiếng Việt).
-- CHỈ trả về nội dung response, KHÔNG giải thích thêm. KHÔNG dùng ngoặc kép bọc câu trả lời.
-
-Nội dung bài đăng/comment gốc của khách hàng:
-"${lead.content.substring(0, 1000)}"
-
-Phân tích nhu cầu:
-- Category: ${lead.category}
-- Nhu cầu/Insight: ${lead.summary}
-- Mức độ cấp bách: ${lead.urgency}
-
-Template dịch vụ tham khảo (Hãy rút gọn siêu ngắn nếu là TikTok):
-${template}
-
-Viết response phù hợp nhất:`;
-
-        const sysPrompt = `Bạn là sales representative của THG. Nhiệm vụ: viết một comment/message phản hồi lại bài đăng/bình luận của khách hàng trên ${lead.platform}.\n${config.THG_CONTEXT}\n\nQuy tắc:\n${lenRule}\n${toneRule}\n- Đề cập đúng nhu cầu của họ\n- Kết thúc bằng CTA nhẹ nhàng\n- Ngôn ngữ: cùng ngôn ngữ với bài gốc\n- CHỈ trả về nội dung response, KHÔNG giải thích thêm.`;
-        const usrPrompt = `Bài đăng gốc:\n"${lead.content.substring(0, 1000)}"\n\nCategory: ${lead.category}\nNhu cầu: ${lead.summary}\nMức độ cấp bách: ${lead.urgency}\n\nTemplate tham khảo:\n${template}\n\nViết response:`;
-
-        const text = await generateText(sysPrompt, usrPrompt, { maxTokens: 300, temperature: 0.3 });
-
-        if (text) {
-            let cleaned = text.trim();
-            // Remove quotes if AI accidentally adds them
-            if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
-                cleaned = cleaned.substring(1, cleaned.length - 1);
-            }
-            console.log(`[Responder] ✅ AI generated response: ${cleaned.substring(0, 80)}...`);
-            return cleaned;
-        }
-        return RESPONSE_TEMPLATES[lead.category] || RESPONSE_TEMPLATES.General;
-    } catch (err) {
-        console.error('[Responder] ✗ AI error:', err.message);
-        return RESPONSE_TEMPLATES[lead.category] || RESPONSE_TEMPLATES.General;
-    }
-}
-
-/**
- * Generate responses for a batch of leads
+ * Legacy Support: Generate responses for lead-gen pipeline
  */
 async function generateResponses(leads) {
-    console.log(`[Responder] 💬 Generating responses for ${leads.length} leads (AI cascade)...`);
+    // For SIS v2, we treat this as a batch card generator for high-intent signals
     const results = [];
-
-    for (let i = 0; i < leads.length; i++) {
-        const lead = leads[i];
-        console.log(`[Responder] ⏳ Processing lead ${i + 1}/${leads.length}...`);
-        const response = await generateResponse(lead);
-        results.push({ ...lead, suggested_response: response });
-        await new Promise(r => setTimeout(r, 500));
+    for (const lead of leads) {
+        const raw = database._db.prepare(`SELECT id FROM raw_posts WHERE external_post_id = ?`).get(lead.post_url || lead.id);
+        if (raw) {
+            await generateLeadCard(raw.id);
+            const card = database.getLeadCardByPost(raw.id);
+            results.push({ ...lead, suggested_response: card?.suggested_opener || 'Drafting strategy...' });
+        } else {
+            results.push(lead);
+        }
     }
-
-    console.log(`[Responder] ✅ Generated ${results.length} responses`);
     return results;
 }
 
-module.exports = { generateCopilotReply, classifyIntent, generateResponse, generateResponses };
+/**
+ * Draft a reply for a specific conversation (Manual/Auto Takeover)
+ */
+async function generateCopilotReply(message, context) {
+    const reply = await buildAgentReply(context.salesName || 'THG Agent', message, context);
+    return reply;
+}
+
+module.exports = { generateLeadCard, generateResponses, generateCopilotReply };

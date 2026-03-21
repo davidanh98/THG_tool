@@ -30,7 +30,177 @@ db.exec(`
     status TEXT DEFAULT 'new',
     scraped_at TEXT,
     created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    account_id INTEGER
+  );
+
+  -- 1. Bảng nguồn scrape thô (SIS v2)
+  CREATE TABLE IF NOT EXISTS raw_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_platform TEXT NOT NULL DEFAULT 'facebook',
+    source_type TEXT NOT NULL, -- group_post, comment, page_post
+    external_post_id TEXT UNIQUE NOT NULL,
+    group_name TEXT,
+    group_id TEXT,
+    author_name TEXT,
+    author_profile_url TEXT,
+    author_external_id TEXT,
+    post_url TEXT,
+    post_text TEXT,
+    post_language TEXT,
+    links_found TEXT DEFAULT '[]',
+    media_urls TEXT DEFAULT '[]',
+    engagement_json TEXT DEFAULT '{}',
+    top_comments TEXT DEFAULT '[]',
+    scraped_at TEXT DEFAULT (datetime('now')),
+    posted_at TEXT,
+    raw_payload TEXT DEFAULT '{}'
+  );
+
+  -- 2. Bảng feature pre-filter
+  CREATE TABLE IF NOT EXISTS post_prefilter_features (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raw_post_id INTEGER NOT NULL REFERENCES raw_posts(id) ON DELETE CASCADE,
+    is_duplicate INTEGER DEFAULT 0,
+    normalized_text TEXT,
+    text_length INTEGER,
+    has_blacklist_keyword INTEGER DEFAULT 0,
+    has_positive_keyword INTEGER DEFAULT 0,
+    group_trust_score INTEGER DEFAULT 0,
+    pre_score INTEGER DEFAULT 0,
+    hard_reject INTEGER DEFAULT 0,
+    hard_reject_reason TEXT,
+    feature_json TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  -- 3. Bảng kết quả AI worker (Classification)
+  CREATE TABLE IF NOT EXISTS post_classifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raw_post_id INTEGER NOT NULL REFERENCES raw_posts(id) ON DELETE CASCADE,
+    model_name TEXT NOT NULL,
+    is_relevant INTEGER NOT NULL,
+    entity_type TEXT NOT NULL, -- seller, competitor, newbie, noise, unknown
+    seller_likelihood INTEGER NOT NULL,
+    pain_score INTEGER NOT NULL,
+    intent_score INTEGER NOT NULL,
+    resolution_confidence INTEGER NOT NULL,
+    contactability_score INTEGER NOT NULL,
+    competitor_probability INTEGER NOT NULL,
+    pain_tags TEXT DEFAULT '[]',
+    market_tags TEXT DEFAULT '[]',
+    seller_stage_estimate TEXT DEFAULT 'unknown',
+    language_signals TEXT DEFAULT '[]',
+    possible_identity_clues TEXT DEFAULT '[]',
+    recommended_lane TEXT NOT NULL, -- resolved_lead, partial_lead, anonymous_signal, competitor_intel, discard
+    reason_summary TEXT,
+    confidence TEXT DEFAULT 'low',
+    raw_response TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  -- 4. Bảng identity clues
+  CREATE TABLE IF NOT EXISTS identity_clues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raw_post_id INTEGER NOT NULL REFERENCES raw_posts(id) ON DELETE CASCADE,
+    clue_type TEXT NOT NULL, -- domain, email, page, instagram, tiktok, brand_mention
+    clue_value TEXT NOT NULL,
+    confidence_score INTEGER DEFAULT 0,
+    discovered_by TEXT NOT NULL, -- regex, parser, ai, manual
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  -- 5. Bảng account hợp nhất (v2)
+  CREATE TABLE IF NOT EXISTS accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_name TEXT,
+    brand_name TEXT,
+    primary_domain TEXT,
+    primary_email TEXT,
+    primary_page_url TEXT,
+    instagram_handle TEXT,
+    tiktok_handle TEXT,
+    category TEXT,
+    platform TEXT, -- shopify, etsy, tiktok_shop, amazon, woo, unknown
+    market TEXT,   -- US, EU, UK, mixed, unknown
+    maturity_stage TEXT DEFAULT 'unknown',
+    estimated_volume_band TEXT DEFAULT 'unknown',
+    seller_likelihood INTEGER DEFAULT 0,
+    pain_score INTEGER DEFAULT 0,
+    intent_score INTEGER DEFAULT 0,
+    resolution_confidence INTEGER DEFAULT 0,
+    contactability_score INTEGER DEFAULT 0,
+    competitor_probability INTEGER DEFAULT 0,
+    sales_priority_score INTEGER DEFAULT 0,
+    intelligence_value_score INTEGER DEFAULT 0,
+    outreach_readiness_score INTEGER DEFAULT 0,
+    account_status TEXT DEFAULT 'active', -- active, watchlist, archived, competitor
+    created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  -- 6. Bảng map post vào account
+  CREATE TABLE IF NOT EXISTS account_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    raw_post_id INTEGER NOT NULL REFERENCES raw_posts(id) ON DELETE CASCADE,
+    link_confidence INTEGER DEFAULT 0,
+    is_primary_signal INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  -- 7. Bảng contact paths
+  CREATE TABLE IF NOT EXISTS contact_paths (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    channel TEXT NOT NULL, -- email, page, instagram, tiktok, website_form, whatsapp
+    contact_value TEXT NOT NULL,
+    is_reachable INTEGER DEFAULT 1,
+    quality_score INTEGER DEFAULT 0,
+    discovered_by TEXT DEFAULT 'system',
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  -- 8. Bảng lead card cho sales
+  CREATE TABLE IF NOT EXISTS lead_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+    raw_post_id INTEGER REFERENCES raw_posts(id) ON DELETE SET NULL,
+    lane TEXT NOT NULL, -- resolved_lead, partial_lead, anonymous_signal, competitor_intel
+    lead_type TEXT NOT NULL, -- direct, partial, intelligence
+    core_pain TEXT,
+    pain_summary TEXT,
+    action_recommendation TEXT,
+    suggested_channel TEXT,
+    opener_message TEXT,
+    mini_audit_note TEXT,
+    objections_likely TEXT DEFAULT '[]',
+    priority_level TEXT DEFAULT 'low', -- low, medium, high
+    generated_by_model TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  -- 9. Bảng activity của sales
+  CREATE TABLE IF NOT EXISTS sales_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    lead_card_id INTEGER NOT NULL REFERENCES lead_cards(id) ON DELETE CASCADE,
+    action_type TEXT NOT NULL, -- reviewed, contacted, skipped, nurture, won, lost
+    actor_name TEXT,
+    action_notes TEXT,
+    outcome TEXT, -- replied, no_reply, qualified, disqualified, pilot, won, lost
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  -- 10. Bảng learning loop
+  CREATE TABLE IF NOT EXISTS learning_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    lead_card_id INTEGER NOT NULL REFERENCES lead_cards(id) ON DELETE CASCADE,
+    sales_outcome TEXT NOT NULL, -- win, loss, no_reply, unqualified
+    outcome_reason TEXT,
+    extracted_insights TEXT DEFAULT '[]',
+    weight_update_json TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now'))
   );
 
   CREATE TABLE IF NOT EXISTS scan_logs (
@@ -43,53 +213,6 @@ db.exec(`
     finished_at TEXT,
     status TEXT DEFAULT 'running',
     error TEXT
-  );
-
-  -- =========================================
-  -- 🚀 SIS (Seller Intelligence System) Tables
-  -- =========================================
-  
-  CREATE TABLE IF NOT EXISTS accounts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    brand_name TEXT,
-    primary_domain TEXT,
-    primary_email TEXT,
-    category TEXT,
-    platform TEXT,
-    market TEXT,
-    maturity_stage TEXT,
-    estimated_volume_band TEXT,
-    contactability_score INTEGER DEFAULT 0,
-    pain_score INTEGER DEFAULT 0,
-    revenue_score INTEGER DEFAULT 0,
-    switching_score INTEGER DEFAULT 0,
-    urgency_score INTEGER DEFAULT 0,
-    priority_score INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'new',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS identities (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,
-    type TEXT NOT NULL,
-    value TEXT NOT NULL,
-    confidence_score INTEGER DEFAULT 100,
-    discovered_from TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS actions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,
-    action_type TEXT,
-    channel TEXT,
-    template_used TEXT,
-    owner TEXT,
-    status TEXT,
-    scheduled_at TEXT,
-    executed_at TEXT,
-    response_result TEXT
   );
 `);
 
@@ -138,6 +261,25 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 `);
+
+// ── SIS v2 Account Table Migration (Add new columns if missing) ───────────
+const accountCols = [
+  ['account_name', 'TEXT'],
+  ['primary_page_url', 'TEXT'],
+  ['instagram_handle', 'TEXT'],
+  ['tiktok_handle', 'TEXT'],
+  ['seller_likelihood', 'INTEGER DEFAULT 0'],
+  ['intent_score', 'INTEGER DEFAULT 0'],
+  ['resolution_confidence', 'INTEGER DEFAULT 0'],
+  ['sales_priority_score', 'INTEGER DEFAULT 0'],
+  ['intelligence_value_score', 'INTEGER DEFAULT 0'],
+  ['outreach_readiness_score', 'INTEGER DEFAULT 0'],
+  ['account_status', "TEXT DEFAULT 'active'"]
+];
+
+for (const [col, type] of accountCols) {
+  try { db.exec(`ALTER TABLE accounts ADD COLUMN ${col} ${type};`); } catch (e) { }
+}
 
 // ── Seed admin account from .env if users table is empty ──────────────────
 (async () => {
@@ -1006,6 +1148,15 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_outreach_lead ON outreach_log(lead_id);
   CREATE INDEX IF NOT EXISTS idx_outreach_staff ON outreach_log(staff_name);
+
+  -- SIS v2 Core Indices
+  CREATE INDEX IF NOT EXISTS idx_raw_posts_external_post_id ON raw_posts(external_post_id);
+  CREATE INDEX IF NOT EXISTS idx_raw_posts_group_name ON raw_posts(group_name);
+  CREATE INDEX IF NOT EXISTS idx_post_classifications_raw_post_id ON post_classifications(raw_post_id);
+  CREATE INDEX IF NOT EXISTS idx_post_classifications_lane ON post_classifications(recommended_lane);
+  CREATE INDEX IF NOT EXISTS idx_accounts_sales_priority ON accounts(sales_priority_score DESC);
+  CREATE INDEX IF NOT EXISTS idx_accounts_status ON accounts(account_status);
+  CREATE INDEX IF NOT EXISTS idx_lead_cards_lane ON lead_cards(lane);
 `);
 
 // Pipeline stage on leads
@@ -1100,6 +1251,227 @@ const logSISAction = (action) => {
   return rs.lastInsertRowid;
 };
 
+// ─── SIS v2 Methods (Signal-Centric) ──────────────────────────────────────
+
+const insertRawPost = (post) => {
+  const stmt = db.prepare(`
+    INSERT INTO raw_posts (
+      source_platform, source_type, external_post_id, group_name, group_id,
+      author_name, author_profile_url, author_external_id, post_url, post_text,
+      post_language, links_found, media_urls, engagement_json, top_comments,
+      scraped_at, posted_at, raw_payload
+    ) VALUES (
+      @source_platform, @source_type, @external_post_id, @group_name, @group_id,
+      @author_name, @author_profile_url, @author_external_id, @post_url, @post_text,
+      @post_language, @links_found, @media_urls, @engagement_json, @top_comments,
+      @scraped_at, @posted_at, @raw_payload
+    ) ON CONFLICT(external_post_id) DO UPDATE SET
+      engagement_json = excluded.engagement_json,
+      top_comments = excluded.top_comments
+  `);
+
+  const rs = stmt.run({
+    source_platform: post.source_platform || 'facebook',
+    source_type: post.source_type || 'post',
+    external_post_id: post.external_post_id || post.post_url,
+    group_name: post.group_name || '',
+    group_id: post.group_id || '',
+    author_name: post.author_name || 'Unknown',
+    author_profile_url: post.author_profile_url || '',
+    author_external_id: post.author_external_id || '',
+    post_url: post.post_url || '',
+    post_text: post.post_text || (post.content || ''),
+    post_language: post.post_language || 'vi',
+    links_found: JSON.stringify(post.links_found || []),
+    media_urls: JSON.stringify(post.media_urls || []),
+    engagement_json: JSON.stringify(post.engagement_json || {}),
+    top_comments: JSON.stringify(post.top_comments || []),
+    scraped_at: post.scraped_at || new Date().toISOString(),
+    posted_at: post.posted_at || post.post_created_at || new Date().toISOString(),
+    raw_payload: JSON.stringify(post.raw_payload || {})
+  });
+  return rs.lastInsertRowid;
+};
+
+const insertClassification = (cls) => {
+  const stmt = db.prepare(`
+    INSERT INTO post_classifications (
+      raw_post_id, model_name, is_relevant, entity_type, 
+      seller_likelihood, pain_score, intent_score, resolution_confidence,
+      contactability_score, competitor_probability,
+      pain_tags, market_tags, seller_stage_estimate, language_signals,
+      possible_identity_clues, recommended_lane, reason_summary, confidence, raw_response
+    ) VALUES (
+      @raw_post_id, @model_name, @is_relevant, @entity_type, 
+      @seller_likelihood, @pain_score, @intent_score, @resolution_confidence,
+      @contactability_score, @competitor_probability,
+      @pain_tags, @market_tags, @seller_stage_estimate, @language_signals,
+      @possible_identity_clues, @recommended_lane, @reason_summary, @confidence, @raw_response
+    )
+  `);
+
+  const rs = stmt.run({
+    raw_post_id: cls.raw_post_id,
+    model_name: cls.model_name || 'gpt-4o-mini',
+    is_relevant: cls.is_relevant ? 1 : 0,
+    entity_type: cls.entity_type || 'unknown',
+    seller_likelihood: cls.seller_likelihood || 0,
+    pain_score: cls.pain_score || 0,
+    intent_score: cls.intent_score || 0,
+    resolution_confidence: cls.resolution_confidence || 0,
+    contactability_score: cls.contactability_score || 0,
+    competitor_probability: cls.competitor_probability || 0,
+    pain_tags: JSON.stringify(cls.pain_tags || []),
+    market_tags: JSON.stringify(cls.market_tags || []),
+    seller_stage_estimate: cls.seller_stage_estimate || 'unknown',
+    language_signals: JSON.stringify(cls.language_signals || []),
+    possible_identity_clues: JSON.stringify(cls.possible_identity_clues || []),
+    recommended_lane: cls.recommended_lane || 'discard',
+    reason_summary: cls.reason_summary || '',
+    confidence: cls.confidence || 'low',
+    raw_response: JSON.stringify(cls.raw_response || {})
+  });
+  return rs.lastInsertRowid;
+};
+
+const getLeadCards = (lane = 'resolved_lead', limit = 50) => {
+  return db.prepare(`
+    SELECT lc.*, rp.post_text, rp.author_name, rp.post_url, rp.group_name 
+    FROM lead_cards lc
+    JOIN raw_posts rp ON lc.raw_post_id = rp.id
+    WHERE lc.lane = ?
+    ORDER BY lc.created_at DESC
+    LIMIT ?
+  `).all(lane, limit);
+};
+
+const insertLeadCard = (card) => {
+  const stmt = db.prepare(`
+    INSERT INTO lead_cards (
+      raw_post_id, account_id, lane, strategic_summary, 
+      suggested_opener, objection_prevention, next_best_action, sales_priority_score
+    ) VALUES (
+      @raw_post_id, @account_id, @lane, @strategic_summary, 
+      @suggested_opener, @objection_prevention, @next_best_action, @sales_priority_score
+    )
+  `);
+  const rs = stmt.run({
+    raw_post_id: card.raw_post_id,
+    account_id: card.account_id || null,
+    lane: card.lane || 'anonymous_signal',
+    strategic_summary: card.strategic_summary || '',
+    suggested_opener: card.suggested_opener || '',
+    objection_prevention: card.objection_prevention || '',
+    next_best_action: card.next_best_action || 'monitor',
+    sales_priority_score: card.sales_priority_score || 0
+  });
+  return rs.lastInsertRowid;
+};
+
+const getLeadCardByPost = (rawPostId) => {
+  return db.prepare(`SELECT * FROM lead_cards WHERE raw_post_id = ?`).get(rawPostId);
+};
+
+const migrateToV2 = () => {
+  console.log('[Migration] Starting SIS v2 Data Migration...');
+
+  const legacyLeads = db.prepare('SELECT * FROM leads').all();
+  if (legacyLeads.length === 0) {
+    console.log('[Migration] No legacy leads found. Skipping.');
+    return;
+  }
+
+  const checkRawExists = db.prepare('SELECT id FROM raw_posts WHERE external_post_id = ?');
+
+  db.transaction(() => {
+    let migratedCount = 0;
+    for (const lead of legacyLeads) {
+      const extId = lead.post_url || `legacy_${lead.id}`;
+      const existingRaw = checkRawExists.get(extId);
+      if (existingRaw) continue;
+
+      const rawId = insertRawPost({
+        source_platform: lead.platform,
+        source_type: lead.item_type || 'post',
+        external_post_id: extId,
+        author_name: lead.author_name,
+        author_profile_url: lead.author_url,
+        post_url: lead.post_url,
+        post_text: lead.content,
+        scraped_at: lead.scraped_at,
+        posted_at: lead.post_created_at,
+        group_name: lead.group_name || lead.source_group
+      });
+
+      const isRelevant = lead.score >= 60 ? 1 : 0;
+      const resConf = lead.post_url ? 80 : 20;
+      const lane = lead.score >= 60
+        ? (lead.post_url ? 'resolved_lead' : 'partial_lead')
+        : 'discard';
+
+      insertClassification({
+        raw_post_id: rawId,
+        model_name: 'legacy_migration',
+        is_relevant: isRelevant,
+        entity_type: lead.role === 'buyer' ? 'seller' : 'unknown',
+        seller_likelihood: lead.score || 0,
+        pain_score: lead.pain_score || 0,
+        intent_score: 70,
+        resolution_confidence: resConf,
+        contactability_score: 50,
+        competitor_probability: 0,
+        recommended_lane: lane,
+        reason_summary: lead.summary || 'Migrated from v1',
+        confidence: 'high'
+      });
+
+      migratedCount++;
+    }
+    console.log(`[Migration] Successfully migrated ${migratedCount} leads to SIS v2.`);
+  })();
+};
+
+const getSISSummary = () => {
+  const lanes = db.prepare(`
+    SELECT recommended_lane as lane, COUNT(*) as count 
+    FROM post_classifications 
+    GROUP BY recommended_lane
+  `).all();
+
+  const stats = db.prepare(`
+    SELECT 
+      AVG(intent_score) as avg_intent,
+      AVG(pain_score) as avg_pain,
+      COUNT(DISTINCT raw_post_id) as total_signals
+    FROM post_classifications
+    WHERE is_relevant = 1
+  `).get();
+
+  return { lanes, stats };
+};
+
+const insertFeedback = (fb) => {
+  const stmt = db.prepare(`
+    INSERT INTO learning_feedback (
+      raw_post_id, classification_id, user_id, 
+      is_correct, corrected_lane, corrected_scores_json, feedback_note
+    ) VALUES (
+      @raw_post_id, @classification_id, @user_id, 
+      @is_correct, @corrected_lane, @corrected_scores_json, @feedback_note
+    )
+  `);
+  const rs = stmt.run({
+    raw_post_id: fb.raw_post_id,
+    classification_id: fb.classification_id,
+    user_id: fb.user_id || 'manual_user',
+    is_correct: fb.is_correct ? 1 : 0,
+    corrected_lane: fb.corrected_lane || null,
+    corrected_scores_json: JSON.stringify(fb.corrected_scores || {}),
+    feedback_note: fb.feedback_note || ''
+  });
+  return rs.lastInsertRowid;
+};
+
 module.exports = {
   db,
   insertLead,
@@ -1109,23 +1481,12 @@ module.exports = {
   updateLeadStatus,
   getStats: getStatsCached,
   invalidateStatsCache,
-  getAnalytics,
   insertScanLog,
   updateScanLog,
   getRecentScans,
   // Conversations
   insertConversation,
   getConversations,
-  getConversationById,
-  updateConversation,
-  getConversationStats,
-  // Credits
-  logCreditUsage,
-  getCreditStats,
-  getCreditLog,
-  // Deduplication (deprecated — use INSERT OR IGNORE)
-  getExistingPostUrls,
-  getExistingContentHashes,
   // Agent Profiles
   getAgentProfiles,
   getAgentProfile,
@@ -1142,12 +1503,6 @@ module.exports = {
   markTeachingSample,
   getSalesStyle,
   saveSalesStyle,
-  // Scan Queue (IPC)
-  enqueueScan,
-  claimNextScan,
-  completeScan,
-  failScan,
-  getScanQueueStatus,
   // Social Agent
   logSocialActivity,
   getSocialActivityLog,
@@ -1159,5 +1514,14 @@ module.exports = {
   insertIdentity,
   findAccountByIdentity,
   logSISAction,
+  // SIS v2 Methods
+  insertRawPost,
+  insertClassification,
+  getLeadCards,
+  insertLeadCard,
+  getLeadCardByPost,
+  getSISSummary,
+  insertFeedback,
+  migrateToV2,
   _db: db
 };

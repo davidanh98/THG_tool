@@ -1,46 +1,54 @@
 /**
- * Identity Resolver Worker — Phase 3
+ * SIS v2 Identity Resolver — Clue-Centric Logic
  * 
- * Polls for qualified leads and resolves their business identities (Fanpages, Websites, Emails).
+ * Instead of just "finding a website", this worker resolves "Identity Clues"
+ * into unified Account Cards. 
+ * 
+ * Logic:
+ * 1. Poll post_classifications for Partials (lane='partial_lead' or 'anonymous_signal').
+ * 2. Scrape author profiles or follow AI-suggested clues.
+ * 3. Update 'accounts' and 'identities' tables.
+ * 4. Sync resolution_confidence back to the classification record.
  */
-const { chromium, delay } = require('../scraper/browserManager');
-const { getAuthContext } = require('../scraper/authContext');
-const { resolveProfile } = require('../scraper/profileScraper');
+
+const { chromium } = require('playwright');
 const database = require('../../core/data_store/database');
 const accountManager = require('../../../ai/agents/accountManager');
+const { getAuthContext } = require('../scraper/authContext');
+const { resolveProfile } = require('../scraper/profileScraper');
 
-const POLL_INTERVAL = 45000; // 45 seconds (don't rush identity resolution)
-const MIN_SCORE = 70;
+const POLL_INTERVAL = 60000; // 60s
 let isProcessing = false;
 
-async function runIdentityResolution() {
+async function runSISIdentityWorker() {
     if (isProcessing) return;
     isProcessing = true;
 
     try {
-        // 1. Find a qualified lead that hasn't been resolved yet
-        const lead = database.db.prepare(`
-            SELECT * FROM leads 
-            WHERE account_id IS NULL 
-            AND score >= ? 
-            AND author_url IS NOT NULL 
-            AND author_url != ''
-            AND status != 'ignored'
-            ORDER BY score DESC 
+        // 1. Find a Classification that needs more clues
+        // Priority: partial_lead > anonymous_signal
+        const target = database._db.prepare(`
+            SELECT pc.*, rp.author_url, rp.author_name, rp.platform
+            FROM post_classifications pc
+            JOIN raw_posts rp ON pc.raw_post_id = rp.id
+            WHERE pc.recommended_lane IN ('partial_lead', 'anonymous_signal')
+            AND pc.resolution_confidence < 90
+            AND rp.author_url IS NOT NULL
+            ORDER BY pc.intent_score DESC
             LIMIT 1
-        `).get(MIN_SCORE);
+        `).get();
 
-        if (!lead) {
+        if (!target) {
             isProcessing = false;
             return;
         }
 
-        console.log(`[IdentityWorker] 🎯 Target: ${lead.author_name} (Lead #${lead.id}, Score: ${lead.score})`);
+        console.log(`[SIS Identity] 🔍 Investigating Clues for: ${target.author_name} (Signal #${target.id})`);
 
-        // 2. Get available account
+        // 2. Resolve Profile (Websites, Emails, Pages)
         const account = accountManager.getNextAccount({ forScraping: true });
         if (!account) {
-            console.warn('[IdentityWorker] ⚠️ No accounts available for identity resolution');
+            console.warn('[SIS Identity] ⚠️ No accounts available for scraping');
             isProcessing = false;
             return;
         }
@@ -49,68 +57,76 @@ async function runIdentityResolution() {
         try {
             browser = await chromium.launch({
                 headless: true,
-                executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
-                args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+                args: ['--no-sandbox', '--disable-dev-shm-usage']
             });
 
             const context = await getAuthContext(account, browser);
             const page = await context.newPage();
 
-            const identity = await resolveProfile(page, lead.author_url);
+            // ── HUNTING PHASE ──
+            const resolved = await resolveProfile(page, target.author_url);
 
-            if (identity && identity.ok) {
-                // 3. Save to Database (Transaction)
-                database.db.transaction(() => {
-                    // a) Create/Find Account
-                    // To keep it simple, we use the author_name as the initial brand name
-                    const brandName = lead.author_name || 'Prospect';
-                    const mainDomain = identity.websites[0] || '';
-                    const mainEmail = identity.emails[0] || '';
+            if (resolved && resolved.ok) {
+                // 3. SYNTHESIS PHASE (Transaction)
+                database._db.transaction(() => {
+                    // a) Find/Create Account Card
+                    // Check if we already have an identity for this author_url
+                    let accId = database.findAccountByIdentity('fb_profile', target.author_url);
 
-                    const accResult = database.db.prepare(`
-                        INSERT INTO accounts (brand_name, primary_domain, primary_email, status, category)
-                        VALUES (?, ?, ?, 'lead', ?)
-                    `).run(brandName, mainDomain, mainEmail, lead.category || 'General');
+                    if (!accId) {
+                        accId = database.insertAccount({
+                            brand_name: target.author_name || 'Anonymous Seller',
+                            status: 'lead'
+                        });
+                        database.insertIdentity({ account_id: accId, type: 'fb_profile', value: target.author_url, discovered_from: 'signal_scrape' });
+                    }
 
-                    const accountId = accResult.lastInsertRowid;
+                    // b) Save discovered clues
+                    const insertIden = (type, val) => {
+                        try { database.insertIdentity({ account_id: accId, type, value: val, discovered_from: 'identity_worker' }); } catch (e) { }
+                    };
 
-                    // b) Save Identities
-                    const insertIden = database.db.prepare(`
-                        INSERT INTO identities (account_id, type, value, discovered_from)
-                        VALUES (?, ?, ?, ?)
-                    `);
+                    let newClues = 0;
+                    (resolved.emails || []).forEach(e => { insertIden('email', e); newClues++; });
+                    (resolved.websites || []).forEach(w => { insertIden('website', w); newClues++; });
+                    (resolved.pages || []).forEach(p => { insertIden('fb_page', p); newClues++; });
+                    (resolved.phones || []).forEach(ph => { insertIden('phone', ph); newClues++; });
 
-                    identity.emails.forEach(email => insertIden.run(accountId, 'email', email, 'profile_scrape'));
-                    identity.phones.forEach(phone => insertIden.run(accountId, 'phone', phone, 'profile_scrape'));
-                    identity.websites.forEach(web => insertIden.run(accountId, 'website', web, 'profile_scrape'));
-                    identity.pages.forEach(pageUrl => insertIden.run(accountId, 'fb_page', pageUrl, 'profile_scrape'));
+                    // c) update resolution score
+                    const newConfidence = Math.min(100, target.resolution_confidence + (newClues * 15) + (resolved.websites.length > 0 ? 30 : 0));
+                    const newLane = newConfidence >= 80 ? 'resolved_lead' : target.recommended_lane;
 
-                    // c) Link Lead to Account
-                    database.db.prepare(`UPDATE leads SET account_id = ? WHERE id = ?`)
-                        .run(accountId, lead.id);
+                    database._db.prepare(`
+                        UPDATE post_classifications 
+                        SET resolution_confidence = ?, recommended_lane = ?
+                        WHERE id = ?
+                    `).run(newConfidence, newLane, target.id);
 
-                    console.log(`[IdentityWorker] ✅ Resolved Lead #${lead.id} → Account #${accountId}`);
+                    console.log(`[SIS Identity] ✅ Identity Updated: Confidence ${target.resolution_confidence} -> ${newConfidence} | Lane: ${newLane}`);
+
+                    // d) Update Account main fields if we found a website
+                    if (resolved.websites.length > 0) {
+                        database._db.prepare(`UPDATE accounts SET primary_domain = ? WHERE id = ? AND (primary_domain IS NULL OR primary_domain = '')`)
+                            .run(resolved.websites[0], accId);
+                    }
                 })();
-            } else {
-                console.warn(`[IdentityWorker] ⚠️ Failed for Lead #${lead.id}: ${identity?.error || 'Unknown error'}`);
-                // Tag it so we don't retry immediately? (Optional: increment a resolution_attempts column)
             }
 
             await page.close();
         } catch (err) {
-            console.error(`[IdentityWorker] 💥 Task failed: ${err.message}`);
+            console.error(`[SIS Identity] 💥 Task failed:`, err.message);
         } finally {
             if (browser) await browser.close();
         }
 
     } catch (err) {
-        console.error(`[IdentityWorker] ❌ Worker loop error: ${err.message}`);
+        console.error(`[SIS Identity] ❌ Loop error:`, err.message);
     } finally {
         isProcessing = false;
     }
 }
 
-// Start the loop
-console.log(`[IdentityWorker] 🚀 Started (Polling every ${POLL_INTERVAL / 1000}s)`);
-setInterval(runIdentityResolution, POLL_INTERVAL);
-runIdentityResolution(); // Run once immediately
+// Start Worker
+console.log(`[SIS Identity] 🚀 SIS v2 Identity Worker Started. Polling every ${POLL_INTERVAL / 1000}s`);
+setInterval(runSISIdentityWorker, POLL_INTERVAL);
+runSISIdentityWorker(); 

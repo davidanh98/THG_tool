@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AppLayout from './components/layout/AppLayout'
 import LoginPage from './pages/LoginPage'
 import AccountsPage from './pages/AccountsPage'
+import LeadsPage from './pages/LeadsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import InboxPage from './pages/InboxPage'
 import GroupsPage from './pages/GroupsPage'
@@ -9,6 +10,7 @@ import AgentsPage from './pages/AgentsPage'
 import StrategiesPage from './pages/StrategiesPage'
 import LeaderboardPage from './pages/LeaderboardPage'
 import SystemPage from './pages/SystemPage'
+import SISDashboard from './pages/SISDashboard'
 import PlaceholderPage from './pages/PlaceholderPage'
 import { useAuthStore } from './store/authStore'
 import { useEffect } from 'react'
@@ -36,7 +38,9 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/" element={<AccountsPage />} />
+          <Route path="/" element={<SISDashboard />} />
+          <Route path="/leads" element={<LeadsPage />} />
+          <Route path="/accounts" element={<AccountsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/groups" element={<GroupsPage />} />
