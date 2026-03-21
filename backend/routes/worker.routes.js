@@ -107,6 +107,8 @@ router.post('/api/worker/jobs/:id/complete', express.json({ limit: '10mb' }), (r
                         pain_score: post.pain_score || 0,
                         spam_score: post.spam_score || post.spamScore || 0,
                         item_type: post.item_type || 'post',
+                        is_anonymous: post.is_anonymous || 0,
+                        automatic_comment_sent: post.automatic_comment_sent || 0
                     });
                     saved++;
                 } catch (e) {
