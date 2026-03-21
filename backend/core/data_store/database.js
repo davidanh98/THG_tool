@@ -133,6 +133,16 @@ db.exec(`
     error       TEXT,
     started_at  TEXT DEFAULT (datetime('now'))
   );
+  -- 8. Bảng phản hồi (Human Feedback)
+  CREATE TABLE IF NOT EXISTS feedback (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    raw_post_id   INTEGER NOT NULL REFERENCES raw_posts(id) ON DELETE CASCADE,
+    is_correct    INTEGER NOT NULL,
+    corrected_lane TEXT,
+    feedback_text TEXT,
+    created_at    TEXT DEFAULT (datetime('now'))
+  );
+
   CREATE INDEX IF NOT EXISTS idx_scan_queue_status ON scan_queue(status);
 `);
 
@@ -318,6 +328,13 @@ const insertIdentity = (clue) => {
   return db.prepare(`INSERT INTO identity_clues (account_id, clue_type, clue_value, discovered_by) VALUES (?, ?, ?, ?)`).run(
     clue.account_id, clue.type || clue.clue_type, clue.value || clue.clue_value, clue.discovered_from || 'system'
   ).lastInsertRowid;
+};
+
+const insertFeedback = (fb) => {
+  return db.prepare(`
+        INSERT INTO feedback (raw_post_id, is_correct, corrected_lane, feedback_text)
+        VALUES (?, ?, ?, ?)
+    `).run(fb.raw_post_id, fb.is_correct ? 1 : 0, fb.corrected_lane, fb.feedback_text).lastInsertRowid;
 };
 
 module.exports = {
