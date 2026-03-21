@@ -24,21 +24,11 @@ const BATCH_SIZE = 20;
 let isProcessing = false;
 
 // ── Routing rules ──────────────────────────────────────────────────────
-const ROUTING_RULES = [
-    { pattern: /pod|print.on.demand|in.áo|in.theo|xưởng.in/i, assignTo: 'Đức Anh' },
-    { pattern: /trung.quốc|china|tq|taobao|1688|quảng.châu|cn.→|cn\s/i, assignTo: 'Moon' },
-    { pattern: /kho.mỹ|warehouse|3pl|texas|pennsylvania|pa.kho|kho.us/i, assignTo: 'Khoa' },
-    { pattern: /fulfillment|fulfill|dropship|drop.ship/i, assignTo: 'Đức Anh' },
-    { pattern: /epacket|chile|colombia|mexico|saudi|uae|úc|australia/i, assignTo: 'Linh' },
-];
 const ROUND_ROBIN_SALES = ['Đức Anh', 'Moon', 'Khoa', 'Linh'];
 let rrIdx = 0;
 
 function routeLead(content) {
-    const text = content || '';
-    for (const rule of ROUTING_RULES) {
-        if (rule.pattern.test(text)) return rule.assignTo;
-    }
+    // Phân bổ đều data cho 4 sale accounts (round-robin)
     const sales = ROUND_ROBIN_SALES[rrIdx % ROUND_ROBIN_SALES.length];
     rrIdx++;
     return sales;

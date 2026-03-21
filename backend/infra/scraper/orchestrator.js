@@ -289,8 +289,8 @@ async function _scrapeWithContext(browser, account, groups) {
         // 🎭 Persona Warm-up — PASSIVE camouflage before scraping
         const warmPage = await context.newPage();
         try {
-            console.log(`${tag} � Đang khoác áo Nguỵ Trang (Warm-up)...`);
-            await runPersonaSession(warmPage, accUsername, 'light');
+            console.log(`${tag} 🎭 Đang khoác áo Nguỵ Trang (Warm-up Medium)...`);
+            await runPersonaSession(warmPage, accUsername, 'medium');
         } catch (e) { console.warn(`${tag} ⚠️ Persona Warm-up error: ${e.message}`); }
         finally {
             await warmPage.close();
@@ -314,9 +314,19 @@ async function _scrapeWithContext(browser, account, groups) {
                     const jitter = 8000 + Math.random() * 12000;
                     console.log(`${tag} 😴 Jitter: ${(jitter / 1000).toFixed(1)}s`);
                     await delay(jitter);
+
                     if (i % 5 === 0) {
-                        const breakTime = 25000 + Math.random() * 20000;
-                        console.log(`${tag} ☕ Coffee break: ${(breakTime / 1000).toFixed(0)}s`);
+                        const breakTime = 15000 + Math.random() * 15000;
+                        console.log(`${tag} ☕ Coffee break & Feed Browsing (Anti-bot)...`);
+
+                        try {
+                            const breakPage = await context.newPage();
+                            await runPersonaSession(breakPage, accUsername, 'light');
+                            await breakPage.close();
+                        } catch (e) {
+                            console.warn(`${tag} ⚠️ Break Persona error: ${e.message}`);
+                        }
+
                         await delay(breakTime);
                     }
                 }
