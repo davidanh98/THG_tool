@@ -585,12 +585,27 @@ const insertLead = {
     };
     const lang = lead.language || (isVietnamese(lead.content) ? 'vietnamese' : 'foreign');
     const safeLead = {
-      ...lead,
-      language: lang,
+      platform: lead.platform || 'facebook',
+      post_url: lead.post_url || '',
+      author_name: lead.author_name || 'Unknown',
+      author_url: lead.author_url || '',
       author_avatar: lead.author_avatar || '',
+      content: lead.content || '',
       score: lead.score || 0,
+      category: lead.category || 'uncategorised',
+      summary: lead.summary || '',
+      urgency: lead.urgency || 'low',
+      suggested_response: lead.suggested_response || '',
+      role: lead.role || 'buyer',
+      buyer_signals: lead.buyer_signals || '',
+      scraped_at: lead.scraped_at || new Date().toISOString(),
+      post_created_at: lead.post_created_at || new Date().toISOString(),
+      profit_estimate: lead.profit_estimate || '',
+      gap_opportunity: lead.gap_opportunity || '',
       pain_score: lead.pain_score || 0,
-      spam_score: lead.spam_score || 0
+      spam_score: lead.spam_score || 0,
+      item_type: lead.item_type || 'post',
+      language: lang
     };
     return _insertLeadStmt.run(safeLead);
   }
