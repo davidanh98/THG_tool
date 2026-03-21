@@ -80,6 +80,18 @@ router.delete('/api/groups/:encodedUrl', (req, res) => {
     }
 });
 
+// ── DELETE /api/groups/category/:categoryName — Delete all groups in a category ────────
+router.delete('/api/groups/category/:categoryName', (req, res) => {
+    try {
+        const categoryName = decodeURIComponent(req.params.categoryName);
+        const groupDb = require('../../ai/agents/groupDiscovery');
+        groupDb.deleteGroupsByCategory(categoryName);
+        res.json({ success: true, message: `All groups in category '${categoryName}' have been deleted` });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // ── POST /api/groups/bulk — Bulk import groups ──────────────────────────────
 router.post('/api/groups/bulk', (req, res) => {
     try {

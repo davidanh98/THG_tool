@@ -52,6 +52,12 @@ export default function GroupsPage() {
         load();
     }
 
+    const deleteCategory = async (cat: string) => {
+        if (!confirm(`Bạn có CHẮC CHẮN muốn XÓA TOÀN BỘ thư mục (Category) '${cat}' và TẤT CẢ TỪNG GROUP bên trong nó khỏi cơ sở dữ liệu không?\nHành động này không thể hoàn tác!`)) return;
+        await apiDelete(`/api/groups/category/${encodeURIComponent(cat)}`);
+        load();
+    }
+
     const toggleStatus = async (url: string, newStatus: string) => {
         await apiPatch(`/api/groups/${encodeURIComponent(url)}/status`, { status: newStatus })
         load()
@@ -70,7 +76,20 @@ export default function GroupsPage() {
                     <div className="stat-card"><div className="stat-card-icon">✅</div><div className="stat-card-value" style={{ color: 'var(--success)' }}>{stats.active}</div><div className="stat-card-label">Active</div></div>
                     <div className="stat-card"><div className="stat-card-icon">⏸️</div><div className="stat-card-value" style={{ color: 'var(--warning)' }}>{stats.paused}</div><div className="stat-card-label">Paused</div></div>
                     {Object.entries(stats.by_category || {}).map(([cat, cnt]) => (
-                        <div className="stat-card" key={cat}><div className="stat-card-icon">{CAT_ICONS[cat] || '📁'}</div><div className="stat-card-value">{cnt}</div><div className="stat-card-label" style={{ textTransform: 'capitalize' }}>{cat}</div></div>
+                        <div className="stat-card" key={cat} style={{ position: 'relative' }}>
+                            <button
+                                onClick={() => deleteCategory(cat)}
+                                title={`Xóa toàn bộ thư mục ${cat}`}
+                                style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, fontSize: '1.2rem' }}
+                                onMouseOver={(e) => e.currentTarget.style.opacity = '1'}
+                                onMouseOut={(e) => e.currentTarget.style.opacity = '0.6'}
+                            >
+                                🗑️
+                            </button>
+                            <div className="stat-card-icon">{CAT_ICONS[cat] || '📁'}</div>
+                            <div className="stat-card-value">{String(cnt)}</div>
+                            <div className="stat-card-label" style={{ textTransform: 'capitalize' }}>{cat}</div>
+                        </div>
                     ))}
                 </div>
             )}

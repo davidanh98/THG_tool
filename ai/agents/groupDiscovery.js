@@ -152,6 +152,10 @@ function deleteGroup(url) {
     getDb().prepare(`DELETE FROM fb_groups WHERE url = ?`).run(url);
 }
 
+function deleteGroupsByCategory(category) {
+    getDb().prepare(`DELETE FROM fb_groups WHERE category = ?`).run(category);
+}
+
 function getStats() {
     const db = getDb();
     const total = db.prepare('SELECT COUNT(*) as c FROM fb_groups').get().c;
@@ -324,5 +328,6 @@ module.exports = {
     extractGroupId,
     deactivateGroup,
     deleteGroup,
+    deleteGroupsByCategory,
     autoClassifyCategory,
 };
