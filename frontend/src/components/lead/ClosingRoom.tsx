@@ -48,6 +48,7 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
     const [showDealModal, setShowDealModal] = useState(false)
 
     // ── Outreach state ──
+    // ── Outreach state ──
     const [outreachMsg, setOutreachMsg] = useState('')
     const [outreachTone, setOutreachTone] = useState<'friendly' | 'professional' | 'urgent'>('friendly')
     const [outreachType, setOutreachType] = useState<'dm' | 'comment'>('dm')
@@ -56,6 +57,13 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
     const [outreachHistory, setOutreachHistory] = useState<any[]>([])
     const [copySuccess, setCopySuccess] = useState(false)
     const [pipelineStage, setPipelineStage] = useState((lead as any).pipeline_stage || 'new')
+
+    // Initialize outreach message with pre-generated draft if it exists
+    useEffect(() => {
+        if (lead.response_draft && !outreachMsg) {
+            setOutreachMsg(lead.response_draft)
+        }
+    }, [lead.response_draft])
 
     const claimedArr = (lead.claimed_by || lead.assigned_to || '').split(',').map((s) => s.trim()).filter(Boolean)
     const postDate = lead.post_created_at || lead.scraped_at || lead.created_at
@@ -255,6 +263,16 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
                             <StatusTag status={lead.status || 'new'} />
                             {lead.urgency === 'critical' && <span className="status-tag status-tag--ignored">🚨 Critical</span>}
                             {lead.urgency === 'high' && <span className="status-tag status-tag--contacted">⚡ Cần gấp</span>}
+                            {/* Display Pain Tags */}
+                            {Array.isArray(lead.tags) ? lead.tags.map((tag, i) => (
+                                <span key={i} className="status-tag" style={{ background: 'var(--bg-secondary)', color: 'var(--warning)', borderColor: 'var(--warning)' }}>
+                                    {tag}
+                                </span>
+                            )) : lead.tags && typeof lead.tags === 'string' && lead.tags.startsWith('[') ? JSON.parse(lead.tags).map((tag: string, i: number) => (
+                                <span key={i} className="status-tag" style={{ background: 'var(--bg-secondary)', color: 'var(--warning)', borderColor: 'var(--warning)' }}>
+                                    {tag}
+                                </span>
+                            )) : null}
                         </div>
                     </div>
 
@@ -267,9 +285,22 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
                     </div>
 
                     {/* AI Analysis */}
-                    {(lead.summary || lead.gap_opportunity) && (
-                        <div className="card">
-                            <div className="card-title">🧠 AI Analysis</div>
+                    {(lead.summary || lead.gap_opportunity || lead.response_draft) && (
+                        <div className="card" style={{ border: lead.response_draft ? '1px solid var(--accent)' : undefined }}>
+                            <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span>🧠 AI Analysis</span>
+                                {lead.response_draft && <span style={{ fontSize: '0.6rem', background: 'var(--accent)', color: '#fff', padding: '2px 6px', borderRadius: 4 }}>COPILOT READY</span>}
+                            </div>
+                            {lead.response_draft && (
+                                <div style={{ marginBottom: 'var(--space-md)', background: 'rgba(99, 102, 241, 0.05)', padding: '10px', borderRadius: '8px', border: '1px dashed var(--accent)' }}>
+                                    <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--accent)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        🚀 SALES COPILOT DRAFT
+                                    </div>
+                                    <div style={{ fontSize: 'var(--text-sm)', whiteSpace: 'pre-wrap', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                                        {lead.response_draft}
+                                    </div>
+                                </div>
+                            )}
                             {lead.summary && (
                                 <div style={{ marginBottom: 'var(--space-md)' }}>
                                     <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>💡 Tóm tắt</div>
@@ -280,6 +311,48 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
                                 <div>
                                     <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>🔍 Cơ hội (Gap)</div>
                                     <div style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)' }}>{lead.gap_opportunity}</div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Business Identity */}
+                    {lead.account && (
+                        <div className="card" style={{ border: '1px solid var(--success-subtle)' }}>
+                            <div className="card-title" style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                🏢 Business Identity
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
+                                <div>
+                                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Brand Name</div>
+                                    <div style={{ fontWeight: 600 }}>{lead.account.brand_name}</div>
+                                </div>
+                                {lead.account.primary_domain && (
+                                    <div>
+                                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Website</div>
+                                        <a href={lead.account.primary_domain} target="_blank" rel="noopener noreferrer" style={{ fontSize: 'var(--text-sm)', color: 'var(--link)', textDecoration: 'none' }}>
+                                            🌐 {lead.account.primary_domain.replace(/^https?:\/\//, '')}
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+
+                            {lead.account.identities && lead.account.identities.length > 0 && (
+                                <div style={{ marginTop: 'var(--space-md)', paddingTop: 'var(--space-md)', borderTop: '1px solid var(--border)' }}>
+                                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 8 }}>Discovered Assets</div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        {lead.account.identities.map((id, i) => (
+                                            <div key={i} style={{ fontSize: 'var(--text-sm)', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-primary)' }}>
+                                                {id.type === 'fb_page' && <span title="Facebook Page">📘</span>}
+                                                {id.type === 'email' && <span title="Email">📧</span>}
+                                                {id.type === 'phone' && <span title="Phone">📞</span>}
+                                                {id.type === 'website' && <span title="Website">🌐</span>}
+                                                {id.type === 'fb_page' ? (
+                                                    <a href={id.value} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--link)', textDecoration: 'none' }}>Fanpage</a>
+                                                ) : <span>{id.value}</span>}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                         </div>

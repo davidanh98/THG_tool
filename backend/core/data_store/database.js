@@ -276,6 +276,23 @@ try {
   db.exec(`ALTER TABLE leads ADD COLUMN gap_opportunity TEXT DEFAULT ''`);
 } catch { /* column already exists */ }
 
+// --- Copilot & Signal Enrichment columns ---
+try {
+  db.exec(`ALTER TABLE leads ADD COLUMN response_draft TEXT DEFAULT ''`);
+} catch { }
+try {
+  db.exec(`ALTER TABLE leads ADD COLUMN tags TEXT DEFAULT '[]'`);
+} catch { }
+try {
+  db.exec(`ALTER TABLE leads ADD COLUMN assigned_sales TEXT DEFAULT ''`);
+} catch { }
+try {
+  db.exec(`ALTER TABLE leads ADD COLUMN group_name TEXT DEFAULT ''`);
+} catch { }
+try {
+  db.exec(`ALTER TABLE leads ADD COLUMN item_type TEXT DEFAULT 'post'`);
+} catch { }
+
 // --- AI Language Targeting column ---
 try {
   db.exec(`ALTER TABLE leads ADD COLUMN language TEXT DEFAULT 'foreign'`);
@@ -615,7 +632,7 @@ const insertLead = {
 const LEADS_LIST_COLS = `id, platform, author_name, author_url, author_avatar, post_url,
   score, category, summary, urgency, status, role, source_group,
   assigned_to, claimed_by, claimed_at, deal_value, winner_staff,
-  pain_score, spam_score, item_type, notes, language, created_at, post_created_at`;
+  pain_score, spam_score, item_type, notes, language, response_draft, tags, created_at, post_created_at`;
 
 const getLeads = (filters = {}) => {
   let query = `SELECT ${LEADS_LIST_COLS} FROM leads WHERE 1=1`;
@@ -685,7 +702,13 @@ const getLeads = (filters = {}) => {
   return db.prepare(query).all(params);
 };
 
-const getLeadById = db.prepare('SELECT * FROM leads WHERE id = ?');
+const getLeadById = (id) => {
+  const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(id);
+  if (lead && lead.account_id) {
+    lead.account = getAccountById(lead.account_id);
+  }
+  return lead;
+};
 
 const updateLeadStatus = db.prepare(`
   UPDATE leads SET status = @status, notes = COALESCE(@notes, notes),
@@ -1074,6 +1097,7 @@ module.exports = {
   insertLead,
   getLeads,
   getLeadById,
+  getAccountById,
   updateLeadStatus,
   getStats: getStatsCached,
   invalidateStatsCache,

@@ -1,3 +1,24 @@
+export interface Identity {
+    id: number;
+    account_id: number;
+    type: 'email' | 'phone' | 'website' | 'fb_page' | 'other';
+    value: string;
+    confidence_score: number;
+    discovered_from: string;
+}
+
+export interface Account {
+    id: number;
+    brand_name: string;
+    primary_domain: string;
+    primary_email: string;
+    status: string;
+    category: string;
+    created_at: string;
+    updated_at: string;
+    identities?: Identity[];
+}
+
 export interface Lead {
     id: number
     platform: 'facebook' | 'instagram' | 'tiktok' | string
@@ -32,6 +53,10 @@ export interface Lead {
     created_at: string
     post_created_at: string
     scraped_at: string
+    response_draft: string
+    tags: string | string[]
+    account_id?: number | null
+    account?: Account
 }
 
 export interface LeadFilters {

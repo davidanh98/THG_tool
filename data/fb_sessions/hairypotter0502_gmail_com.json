@@ -80,21 +80,21 @@
     "sameSite": "Lax"
   },
   {
-    "name": "fr",
-    "value": "1YysZC57TLc3lvkqP.AWcLYz_mqf1z1Jt9eJmcWWr9aChqBvP_vZcoKlmWNIRPGHWNjZY.Bpu3A7..AAA.0.0.Bpu3A7.AWcR81WQflb_YQntYMFkm-w-RKY",
-    "domain": ".facebook.com",
-    "path": "/",
-    "expires": 1781667643.147582,
-    "httpOnly": true,
-    "secure": true,
-    "sameSite": "None"
-  },
-  {
     "name": "xs",
     "value": "49%3AYWyCJPDHg0XRuA%3A2%3A1773683315%3A-1%3A-1%3A%3AAcxEBl5EEHlSPathVVhbc5mZ32eU_s67CSAeY8vyGpAQ",
     "domain": ".facebook.com",
     "path": "/",
     "expires": 1805427643.14762,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "fr",
+    "value": "1YysZC57TLc3lvkqP.AWc50fPC_leiAqJ0C_HnAMDVYrjrKPMO4O9mMpczC3VtsnvAE6g.Bpu3A7..AAA.0.0.BpvimU.AWcvBBQ3HMc_ne4qQCobbHektcI",
+    "domain": ".facebook.com",
+    "path": "/",
+    "expires": 1781846165.206658,
     "httpOnly": true,
     "secure": true,
     "sameSite": "None"

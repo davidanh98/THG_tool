@@ -114,8 +114,24 @@ export default function LeadRow({ lead, onSelect }: LeadRowProps) {
             </td>
 
             <td>
-                <div className="truncate" style={{ maxWidth: 300, color: summary ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                <div className="truncate" style={{ maxWidth: 300, color: summary ? 'var(--text-primary)' : 'var(--text-muted)', marginBottom: 4 }}>
                     {summary || <em style={{ opacity: 0.4, fontSize: 'var(--text-xs)' }}>Chưa có tóm tắt</em>}
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {lead.response_draft && (
+                        <span style={{ fontSize: '0.6rem', background: 'var(--accent)', color: '#fff', padding: '1px 4px', borderRadius: 3, fontWeight: 700 }}>
+                            🤖 COPILOT
+                        </span>
+                    )}
+                    {Array.isArray(lead.tags) ? lead.tags.slice(0, 2).map((tag, i) => (
+                        <span key={i} style={{ fontSize: '0.6rem', border: '1px solid var(--warning)', color: 'var(--warning)', padding: '0px 4px', borderRadius: 3 }}>
+                            {tag}
+                        </span>
+                    )) : lead.tags && typeof lead.tags === 'string' && lead.tags.startsWith('[') ? JSON.parse(lead.tags).slice(0, 2).map((tag: string, i: number) => (
+                        <span key={i} style={{ fontSize: '0.6rem', border: '1px solid var(--warning)', color: 'var(--warning)', padding: '0px 4px', borderRadius: 3 }}>
+                            {tag}
+                        </span>
+                    )) : null}
                 </div>
             </td>
 

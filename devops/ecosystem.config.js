@@ -133,5 +133,31 @@ module.exports = {
             max_size: '20M',
         },
 
+        // ── Identity Worker (Profile Resolution — I/O-bound) ──────────
+        {
+            name: 'thg-identity-worker',
+            script: 'backend/infra/workers/identityWorker.js',
+            cwd: require('path').join(__dirname, '..'),
+
+            exec_mode: 'fork',
+            instances: 1,
+
+            env: {
+                NODE_ENV: 'production',
+            },
+
+            autorestart: true,
+            max_restarts: 10,
+            restart_delay: 5000,
+
+            // Memory
+            max_memory_restart: '300M',
+
+            log_file: 'logs/identity_worker_combined.log',
+            out_file: 'logs/identity_worker_out.log',
+            error_file: 'logs/identity_worker_error.log',
+            log_date_format: 'YYYY-MM-DD HH:mm:ss',
+        },
+
     ],
 };
