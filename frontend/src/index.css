@@ -1739,6 +1739,7 @@ select:focus {
   letter-spacing: -0.03em;
   background: linear-gradient(135deg, #6366f1, #a78bfa);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
