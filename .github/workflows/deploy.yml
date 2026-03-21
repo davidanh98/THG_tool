@@ -141,9 +141,6 @@ jobs:
             kill -9 $PORT_PID 2>/dev/null || true
           fi
           
-          # Also nuke any docker container named thg just in case
-          docker stop $(docker ps -q --filter "name=thg") 2>/dev/null || true
-          docker rm $(docker ps -aq --filter "name=thg") 2>/dev/null || true
           sleep 4
 
           # Fresh start
