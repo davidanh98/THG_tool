@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiGet, apiPost, apiPatch } from '../api/client'
+import { apiGet, apiPost, apiPatch, apiDelete } from '../api/client'
 
 interface Group {
     url: string; name: string; category: string; status: string; members: number;
@@ -36,10 +36,20 @@ export default function GroupsPage() {
 
     const addGroup = async () => {
         if (!newGroup.name || !newGroup.url) return
-        await apiPost('/api/groups', newGroup)
+        const res: any = await apiPost('/api/groups', newGroup)
+        if (res && res.success === false) {
+            alert('Lỗi thêm Group: ' + res.error)
+            return
+        }
         setShowAdd(false)
         setNewGroup({ name: '', url: '', category: 'fulfillment', notes: '' })
         load()
+    }
+
+    const deleteGroup = async (url: string) => {
+        if (!confirm('Bạn có chắc chắn muốn XÓA group này khỏi cơ sở dữ liệu vĩnh viễn không?')) return;
+        await apiDelete(`/api/groups/${encodeURIComponent(url)}`);
+        load();
     }
 
     const toggleStatus = async (url: string, newStatus: string) => {
@@ -116,7 +126,10 @@ export default function GroupsPage() {
                                     <td>{g.status === 'active' ? <span style={{ color: 'var(--success)' }}>✅ Active</span> : <span style={{ color: 'var(--warning)' }}>⏸️ Paused</span>}</td>
                                     <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{g.last_scraped ? new Date(g.last_scraped).toLocaleDateString('vi-VN') : '—'}</td>
                                     <td>{g.posts_found || 0}</td>
-                                    <td><button className="btn btn-secondary btn-sm" onClick={() => toggleStatus(g.url, g.status === 'active' ? 'paused' : 'active')}>{g.status === 'active' ? '⏸️' : '▶️'}</button></td>
+                                    <td style={{ display: 'flex', gap: '8px' }}>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => toggleStatus(g.url, g.status === 'active' ? 'paused' : 'active')}>{g.status === 'active' ? '⏸️' : '▶️'}</button>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => deleteGroup(g.url)} title="Xóa Group">🗑️</button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>

@@ -45,10 +45,11 @@ router.post('/api/groups', (req, res) => {
     try {
         const { name, url, category, notes } = req.body;
         if (!name || !url) return res.status(400).json({ success: false, error: 'Name and URL are required' });
+        if (!url.includes('facebook.com/groups/')) return res.status(400).json({ success: false, error: 'URL must be a valid facebook.com/groups/ URL' });
 
         const groupDb = require('../../ai/agents/groupDiscovery');
         groupDb.upsertGroup({ name, url, category: category || 'uncategorized', notes: notes || '', status: 'active' });
-        res.json({ success: true, message: 'Group added' });
+        res.json({ success: true, message: 'Group added or updated' });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -62,6 +63,18 @@ router.patch('/api/groups/:encodedUrl/status', (req, res) => {
         const groupDb = require('../../ai/agents/groupDiscovery');
         groupDb.setStatus(url, status);
         res.json({ success: true, message: 'Group status updated' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ── DELETE /api/groups/:encodedUrl — Delete a group ─────────────────────────
+router.delete('/api/groups/:encodedUrl', (req, res) => {
+    try {
+        const url = decodeURIComponent(req.params.encodedUrl);
+        const groupDb = require('../../ai/agents/groupDiscovery');
+        groupDb.deleteGroup(url);
+        res.json({ success: true, message: 'Group deleted' });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }

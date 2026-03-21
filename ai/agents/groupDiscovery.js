@@ -98,7 +98,8 @@ function upsertGroup(group) {
             name = excluded.name,
             group_id = COALESCE(excluded.group_id, fb_groups.group_id),
             member_count = CASE WHEN excluded.member_count > 0 THEN excluded.member_count ELSE fb_groups.member_count END,
-            relevance_score = excluded.relevance_score
+            relevance_score = excluded.relevance_score,
+            status = 'active'
     `);
     return stmt.run({
         name: group.name,
@@ -145,6 +146,10 @@ function updateScore(url, score) {
 
 function setStatus(url, status) {
     getDb().prepare(`UPDATE fb_groups SET status = ? WHERE url = ?`).run(status, url);
+}
+
+function deleteGroup(url) {
+    getDb().prepare(`DELETE FROM fb_groups WHERE url = ?`).run(url);
 }
 
 function getStats() {
@@ -318,5 +323,6 @@ module.exports = {
     getStats,
     extractGroupId,
     deactivateGroup,
+    deleteGroup,
     autoClassifyCategory,
 };
