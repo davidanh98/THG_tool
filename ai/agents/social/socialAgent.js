@@ -263,6 +263,8 @@ async function runSession() {
             const hotLeads = db.db.prepare(`
                 SELECT * FROM leads 
                 WHERE score >= 60 AND post_url IS NOT NULL 
+                AND is_anonymous = 1
+                AND automatic_comment_sent = 0
                 AND status IN ('new', 'hot') 
                 ORDER BY score DESC LIMIT 3
             `).all();

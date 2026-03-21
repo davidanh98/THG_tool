@@ -419,6 +419,8 @@ async function runPipeline(options = {}) {
                     pain_score: lead.painScore || 0,
                     spam_score: lead.spamScore || 0,
                     item_type: lead.item_type || 'post',
+                    is_anonymous: lead.is_anonymous || 0,
+                    automatic_comment_sent: lead.automatic_comment_sent || 0,
                 });
 
                 if (info.changes > 0) {

@@ -62,8 +62,8 @@ function ensureAccountsTable() {
             email: email,
             password: process.env[`FB_ACCOUNT_${i}_PASSWORD`] || '',
             proxy_url: proxyUrl,
-            sales_name: 'Đức Anh',
-            role: 'scraper'
+            sales_name: process.env[`FB_ACCOUNT_${i}_AGENT`] || 'Đức Anh',
+            role: process.env[`FB_ACCOUNT_${i}_ROLE`] || 'scraper'
         });
         i++;
     }
@@ -88,7 +88,8 @@ function ensureAccountsTable() {
         db.db.prepare(`
             INSERT INTO fb_accounts (id, email, password, proxy_url, session_path, sales_name, role)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET 
+            ON CONFLICT(email) DO UPDATE SET 
+                password = excluded.password,
                 proxy_url = excluded.proxy_url,
                 sales_name = excluded.sales_name,
                 role = excluded.role

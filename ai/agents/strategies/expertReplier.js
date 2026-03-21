@@ -132,6 +132,7 @@ function updatePipeline(leadId, stage) {
     try {
         database.db.prepare(`
             UPDATE leads SET pipeline_stage = ?, status = 'contacted',
+            automatic_comment_sent = 1,
             contacted_at = COALESCE(contacted_at, datetime('now')), updated_at = datetime('now')
             WHERE id = ?
         `).run(stage, leadId);

@@ -325,11 +325,18 @@ async function _getGroupPostsInner(groupUrl, groupName, account = null) {
                         }
                     }
 
+                    const isAnonymous =
+                        (authorName.toLowerCase().includes('ẩn danh') ||
+                            authorName.toLowerCase().includes('anonymous') ||
+                            !authorUrl ||
+                            (authorUrl.includes('/groups/') && !authorUrl.includes('user/'))) ? 1 : 0;
+
                     results.push({
                         url: postUrl || gUrl,
                         content: content.substring(0, 2000),
                         author_name: authorName, author_url: authorUrl, author_avatar: authorAvatar,
                         created_at: createdAt, commentCount, topComments,
+                        is_anonymous: isAnonymous
                     });
                 } catch { }
             }

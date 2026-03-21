@@ -292,6 +292,12 @@ try {
 try {
   db.exec(`ALTER TABLE leads ADD COLUMN item_type TEXT DEFAULT 'post'`);
 } catch { }
+try {
+  db.exec(`ALTER TABLE leads ADD COLUMN is_anonymous INTEGER DEFAULT 0`);
+} catch { }
+try {
+  db.exec(`ALTER TABLE leads ADD COLUMN automatic_comment_sent INTEGER DEFAULT 0`);
+} catch { }
 
 // --- AI Language Targeting column ---
 try {
@@ -590,8 +596,8 @@ const getPointsLog = (limit = 20) =>
 
 
 const _insertLeadStmt = db.prepare(`
-  INSERT OR IGNORE INTO leads (platform, post_url, author_name, author_url, author_avatar, content, score, category, summary, urgency, suggested_response, role, buyer_signals, scraped_at, post_created_at, profit_estimate, gap_opportunity, pain_score, spam_score, item_type, language)
-  VALUES (@platform, @post_url, @author_name, @author_url, @author_avatar, @content, @score, @category, @summary, @urgency, @suggested_response, @role, @buyer_signals, @scraped_at, @post_created_at, @profit_estimate, @gap_opportunity, @pain_score, @spam_score, @item_type, @language)
+  INSERT OR IGNORE INTO leads (platform, post_url, author_name, author_url, author_avatar, content, score, category, summary, urgency, suggested_response, role, buyer_signals, scraped_at, post_created_at, profit_estimate, gap_opportunity, pain_score, spam_score, item_type, language, is_anonymous, automatic_comment_sent)
+  VALUES (@platform, @post_url, @author_name, @author_url, @author_avatar, @content, @score, @category, @summary, @urgency, @suggested_response, @role, @buyer_signals, @scraped_at, @post_created_at, @profit_estimate, @gap_opportunity, @pain_score, @spam_score, @item_type, @language, @is_anonymous, @automatic_comment_sent)
 `);
 
 const insertLead = {
@@ -622,7 +628,9 @@ const insertLead = {
       pain_score: lead.pain_score || 0,
       spam_score: lead.spam_score || 0,
       item_type: lead.item_type || 'post',
-      language: lang
+      language: lang,
+      is_anonymous: lead.is_anonymous || 0,
+      automatic_comment_sent: lead.automatic_comment_sent || 0
     };
     return _insertLeadStmt.run(safeLead);
   }
@@ -632,7 +640,7 @@ const insertLead = {
 const LEADS_LIST_COLS = `id, platform, author_name, author_url, author_avatar, post_url,
   score, category, summary, urgency, status, role, source_group,
   assigned_to, claimed_by, claimed_at, deal_value, winner_staff,
-  pain_score, spam_score, item_type, notes, language, response_draft, tags, created_at, post_created_at`;
+  pain_score, spam_score, item_type, notes, language, response_draft, tags, is_anonymous, automatic_comment_sent, created_at, post_created_at`;
 
 const getLeads = (filters = {}) => {
   let query = `SELECT ${LEADS_LIST_COLS} FROM leads WHERE 1=1`;

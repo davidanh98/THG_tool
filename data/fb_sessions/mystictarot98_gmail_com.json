@@ -71,10 +71,30 @@
   },
   {
     "name": "fr",
-    "value": "1h3D1D6NbxmKfTQGk.AWeKoonNVBheceR8u7GByrqY9BTvUuObbO5b1WuSoZ1wCDhFn-4.BpuBi-..AAA.0.0.BpvimU.AWfSVaDEliKQV9r4cQgceJ-13E4",
+    "value": "1h3D1D6NbxmKfTQGk.AWcPnhhgUcjBzluuMU1uVVAoC50a3WIyhJG7CCSmw9luGGdFNMU.BpuBi-..AAA.0.0.BpviuY.AWd8Oenjg7RFg0QJS6ua-aF70_o",
     "domain": ".facebook.com",
     "path": "/",
-    "expires": 1781846165.273951,
+    "expires": 1781846680.848651,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "ps_l",
+    "value": "1",
+    "domain": ".facebook.com",
+    "path": "/",
+    "expires": 1808630681.344336,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "ps_n",
+    "value": "1",
+    "domain": ".facebook.com",
+    "path": "/",
+    "expires": 1808630681.344454,
     "httpOnly": true,
     "secure": true,
     "sameSite": "None"
