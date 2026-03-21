@@ -16,50 +16,52 @@ export default function SISDashboard() {
         <div className="sis-dashboard">
             <header className="sis-header">
                 <div>
-                    <h1>SIS v2 Command Center</h1>
-                    <p className="text-muted">Signal-Centric Seller Intelligence — {summary?.total_processed || 0} signals analyzed</p>
+                    <h1>Trung Tâm Chỉ Huy SIS v2</h1>
+                    <p className="text-muted">Phân Tích Tín Hiệu Thương Mại — {summary?.total_processed || 0} tín hiệu đã xử lý</p>
                 </div>
                 <div className="sis-stats-lite">
                     <div className="sis-stat-item">
-                        <span className="label">Resolved</span>
+                        <span className="label">Đã Xác Định</span>
                         <span className="val color-resolved">{summary?.lanes?.resolved || 0}</span>
                     </div>
                     <div className="sis-stat-item">
-                        <span className="label">Partial</span>
+                        <span className="label">Tiềm Năng</span>
                         <span className="val color-partial">{summary?.lanes?.partial || 0}</span>
                     </div>
                     <div className="sis-stat-item">
-                        <span className="label">Anonymous</span>
+                        <span className="label">Ẩn Danh</span>
                         <span className="val color-anonymous">{summary?.lanes?.anonymous || 0}</span>
                     </div>
                 </div>
             </header>
 
             <div className="sis-board">
-                <Lane title="Resolved Leads" icon="🔵" signals={lanes?.resolved || []} color="resolved" />
-                <Lane title="Partial Leads" icon="🟡" signals={lanes?.partial || []} color="partial" />
-                <Lane title="Anonymous Signals" icon="⚪" signals={lanes?.anonymous || []} color="anonymous" />
-                <Lane title="Competitor Intel" icon="🔴" signals={lanes?.competitor || []} color="competitor" />
+                <Section title="Khách Hàng Đã Xác Định" icon="🔵" signals={lanes?.resolved || []} color="resolved" />
+                <Section title="Khách Hàng Tiềm Năng" icon="🟡" signals={lanes?.partial || []} color="partial" />
+                <Section title="Tín Hiệu Ẩn Danh" icon="⚪" signals={lanes?.anonymous || []} color="anonymous" />
+                <Section title="Thông Tin Đối Thủ" icon="🔴" signals={lanes?.competitor || []} color="competitor" />
             </div>
         </div>
     )
 }
 
-function Lane({ title, icon, signals, color }: { title: string; icon: string; signals: SISSignal[]; color: string }) {
+function Section({ title, icon, signals, color }: { title: string; icon: string; signals: SISSignal[]; color: string }) {
+    if (signals.length === 0 && color === 'competitor') return null; // Hide competitor if empty
+
     return (
-        <div className={`sis-lane lane-${color}`}>
-            <div className="lane-header">
-                <h3>{icon} {title}</h3>
-                <span className="badge">{signals.length}</span>
+        <section className="sis-section">
+            <div className="section-header">
+                <h2>{icon} {title}</h2>
+                <span className="section-badge">{signals.length} tín hiệu</span>
             </div>
-            <div className="lane-content">
+            <div className="signal-grid">
                 {signals.length === 0 ? (
-                    <div className="empty-state">No signals in this lane</div>
+                    <div className="empty-state">Chưa có tín hiệu trong mục này</div>
                 ) : (
                     signals.map(s => <SignalCard key={s.id} signal={s} />)
                 )}
             </div>
-        </div>
+        </section>
     )
 }
 
@@ -70,42 +72,56 @@ function SignalCard({ signal }: { signal: SISSignal }) {
     return (
         <div className={`signal-card ${card ? 'has-strategy' : ''}`}>
             <div className="card-top">
-                <span className="platform-tag">{signal.platform}</span>
-                <span className="author">{signal.author_name}</span>
-                {card && <span className="brain-badge">🧠</span>}
+                <div className="author-info">
+                    <span className="author-name">{signal.author_name}</span>
+                    <span className="platform-label">{signal.platform}</span>
+                </div>
+                {card && <div className="brain-indicator" title="Chiến lược AI sẵn sàng">🧠</div>}
             </div>
 
-            <p className="signal-content">{(signal.content || '').substring(0, 150)}...</p>
+            <p className="signal-body">
+                {(signal.content || '').substring(0, 180)}
+                {(signal.content || '').length > 180 ? '...' : ''}
+            </p>
 
             {cls && (
-                <div className="metrics-grid">
-                    <Metric label="Seller" val={cls.seller_likelihood} />
-                    <Metric label="Pain" val={cls.pain_score} />
-                    <Metric label="Intent" val={cls.intent_score} />
+                <div className="metrics-row">
+                    <MetricBox label="Người bán" val={cls.seller_likelihood} />
+                    <MetricBox label="Nỗi đau" val={cls.pain_score} />
+                    <MetricBox label="Ý định" val={cls.intent_score} />
                 </div>
             )}
 
-            {card && (
-                <div className="card-footer">
-                    <div className="priority">
-                        <span className="dot" /> Priority {card.sales_priority_score}
-                    </div>
-                    <button className="btn-view-strategy">View Strategy</button>
+            <div className="card-actions">
+                <div className="prio-tag">
+                    {card ? (
+                        <>
+                            <span className="pulse" />
+                            Ưu tiên {card.sales_priority_score}
+                        </>
+                    ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>Mức độ: {cls?.confidence || 'thấp'}</span>
+                    )}
                 </div>
-            )}
+                {signal.post_url && (
+                    <a href={signal.post_url} target="_blank" rel="noreferrer" className="btn-action-view">
+                        Xem gốc
+                    </a>
+                )}
+            </div>
         </div>
     )
 }
 
-function Metric({ label, val }: { label: string; val: number }) {
-    const color = val > 75 ? '#10b981' : val > 40 ? '#f59e0b' : '#6b7280'
+function MetricBox({ label, val }: { label: string; val: number }) {
+    const color = val > 75 ? 'var(--success)' : val > 40 ? 'var(--warning)' : 'var(--text-muted)'
     return (
-        <div className="metric">
-            <div className="metric-label">{label}</div>
-            <div className="metric-bar-bg">
-                <div className="metric-bar-fill" style={{ width: `${val}%`, backgroundColor: color }} />
+        <div className="metric-box">
+            <span className="m-label">{label}</span>
+            <div className="m-bar-container">
+                <div className="m-bar-fill" style={{ width: `${val}%`, backgroundColor: color }} />
             </div>
-            <div className="metric-val">{val}</div>
+            <span className="m-val" style={{ color }}>{val}</span>
         </div>
     )
 }
