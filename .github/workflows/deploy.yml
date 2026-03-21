@@ -122,13 +122,14 @@ jobs:
           ls -la frontend/dist/index.html 2>/dev/null || echo "❌ index.html NOT FOUND!"
 
           # Ensure PM2 is installed
-          which pm2 || npm install -g pm2
+          which pm2 || sudo npm install -g pm2
           
           # CRITICAL: Force Github Actions to use the root PM2 daemon
+          # We must use sudo to ensure it hooks into the actual root daemon
           export PM2_HOME=/root/.pm2
 
           # Full stop — kill ALL PM2 processes AND any orphaned node process on port 3000
-          pm2 kill 2>/dev/null || true
+          sudo env PM2_HOME=/root/.pm2 pm2 kill 2>/dev/null || true
           sleep 1
           # Force kill anything still holding port 3000 using ultimate lsof nuke
           fuser -k 3000/tcp 2>/dev/null || true
@@ -144,8 +145,8 @@ jobs:
           sleep 4
 
           # Fresh start
-          pm2 start devops/ecosystem.config.js
-          pm2 save
+          sudo env PM2_HOME=/root/.pm2 pm2 start devops/ecosystem.config.js
+          sudo env PM2_HOME=/root/.pm2 pm2 save
 
           echo "⏳ Waiting for API..."
           sleep 5
@@ -161,7 +162,7 @@ jobs:
               ROOT_BODY=$(curl -s http://localhost:3000/ 2>/dev/null | head -c 200)
               echo "📄 Root body: ${ROOT_BODY}"
               
-              pm2 status
+              sudo env PM2_HOME=/root/.pm2 pm2 status
               break
             fi
             echo "  [$((i*2+5))s] HTTP ${HTTP}..."
@@ -169,6 +170,6 @@ jobs:
 
           # Show PM2 logs (last 10 lines) for debugging
           echo "📋 PM2 API logs:"
-          pm2 logs thg-api --lines 10 --nostream 2>/dev/null || true
+          sudo env PM2_HOME=/root/.pm2 pm2 logs thg-api --lines 10 --nostream 2>/dev/null || true
 
           echo "🎉 THG PM2 Deploy hoàn tất!"
