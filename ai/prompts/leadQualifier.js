@@ -119,42 +119,37 @@ async function classifyPost(post) {
  */
 async function saveToSIS(data) {
     try {
-        // 1. Insert Raw Post (returns ID)
+        // 1. Insert Raw Post (v2 structure)
         const rawPostId = database.insertRawPost({
-            platform: data.platform || 'facebook',
-            group_id: data.group_id || null,
-            group_name: data.group_name || data.source_group || null,
-            author_id: data.author_id || null,
+            source_platform: data.platform || 'facebook',
+            source_type: data.source_type || 'post',
+            external_post_id: data.post_url || data.id,
             author_name: data.author_name || 'Unknown',
-            author_url: data.author_url || null,
-            post_id: data.post_id || null,
-            post_url: data.post_url || null,
-            content: data.content || '',
-            item_type: data.item_type || 'post',
-            parent_id: data.parent_id || null,
-            published_at: data.published_at || new Date().toISOString()
+            author_profile_url: data.author_url || data.author_profile_url || '',
+            post_url: data.post_url || '',
+            post_text: data.content || '',
+            post_language: data.language || 'vi',
+            group_name: data.group_name || ''
         });
 
-        // 2. Insert Classification
+        // 2. Insert Classification (6-score SIS v2)
         database.insertClassification({
             raw_post_id: rawPostId,
             model_name: 'gpt-4o-mini',
-            is_relevant: data.is_relevant,
-            entity_type: data.entity_type,
-            seller_likelihood: data.seller_likelihood,
-            pain_score: data.pain_score,
-            intent_score: data.intent_score,
-            resolution_confidence: data.resolution_confidence,
-            contactability_score: data.contactability_score,
-            competitor_probability: data.competitor_probability,
-            pain_tags: data.pain_tags,
-            market_tags: data.market_tags,
-            seller_stage_estimate: data.seller_stage_estimate,
-            language_signals: data.language_signals,
-            possible_identity_clues: data.possible_identity_clues,
-            recommended_lane: data.recommended_lane,
-            reason_summary: data.reason_summary,
-            confidence: data.confidence,
+            is_relevant: data.is_relevant ? 1 : 0,
+            entity_type: data.entity_type || 'unknown',
+            seller_likelihood: data.seller_likelihood || 0,
+            pain_score: data.pain_score || 0,
+            intent_score: data.intent_score || 0,
+            resolution_confidence: data.resolution_confidence || 0,
+            contactability_score: data.contactability_score || 0,
+            competitor_probability: data.competitor_probability || 0,
+            pain_tags: data.pain_tags || [],
+            market_tags: data.market_tags || [],
+            seller_stage_estimate: data.seller_stage_estimate || 'unknown',
+            recommended_lane: data.recommended_lane || 'discard',
+            reason_summary: data.reason_summary || '',
+            confidence: data.confidence || 'low',
             raw_response: data
         });
 

@@ -16,23 +16,11 @@ const { verifyToken } = require('./core/auth/authMiddleware');
 const authRoutes = require('./core/auth/authRoutes');
 
 // ── Route modules ────────────────────────────────────────────────────────────
-const leadsRoutes = require('./routes/leads.routes');
-const statsRoutes = require('./routes/stats.routes');
-const conversationsRoutes = require('./routes/conversations.routes');
-const groupsRoutes = require('./routes/groups.routes');
-const agentsRoutes = require('./routes/agents.routes');
-const accountsRoutes = require('./routes/accounts.routes');
+// ── Route modules ────────────────────────────────────────────────────────────
 const scanRoutes = require('./routes/scan.routes');
-const leaderboardRoutes = require('./routes/leaderboard.routes');
-const workerRoutes = require('./routes/worker.routes');
-const socialRoutes = require('./routes/social.routes');
-const outreachRoutes = require('./routes/outreach.routes');
-const strategyRoutes = require('./routes/strategy.routes');
-const activityRoutes = require('./routes/activity.routes');
-const dataRoutes = require('./routes/data.routes');
 const devRoutes = require('./routes/dev.routes');
 const webhookRoutes = require('./routes/webhook.routes');
-const sisRoutes = require('./routes/sis.routes');
+const sisRoutes = require('./routes/sis.routes'); // Primary SIS v2 Routes
 
 // ╔═══════════════════════════════════════════════════════════╗
 // ║  IN-MEMORY LOG CAPTURE (for Dev Dashboard)                ║
@@ -138,23 +126,15 @@ app.use((req, res, next) => {
 // ╔═══════════════════════════════════════════════════════════╗
 // ║  MOUNT ALL ROUTE MODULES                                  ║
 // ╚═══════════════════════════════════════════════════════════╝
-app.use(statsRoutes);
-app.use(leadsRoutes);
-app.use(conversationsRoutes);
-app.use(groupsRoutes);
-app.use(agentsRoutes);
-app.use(accountsRoutes);
+// ╔═══════════════════════════════════════════════════════════╗
+// ║  MOUNT ALL ROUTE MODULES                                  ║
+// ╚═══════════════════════════════════════════════════════════╗
 app.use(scanRoutes);
-app.use(leaderboardRoutes);
-app.use(workerRoutes);
-app.use(dataRoutes);
 app.use(devRoutes);
 app.use(webhookRoutes);
-app.use(sisRoutes); // Seller Intelligence System (Accounts/Identities)
+app.use(sisRoutes); // Seller Intelligence System (SIS v2)
 app.use('/api/social', socialRoutes);
 app.use(outreachRoutes);
-app.use('/api/strategy', strategyRoutes);
-app.use('/api/activity', activityRoutes);
 
 // ── Initialize Group Discovery DB ───────────────────────────────────────────
 try {

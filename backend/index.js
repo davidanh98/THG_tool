@@ -100,8 +100,9 @@ async function main() {
 
     console.log(`[Main] 🟢 API Server ready! Platforms: ${config.ENABLED_PLATFORMS.join(', ')}`);
     console.log(`[Main] Dashboard: http://localhost:${config.PORT}`);
-    console.log(`[Main] 💡 Start workers: node src/workers/scraperWorker.js`);
-    console.log(`[Main] 💡                 node src/workers/aiWorker.js`);
+    console.log(`[Main] 💡 Start workers: node backend/infra/workers/scraperWorker.js`);
+    console.log(`[Main] 💡                 node backend/infra/workers/aiWorker.js`);
+    console.log(`[Main] 💡                 node backend/infra/workers/identityWorker.js`);
 }
 
 main().catch(err => {

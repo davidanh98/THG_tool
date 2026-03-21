@@ -1,257 +1,58 @@
 /**
- * THG Lead Gen — AI Worker (Standalone Process)
+ * SIS v2 AI Worker — Deep Context Synthesizer (GPT-4o)
  * 
- * This process runs INDEPENDENTLY from the API server.
- * It processes raw_leads (from CrawBot imports) with AI classification.
- * 
- * Flow:
- *   1. Poll raw_leads table for PENDING rows every 3s
- *   2. Pre-filter with regex (free, instant)
- *   3. AI classify each post (Groq/Gemini) → 2-5s per post
- *   4. Route qualified leads to Sales team
- *   5. Insert into leads table (dashboard)
- * 
- * Usage:
- *   node src/workers/aiWorker.js
- *   PM2: thg-ai-worker (see ecosystem.config.js)
+ * This worker picks up qualified signals and handles the "Heavy Intelligence"
+ * work: Mini Audits, Openers, and Next Best Actions.
  */
-const config = require('../../config');
-const database = require('../../core/data_store/database');
-const { generateSISScore } = require('../../../ai/prompts/sisScorer');
 
-const POLL_INTERVAL = 3000; // 3 seconds
-const BATCH_SIZE = 20;
+const database = require('../../core/data_store/database');
+const { generateLeadCard } = require('../../../ai/prompts/salesCopilot');
+
+const POLL_INTERVAL = 10000; // 10s
 let isProcessing = false;
 
-// ── Routing rules ──────────────────────────────────────────────────────
-const ROUND_ROBIN_SALES = ['Đức Anh', 'Moon', 'Khoa', 'Linh'];
-let rrIdx = 0;
-
-function routeLead(content) {
-    // Phân bổ đều data cho 4 sale accounts (round-robin)
-    const sales = ROUND_ROBIN_SALES[rrIdx % ROUND_ROBIN_SALES.length];
-    rrIdx++;
-    return sales;
-}
-
-const SPAM_AD_RE = /(bên em|bên mình|inb em|check ib|nhận gửi|nhận vận chuyển|hệ thống tracking|liên hệ e|zalo:|lh em|inbox ngay|liên hệ ngay|doanh thu|lợi nhuận|roi|tối ưu chi phí|giảm cost|vít ad|scale[^A-Za-z]|max camp|case study|win camp|idea design|chia sẻ tut|hướng dẫn bán|học bán|dạy bán)/i;
-const RETAIL_RE = /(gửi 1 cái|gửi 1 đôi|ship 1kg|gửi đồ ăn|gửi mỹ phẩm|mua hộ|order taobao|gom order|nhận order)/i;
-const OUT_OF_BOUNDS_WH_RE = /(úc|australia|châu âu|eu|can\b|canada|nhật|japan|hàn|korea|đức|germany|pháp|france|sing|đài loan|taiwan|mexico|chile|colombia|saudi|uae|tây ban nha|nhập hàng về|ship về vn|order về vn)/i;
-
-const POD_CORE_RE = /(pod|print on demand|dropship|fulfillment|fulfill|fulfiller)/i;
-const SUPPORT_NEED_RE = /(tìm đơn vị|cần tìm|tìm kho|cần ship|báo giá|shipping|vận chuyển|gửi hàng|áo tee|mug|phone case|ornament|canvas)/i;
-
-/**
- * Phân tích và chấm điểm Lead hoàn toàn bằng Hardcoded String Matching (Thay thế AI)
- */
-function scoreLead(content, topCommentsJson) {
-    let fullText = (content || '').toLowerCase();
-
-    // Ghép comment vào text để quét (người bán hay để số/thông tin dưới comment)
-    if (topCommentsJson) {
-        try {
-            const comments = JSON.parse(topCommentsJson);
-            if (Array.isArray(comments)) {
-                fullText += ' ' + comments.map(c => (c.text || '')).join(' ').toLowerCase();
-            }
-        } catch (e) { }
-    }
-
-    // 1. Hard Filters - Loại bỏ rác, đối thủ, ads, đơn lẻ
-    if (SPAM_AD_RE.test(fullText)) return { pass: false, reason: 'Quảng cáo/Chuyên gia dỏm (doanh thu/case study/inb)' };
-    if (RETAIL_RE.test(fullText)) return { pass: false, reason: 'Đi lẻ/Mua hộ/Đồ ăn (Không phải B2B POD)' };
-    if (OUT_OF_BOUNDS_WH_RE.test(fullText)) return { pass: false, reason: 'Kho/Tuyến ngoại lệ (Chỉ chấp nhận US/VN/CN)' };
-
-    // 2. Chấm điểm - Bắt buộc phải là POD/Dropship cần dịch vụ
-    if (POD_CORE_RE.test(fullText) || SUPPORT_NEED_RE.test(fullText)) {
-        // Cộng điểm
-        let score = 50;
-        if (POD_CORE_RE.test(fullText) && SUPPORT_NEED_RE.test(fullText)) score += 30; // 80 points
-        if (fullText.includes('usa') || fullText.includes('mỹ') || fullText.includes('us')) score += 10;
-
-        // Phải có ít nhất Core HOẶC Need và vượt qua bộ lọc khắt khe trên
-        if (score >= 60) {
-            // Tóm tắt ngắn để UI đẹp hơn
-            const summaryText = content ? content.substring(0, 60).replace(/\n/g, ' ') + '...' : 'Tìm kiếm dịch vụ vận chuyển';
-            return { pass: true, score: score, summary: summaryText };
-        }
-    }
-
-    return { pass: false, reason: 'Không nhắc đến nhu cầu POD/Dropship shipping' };
-}
-
-/**
- * Process a batch of PENDING raw_leads with Hardcoded algorithm + SIS AI Evaluation
- */
-async function processBatch() {
+async function runSISAIWorker() {
     if (isProcessing) return;
     isProcessing = true;
 
     try {
-        const batch = database.db.prepare(
-            `SELECT * FROM raw_leads WHERE status = 'PENDING' LIMIT ?`
-        ).all(BATCH_SIZE);
+        // 1. Find a relevant classification that doesn't have a Lead Card yet
+        const target = database._db.prepare(`
+            SELECT pc.*, rp.id as raw_post_id
+            FROM post_classifications pc
+            JOIN raw_posts rp ON pc.raw_post_id = rp.id
+            LEFT JOIN lead_cards lc ON pc.raw_post_id = lc.raw_post_id
+            WHERE pc.is_relevant = 1 
+            AND pc.recommended_lane != 'discard'
+            AND lc.id IS NULL
+            ORDER BY pc.intent_score DESC
+            LIMIT 1
+        `).get();
 
-        if (batch.length === 0) return;
-
-        console.log(`[AIWorker] 📋 Processing ${batch.length} leads with SIS architecture...`);
-
-        for (const row of batch) {
-            // Mark as PROCESSING
-            database.db.prepare(`UPDATE raw_leads SET status='PROCESSING' WHERE id=?`).run(row.id);
-
-            // Job 2: Fast Filter (Quét post + comments) - GIỮ LẠI LÀM LỌC RÁC
-            const result = scoreLead(row.content, row.top_comments || '[]');
-
-            if (!result.pass) {
-                database.db.prepare(
-                    `UPDATE raw_leads SET status='REJECTED', reject_reason=? WHERE id=?`
-                ).run(result.reason, row.id);
-                console.log(`[AIWorker] 🚫 DROP [${result.reason}]: ${(row.content || '').substring(0, 40)}...`);
-                continue;
-            }
-
-            console.log(`[AIWorker] 🎯 PASS FAST FILTER: ${row.author} - Đang chuyển qua SIS AI Scoring...`);
-
-            // Job 4: SIS AI Scoring 
-            const sisScores = await generateSISScore(row.content, row.top_comments);
-
-            // Job 3: Identity & Entity Resolution
-            let accountId = null;
-            if (row.author_url) {
-                // Thử tìm Identity xem đã tồn tại chưa
-                const existingAccount = database.findAccountByIdentity('fb_profile', row.author_url);
-                if (existingAccount) {
-                    accountId = existingAccount.id;
-                    console.log(`[AIWorker] 🔄 Map vào Account cũ: ID #${accountId}`);
-                }
-            }
-
-            if (!accountId) {
-                // Tạo Account mới
-                accountId = database.insertAccount({
-                    brand_name: row.author,
-                    category: sisScores.category,
-                    platform: row.platform,
-                    market: 'Global'
-                });
-                console.log(`[AIWorker] 🆕 Tạo Account mới: ID #${accountId} - ${row.author}`);
-
-                // Tạo Identity link với Account
-                if (row.author_url) {
-                    database.insertIdentity(accountId, 'fb_profile', row.author_url, 'Facebook Scraper');
-                }
-            }
-
-            // Cập nhật điểm cho Account
-            database.updateAccountScores(accountId, {
-                pain_score: sisScores.pain_score,
-                revenue_score: sisScores.revenue_score,
-                contactability_score: sisScores.contactability_score, // Phụ thuộc vào Bio sau này (Job 5)
-                switching_score: sisScores.switching_score,
-                urgency_score: sisScores.urgency_score,
-                priority_score: sisScores.priority_score,
-                status: 'qualified'
-            });
-
-            // Ghi nhận Identities được LLM bóc tách (LLM Enrichment)
-            if (sisScores.extracted_identities && Array.isArray(sisScores.extracted_identities)) {
-                for (const identity of sisScores.extracted_identities) {
-                    if (identity.type && identity.value && identity.value !== 'giá trị') {
-                        database.insertIdentity(accountId, identity.type, identity.value, 'SIS LLM Scorer');
-                    }
-                }
-            }
-
-            // Ghi nhận Action nếu cần (Optional)
-            if (sisScores.suggested_action === 'sales_now') {
-                database.logSISAction({
-                    account_id: accountId,
-                    action_type: 'Sales_Evaluation_Needed',
-                    owner: 'System',
-                    status: 'pending'
-                });
-            }
-
-            const assignedTo = routeLead(row.content);
-
-            // Layer F: Sales Copilot Generation (gpt-4o)
-            // Chỉ chạy mô hình đắt tiền với những Account ngon (priority_score >= 60)
-            let copilotDraft = "";
-            let categoryLabel = sisScores.category || 'Unknown';
-            let sellerTypeLabel = sisScores.seller_type || 'noise';
-
-            if (sisScores.priority_score >= 60 && ['seller', 'newbie'].includes(sellerTypeLabel)) {
-                console.log(`[AIWorker] 🌟 Kích hoạt gpt-4o Sales Copilot cho Lead: ${row.author}...`);
-                const copilotSysPrompt = `Bạn là Chuyên gia Sales B2B Ecommerce. Phân tích ngữ cảnh khách hàng và soạn draft.
-Ngữ cảnh (Lead):
-${row.content}
-Comments: ${row.top_comments}
-
-Hãy soạn 1 đoạn JSON Output:
-{
-  "mini_audit": "Phân tích 2 câu sắc bén vì sao nên tiếp cận ông này",
-  "next_best_action": "Đề xuất hành động tiếp theo cho team Sales",
-  "opener": "1 đoạn tin nhắn mở đầu (Opener) thật tự nhiên, cá nhân hóa để Sales copy và gửi qua Fanpage Inbox."
-}`;
-                try {
-                    const aiProvider = require('../../../ai/aiProvider');
-                    const draftRaw = await aiProvider.generateText(copilotSysPrompt, "Tạo Sales Copilot Draft", { model: 'gpt-4o', maxTokens: 400, jsonMode: true });
-                    const draftJson = JSON.parse(draftRaw.match(/\{([\s\S]*)\}/)[0]);
-                    copilotDraft = `[MINI AUDIT] ${draftJson.mini_audit}\n[ACTION] ${draftJson.next_best_action}\n[OPENER]\n${draftJson.opener}`;
-                } catch (e) {
-                    console.log("[AIWorker] ⚠️ Copilot gpt-4o failed:", e.message);
-                }
-            }
-
-            // Save to leads table (lúc này là SIGNALS table trong bản chất)
-            database.db.prepare(`
-                INSERT OR IGNORE INTO leads
-                  (platform, author_name, author_url, content, post_url, post_created_at,
-                   item_type, group_name, score, summary, status, tags, response_draft, assigned_sales, account_id)
-                VALUES (?, ?, ?, ?, ?, ?, 'post', ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(
-                row.platform, row.author, row.author_url, row.content,
-                row.url, row.scraped_at, row.group_name,
-                sisScores.priority_score,
-                sisScores.summary,
-                sisScores.suggested_action === 'sales_now' ? 'hot' : 'new',
-                JSON.stringify(sisScores.pain_tags || []),
-                copilotDraft,
-                assignedTo,
-                accountId
-            );
-
-            database.db.prepare(
-                `UPDATE raw_leads SET status='QUALIFIED', score=?, assigned_to=? WHERE id=?`
-            ).run(sisScores.priority_score, assignedTo, row.id);
-
-            // Invalidate stats cache
-            database.invalidateStatsCache();
-
-            console.log(`[AIWorker] 🔥 SIS SCORED [P:${sisScores.pain_score} / R:${sisScores.revenue_score}] -> TỔNG ĐIỂM PRIORITY: ${sisScores.priority_score}đ → ${assignedTo}`);
+        if (!target) {
+            isProcessing = false;
+            return;
         }
-        console.log(`[AIWorker] ✅ Batch done.`);
+
+        console.log(`[SIS AI Worker] 🧠 Synthesizing Deep Strategy for Signal #${target.raw_post_id} (Lane: ${target.recommended_lane})`);
+
+        // 2. Generate Lead Card (GPT-4o)
+        await generateLeadCard(target.raw_post_id);
+
+        console.log(`[SIS AI Worker] ✅ Strategy Synthesized for Signal #${target.raw_post_id}`);
+
     } catch (err) {
-        console.error(`[AIWorker] ❌ Batch error: `, err.message);
+        console.error(`[SIS AI Worker] ❌ Loop error:`, err.message);
     } finally {
         isProcessing = false;
     }
 }
 
-// ═══ Main ═══
-function main() {
-    console.log('╔══════════════════════════════════════════════════════╗');
-    console.log('║  🧠 THG AI Worker — Standalone Process              ║');
-    console.log('║  Polls raw_leads → Pre-filter → AI Classify → Save ║');
-    console.log('╚══════════════════════════════════════════════════════╝');
-    console.log(`[AIWorker] 🔄 Polling raw_leads every ${POLL_INTERVAL / 1000}s (batch=${BATCH_SIZE})...`);
+// Start
+console.log('╔══════════════════════════════════════════════════════╗');
+console.log('║  🧠 SIS v2: Deep Context AI Synthesizer (GPT-4o)      ║');
+console.log('╚══════════════════════════════════════════════════════╝');
+console.log(`[SIS AI Worker] 🔄 Polling classifications every ${POLL_INTERVAL / 1000}s...`);
 
-    // Start polling
-    setInterval(processBatch, POLL_INTERVAL);
-
-    // Initial poll
-    processBatch();
-}
-
-main();
+setInterval(runSISAIWorker, POLL_INTERVAL);
+runSISAIWorker();

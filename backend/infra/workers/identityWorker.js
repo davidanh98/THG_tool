@@ -28,12 +28,12 @@ async function runSISIdentityWorker() {
         // 1. Find a Classification that needs more clues
         // Priority: partial_lead > anonymous_signal
         const target = database._db.prepare(`
-            SELECT pc.*, rp.author_url, rp.author_name, rp.platform
+            SELECT pc.*, rp.author_profile_url, rp.author_name, rp.platform
             FROM post_classifications pc
             JOIN raw_posts rp ON pc.raw_post_id = rp.id
             WHERE pc.recommended_lane IN ('partial_lead', 'anonymous_signal')
             AND pc.resolution_confidence < 90
-            AND rp.author_url IS NOT NULL
+            AND rp.author_profile_url IS NOT NULL
             ORDER BY pc.intent_score DESC
             LIMIT 1
         `).get();
@@ -64,21 +64,20 @@ async function runSISIdentityWorker() {
             const page = await context.newPage();
 
             // ── HUNTING PHASE ──
-            const resolved = await resolveProfile(page, target.author_url);
+            const resolved = await resolveProfile(page, target.author_profile_url);
 
             if (resolved && resolved.ok) {
                 // 3. SYNTHESIS PHASE (Transaction)
                 database._db.transaction(() => {
                     // a) Find/Create Account Card
-                    // Check if we already have an identity for this author_url
-                    let accId = database.findAccountByIdentity('fb_profile', target.author_url);
-
+                    // Check if we already have an identity for this author_profile_url
+                    let accId = database.findAccountByIdentity('fb_profile', target.author_profile_url);
                     if (!accId) {
                         accId = database.insertAccount({
                             brand_name: target.author_name || 'Anonymous Seller',
                             status: 'lead'
                         });
-                        database.insertIdentity({ account_id: accId, type: 'fb_profile', value: target.author_url, discovered_from: 'signal_scrape' });
+                        database.insertIdentity({ account_id: accId, type: 'fb_profile', value: target.author_profile_url, discovered_from: 'signal_scrape' });
                     }
 
                     // b) Save discovered clues
