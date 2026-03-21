@@ -28,7 +28,7 @@ async function runSISIdentityWorker() {
         // 1. Find a Classification that needs more clues
         // Priority: partial_lead > anonymous_signal
         const target = database._db.prepare(`
-            SELECT pc.*, rp.author_profile_url, rp.author_name, rp.platform
+            SELECT pc.*, rp.author_profile_url, rp.author_name, rp.source_platform as platform
             FROM post_classifications pc
             JOIN raw_posts rp ON pc.raw_post_id = rp.id
             WHERE pc.recommended_lane IN ('partial_lead', 'anonymous_signal')

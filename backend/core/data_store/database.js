@@ -281,10 +281,16 @@ const getSISSummary = () => {
 // ─── Scan Queue IPC ────────────────────────────────────────────────────────
 
 const enqueueScan = (jobType, platforms, maxPosts = 200) => {
+  let p = platforms;
+  let m = maxPosts;
+  if (typeof platforms === 'object' && !Array.isArray(platforms)) {
+    p = platforms.platforms;
+    m = platforms.maxPosts || maxPosts;
+  }
   return db.prepare(`
         INSERT INTO scan_queue (job_type, platforms, max_posts)
         VALUES (?, ?, ?)
-    `).run(jobType, Array.isArray(platforms) ? platforms.join(',') : platforms, maxPosts);
+    `).run(jobType, Array.isArray(p) ? p.join(',') : p, m);
 };
 
 const claimNextScan = () => {
