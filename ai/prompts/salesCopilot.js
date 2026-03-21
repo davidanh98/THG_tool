@@ -187,7 +187,9 @@ async function generateResponses(leads) {
     console.log(`[Responder] 💬 Generating responses for ${leads.length} leads (AI cascade)...`);
     const results = [];
 
-    for (const lead of leads) {
+    for (let i = 0; i < leads.length; i++) {
+        const lead = leads[i];
+        console.log(`[Responder] ⏳ Processing lead ${i + 1}/${leads.length}...`);
         const response = await generateResponse(lead);
         results.push({ ...lead, suggested_response: response });
         await new Promise(r => setTimeout(r, 500));
