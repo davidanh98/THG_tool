@@ -22,24 +22,24 @@ export default function SISDashboard() {
                 <div className="sis-stats-lite">
                     <div className="sis-stat-item">
                         <span className="label">Resolved</span>
-                        <span className="val color-resolved">{summary?.lanes.resolved || 0}</span>
+                        <span className="val color-resolved">{summary?.lanes?.resolved || 0}</span>
                     </div>
                     <div className="sis-stat-item">
                         <span className="label">Partial</span>
-                        <span className="val color-partial">{summary?.lanes.partial || 0}</span>
+                        <span className="val color-partial">{summary?.lanes?.partial || 0}</span>
                     </div>
                     <div className="sis-stat-item">
                         <span className="label">Anonymous</span>
-                        <span className="val color-anonymous">{summary?.lanes.anonymous || 0}</span>
+                        <span className="val color-anonymous">{summary?.lanes?.anonymous || 0}</span>
                     </div>
                 </div>
             </header>
 
             <div className="sis-board">
-                <Lane title="Resolved Leads" icon="🔵" signals={lanes.resolved} color="resolved" />
-                <Lane title="Partial Leads" icon="🟡" signals={lanes.partial} color="partial" />
-                <Lane title="Anonymous Signals" icon="⚪" signals={lanes.anonymous} color="anonymous" />
-                <Lane title="Competitor Intel" icon="🔴" signals={lanes.competitor} color="competitor" />
+                <Lane title="Resolved Leads" icon="🔵" signals={lanes?.resolved || []} color="resolved" />
+                <Lane title="Partial Leads" icon="🟡" signals={lanes?.partial || []} color="partial" />
+                <Lane title="Anonymous Signals" icon="⚪" signals={lanes?.anonymous || []} color="anonymous" />
+                <Lane title="Competitor Intel" icon="🔴" signals={lanes?.competitor || []} color="competitor" />
             </div>
         </div>
     )
@@ -75,7 +75,7 @@ function SignalCard({ signal }: { signal: SISSignal }) {
                 {card && <span className="brain-badge">🧠</span>}
             </div>
 
-            <p className="signal-content">{signal.content.substring(0, 150)}...</p>
+            <p className="signal-content">{(signal.content || '').substring(0, 150)}...</p>
 
             {cls && (
                 <div className="metrics-grid">
