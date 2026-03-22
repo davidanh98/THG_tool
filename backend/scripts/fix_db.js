@@ -17,33 +17,75 @@ if (!fs.existsSync(DB_PATH)) {
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 
-console.log('🛠️  Starting Force Migration...');
+console.log('☢️  Starting Nuclear Force Migration...');
 
-const fix = (table, col, type) => {
-    try {
-        db.prepare(`SELECT ${col} FROM ${table} LIMIT 1`).get();
-        console.log(`✅ Column [${col}] already exists in [${table}].`);
-    } catch (e) {
-        if (e.message.includes('no such column')) {
+const schema = {
+    raw_posts: {
+        source_platform: 'TEXT DEFAULT "facebook"',
+        source_type: 'TEXT',
+        external_post_id: 'TEXT',
+        group_name: 'TEXT',
+        author_name: 'TEXT',
+        author_profile_url: 'TEXT',
+        post_url: 'TEXT',
+        post_text: 'TEXT',
+        scraped_at: 'TEXT',
+        posted_at: 'TEXT'
+    },
+    post_classifications: {
+        raw_post_id: 'INTEGER',
+        model_name: 'TEXT',
+        is_relevant: 'INTEGER',
+        entity_type: 'TEXT',
+        seller_likelihood: 'INTEGER',
+        pain_score: 'INTEGER',
+        intent_score: 'INTEGER',
+        resolution_confidence: 'INTEGER',
+        contactability_score: 'INTEGER',
+        competitor_probability: 'INTEGER',
+        recommended_lane: 'TEXT',
+        reason_summary: 'TEXT'
+    },
+    identity_clues: {
+        account_id: 'INTEGER',
+        raw_post_id: 'INTEGER',
+        clue_type: 'TEXT',
+        clue_value: 'TEXT',
+        discovered_by: 'TEXT'
+    },
+    lead_cards: {
+        raw_post_id: 'INTEGER',
+        account_id: 'INTEGER',
+        lane: 'TEXT',
+        strategic_summary: 'TEXT',
+        suggested_opener: 'TEXT',
+        objection_prevention: 'TEXT',
+        next_best_action: 'TEXT',
+        sales_priority_score: 'INTEGER'
+    },
+    scan_logs: {
+        platform: 'TEXT',
+        posts_found: 'INTEGER',
+        leads_detected: 'INTEGER',
+        duration_seconds: 'INTEGER',
+        status: 'TEXT'
+    }
+};
+
+for (const [table, cols] of Object.entries(schema)) {
+    const currentCols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+    for (const [col, type] of Object.entries(cols)) {
+        if (!currentCols.includes(col)) {
             console.log(`➕ Adding missing column [${col}] to [${table}]...`);
             try {
                 db.prepare(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`).run();
                 console.log(`✨ Success: ${table}.${col} added.`);
             } catch (err) {
-                console.error(`❌ Failed to add ${table}.${col}:`, err.message);
+                console.error(`❌ Failed: ${err.message}`);
             }
-        } else {
-            console.error(`❌ Error checking ${table}.${col}:`, e.message);
         }
     }
-};
+}
 
-// Apply all SIS v2.1 schema updates
-fix('scan_logs', 'duration_seconds', 'INTEGER');
-fix('scan_logs', 'leads_detected', 'INTEGER');
-fix('lead_cards', 'account_id', 'INTEGER');
-fix('raw_posts', 'source_platform', 'TEXT');
-fix('identity_clues', 'account_id', 'INTEGER');
-
-console.log('🏁 Force Migration Complete.');
+console.log('🏁 Nuclear Migration Complete.');
 db.close();

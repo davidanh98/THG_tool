@@ -148,37 +148,81 @@ db.exec(`
 `);
 
 // ─── Self-Healing Migrations (v2.1) ───────────────────────────────────────
-function migrate() {
-  console.log('[Database] 🛠️  Checking for schema updates...');
-  const tables = {
-    scan_logs: ['duration_seconds', 'leads_detected'],
-    lead_cards: ['account_id'],
-    raw_posts: ['source_platform'],
-    identity_clues: ['account_id']
+// ─── Nuclear Schema Synchronization (v2.2) ────────────────────────────────
+function nuclearSync() {
+  console.log('[Database] 🛡️  Nuclear Sync: Ensuring 100% Schema Parity...');
+  const schema = {
+    raw_posts: {
+      source_platform: 'TEXT DEFAULT "facebook"',
+      source_type: 'TEXT',
+      external_post_id: 'TEXT',
+      group_name: 'TEXT',
+      author_name: 'TEXT',
+      author_profile_url: 'TEXT',
+      post_url: 'TEXT',
+      post_text: 'TEXT',
+      scraped_at: 'TEXT',
+      posted_at: 'TEXT'
+    },
+    post_classifications: {
+      raw_post_id: 'INTEGER',
+      model_name: 'TEXT',
+      is_relevant: 'INTEGER',
+      entity_type: 'TEXT',
+      seller_likelihood: 'INTEGER',
+      pain_score: 'INTEGER',
+      intent_score: 'INTEGER',
+      resolution_confidence: 'INTEGER',
+      contactability_score: 'INTEGER',
+      competitor_probability: 'INTEGER',
+      recommended_lane: 'TEXT',
+      reason_summary: 'TEXT'
+    },
+    identity_clues: {
+      account_id: 'INTEGER',
+      raw_post_id: 'INTEGER',
+      clue_type: 'TEXT',
+      clue_value: 'TEXT',
+      discovered_by: 'TEXT'
+    },
+    lead_cards: {
+      raw_post_id: 'INTEGER',
+      account_id: 'INTEGER',
+      lane: 'TEXT',
+      strategic_summary: 'TEXT',
+      suggested_opener: 'TEXT',
+      objection_prevention: 'TEXT',
+      next_best_action: 'TEXT',
+      sales_priority_score: 'INTEGER'
+    },
+    scan_logs: {
+      platform: 'TEXT',
+      posts_found: 'INTEGER',
+      leads_detected: 'INTEGER',
+      duration_seconds: 'INTEGER',
+      status: 'TEXT'
+    }
   };
 
-  for (const [table, cols] of Object.entries(tables)) {
-    cols.forEach(col => {
-      try {
-        db.prepare(`SELECT ${col} FROM ${table} LIMIT 1`).get();
-      } catch (e) {
-        if (e.message.includes('no such column')) {
-          console.log(`[Database] ➕ Adding missing column [${col}] to table [${table}]...`);
-          const type = (col.includes('id') || col.includes('score') || col.includes('seconds') || col.includes('detected')) ? 'INTEGER' : 'TEXT';
-          try {
-            db.prepare(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`).run();
-            console.log(`[Database] ✅ Column [${col}] added successfully.`);
-          } catch (alterErr) {
-            console.error(`[Database] ❌ Failed to add column [${col}]:`, alterErr.message);
-          }
-        } else {
-          console.warn(`[Database] ⚠️ Unexpected error checking column [${col}] in [${table}]:`, e.message);
+  for (const [table, cols] of Object.entries(schema)) {
+    // Get current columns
+    const currentCols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+
+    for (const [col, type] of Object.entries(cols)) {
+      if (!currentCols.includes(col)) {
+        console.log(`[Database] ☢️  NUCLEAR ALERT: Adding missing column [${col}] to table [${table}]...`);
+        try {
+          db.prepare(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`).run();
+          console.log(`[Database] ✅ Column [${col}] synchronized.`);
+        } catch (err) {
+          console.error(`[Database] ❌ Sync failed for ${table}.${col}:`, err.message);
         }
       }
-    });
+    }
   }
+  console.log('[Database] ✅ Nuclear Sync Complete. All systems nominal.');
 }
-migrate();
+nuclearSync();
 
 // ─── SIS v2 Methods ───────────────────────────────────────────────────────
 
