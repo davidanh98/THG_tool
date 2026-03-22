@@ -74,6 +74,7 @@ async function classifyPosts(posts) {
         try {
             const response = await aiProvider.generateText(sysPrompt, usrPrompt, {
                 model: 'gpt-4o-mini',
+                maxTokens: 2000,
                 jsonMode: true
             });
 

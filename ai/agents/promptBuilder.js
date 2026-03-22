@@ -151,7 +151,7 @@ Chi tiết JSON cho mỗi kết quả:
   "pain_tags": [],
   "market_tags": [],
   "recommended_lane": "resolved_lead" | "partial_lead" | "anonymous_signal" | "competitor_intel" | "discard",
-  "reason_summary": "..."
+  "reason_summary": "Giải thích ngắn gọn tại sao chọn lane này (tối đa 15 từ)."
 }`;
 }
 
