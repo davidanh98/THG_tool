@@ -28,7 +28,7 @@ Nhiệm vụ: Phân tích các bài đăng/bình luận trên Facebook để xá
    - Partial: Có vẻ là seller xịn nhưng chưa rõ brand -> Theo dõi thêm.
    - Anonymous: Clone/Ẩn danh nhưng pain rõ -> Lưu làm Market Intel.
    - Competitor: Đối thủ đang chào hàng -> Intelligence.
-   - Discard: Rác, nội dung không liên quan.
+   - Discard: Rác, nội dung không liên quan, hoặc SAI TUYẾN (vận chuyển VỀ VN, từ Mỹ/nước ngoài về VN, nội địa VN).
 
 ---
 📊 QUY TẮC CHẤM ĐIỂM (6-SCORE RUBRIC):
@@ -54,9 +54,9 @@ Nhiệm vụ: Phân tích các bài đăng/bình luận trên Facebook để xá
    - (+) "Bên em nhận", "Inbox báo giá", để lại SĐT/Zalo, giới thiệu dịch vụ logistics khác.
 
 ---
-🚫 TUYẾN ĐƯỜNG THG (CHỈ CHỌN NẾU KHỚP):
-- VN/CN -> Mỹ (US), Úc (AU), EU, Canada (CA).
-- KHÔNG nhận: Trung Quốc -> Việt Nam, Việt Nam -> Trung Quốc, Nội địa VN, Về VN.
+🚫 DEAD-RULES (LUẬT TỬ HÌNH - TUYỆT ĐỐI TUÂN THỦ):
+- BẤT KỲ BÀI ĐĂNG NÀO TÌM DỊCH VỤ SHIP **VỀ VIỆT NAM** (TỪ MỸ VỀ, TỪ TQ VỀ, TỪ CHÂU ÂU VỀ...): -> BẮT BUỘC ĐÁNH RỚT: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
+- CHÚNG TA CHỈ NHẬN HÀNG TỪ VN -> ĐI NƯỚC NGOÀI. TUYỆT ĐỐI KHÔNG LÀM CHIỀU NGƯỢC LẠI.
 
 ${config.THG_CONTEXT}`;
 
@@ -140,7 +140,7 @@ ${postsList}
 
 Chi tiết JSON cho mỗi kết quả:
 {
-  "is_relevant": bool,
+  "is_relevant": bool, // BẮT BUỘC FALSE nếu là hàng nhập VỀ VN, Mỹ VỀ VN, nội địa
   "entity_type": "...",
   "seller_likelihood": 0-100,
   "pain_score": 0-100,
@@ -150,8 +150,8 @@ Chi tiết JSON cho mỗi kết quả:
   "competitor_probability": 0-100,
   "pain_tags": [],
   "market_tags": [],
-  "recommended_lane": "resolved_lead" | "partial_lead" | "anonymous_signal" | "competitor_intel" | "discard",
-  "reason_summary": "Giải thích ngắn gọn tại sao chọn lane này (tối đa 15 từ)."
+  "recommended_lane": "resolved_lead" | "partial_lead" | "anonymous_signal" | "competitor_intel" | "discard", // BẮT BUỘC "discard" NẾU SAI TUYẾN (Ví dụ: Nhập hàng về VN)
+  "reason_summary": "Giải thích ngắn gọn (VD: Sai tuyến - Nhập về VN)"
 }`;
 }
 

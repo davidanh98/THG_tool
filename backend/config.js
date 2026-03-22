@@ -137,27 +137,30 @@ module.exports = {
   THG_TIKTOK: 'https://www.tiktok.com/@thgfulfillment',
 
   THG_CONTEXT: `
-THG là công ty logistics thương mại điện tử, chuyên phục vụ SELLER (POD, Dropship, Fulfillment, Amazon FBA).
+THG là công ty logistics thương mại điện tử VÀ HỆ SINH THÁI FULLFILLMENT, chuyên phục vụ SELLER (POD, Dropship, Fulfillment, Amazon FBA).
 Website công ty: https://www.thgfulfill.com/thgfulfill
-Khách hàng mục tiêu: SELLER đang bán trên Amazon, TikTok Shop, Etsy, Shopify, eBay cần:
-- In ấn sản phẩm (POD/Print on Demand)
-- Tìm nguồn hàng từ Trung Quốc (1688, Taobao, xưởng TQ) để ship đi phương Tây
-- Fulfillment/3PL tại Mỹ hoặc châu Âu
-- Vận chuyển quốc tế VN/CN → Mỹ, Anh, Pháp, Đức
 
-📍 TUYẾN PHỤC VỤ:
-- TUYẾN CHÍNH: VN/CN → MỸ (US)
-- TUYẾN PHỤ: VN/CN → Anh (UK), Pháp (France), Đức (Germany)
+👑 MÔ HÌNH KINH DOANH TỐI THƯỢNG CỦA THG:
+1. FULLFILLMENT MẠNH MẼ: Nhận fulfill mọi loại đơn hàng (Dropship, POD). Xử lý trọn gói từ A-Z.
+2. HỆ THỐNG KHO QUỐC TẾ: Sở hữu WAREHOUSE trực tiếp tại MỸ (US), TRUNG QUỐC (CN) và VIỆT NAM (VN). Khách thoải mái gởi hàng lưu kho, xử lý đơn.
+3. VẬN CHUYỂN EXPRESS & TIKTOK LINE: Cung cấp giải pháp vận chuyển siêu tốc (Express). Có LINE TIKTOK RIÊNG biệt, tối ưu cho seller TikTok Shop.
+4. CÔNG NGHỆ & MINH BẠCH: Cung cấp hệ thống Tracking 24/7, theo dõi lộ trình chuẩn xác.
+
+📍 TUYẾN PHỤC VỤ (CHỈ NHẬN TỪ VN/CN ĐI QUỐC TẾ):
+- TUYẾN CHÍNH: VN / CN → MỸ (US)
+- TUYẾN PHỤ: VN / CN → Anh (UK), Pháp (FR), Đức (DE)
 - TUYẾN MỞ RỘNG: Úc, UAE, Đài Loan, Chile, Colombia, Mexico
 
-⛔ THG KHÔNG phục vụ: ship hàng VỀ Việt Nam, nhập hàng TQ→VN, vận chuyển nội địa VN.
+⛔ THG TUYỆT ĐỐI KHÔNG NHẬN CÁC TUYẾN NÀY (ĐÁNH RỚT THÀNH RÁC/DISCARD NGAY LẬP TỨC): 
+- KHÔNG NHẬN: Nhập hàng TỪ nước ngoài VỀ Việt Nam (ví dụ Nhập từ Mỹ/Anh/Pháp... về VN).
+- KHÔNG NHẬN: Nhập từ Trung Quốc VỀ Việt Nam, hoặc chuyển từ VN Mới sang TQ.
+- KHÔNG NHẬN: Vận chuyển Nội Địa Việt Nam.
 
-🎯 DỊCH VỤ THG:
-1. THG Fulfill (POD): Seller gửi thiết kế → THG in tại xưởng VN/CN/US → ship đi Mỹ/UK/EU
-2. THG Fulfill (Dropship): Seller gửi link 1688/Taobao → THG mua hộ + ship QUỐC TẾ
-3. THG Express: Vận chuyển VN/CN → Mỹ/UK/EU — tuyến bay riêng, rẻ hơn DHL/FedEx
-4. THG Warehouse/3PL: Kho Mỹ (PA + TX) — fulfill $1.2/đơn, giao 2-5 ngày, free lưu kho 90 ngày
-5. E-packet: Chile, Colombia, Mexico, Saudi, UAE, Úc, Đài Loan
+🎯 DỊCH VỤ CỐT LÕI CỦA THG:
+1. THG Fulfill (POD & Dropship): Từ in ấn xưởng VN/CN/US đến mua hộ 1688/Taobao ship quốc tế.
+2. THG Express: Vận chuyển VN/CN đi Mỹ/Châu Âu — Rẻ hơn DHL/FedEx, có Line TikTok nội địa.
+3. THG Warehouse/3PL: KHO TẠI MỸ, KHO TRUNG QUỐC, KHO VIỆT NAM. Fulfill siêu nhanh, miễn phí lưu kho dài ngày.
+4. E-packet toàn cầu và Tracking 24/7.
 
 🔥 LEAD CHUẨN (score cao) — ĐÚNG đối tượng THG phục vụ:
 - Seller POD/Print on Demand đang tìm xưởng in, basecost rẻ, supplier fulfill
