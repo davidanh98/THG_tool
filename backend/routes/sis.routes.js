@@ -81,12 +81,10 @@ router.delete('/api/sis/signals/:id', (req, res) => {
     try {
         const id = parseInt(req.params.id);
 
-        const deleteLeadCards = database._db.prepare(`DELETE FROM lead_cards WHERE raw_post_id = ?`);
         const deleteClassifications = database._db.prepare(`DELETE FROM post_classifications WHERE raw_post_id = ?`);
         const deleteRawPost = database._db.prepare(`DELETE FROM raw_posts WHERE id = ?`);
 
         const transaction = database._db.transaction(() => {
-            deleteLeadCards.run(id);
             deleteClassifications.run(id);
             deleteRawPost.run(id);
         });

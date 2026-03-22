@@ -66,22 +66,15 @@ ${identities.websites?.length ? `- Websites: ${identities.websites.join(', ')}` 
 
 Hãy soạn Lead Card chiến lược:`;
 
-        // 4. Call AI (GPT-4o for strategy, fallback to mini)
+        // 4. Call AI (Cost Optimized: Force GPT-4o-mini as requested by David)
         let response = null;
         try {
-            response = await aiProvider.generateText(sysPrompt, usrPrompt, {
-                model: 'gpt-4o',
-                jsonMode: true
-            });
-        } catch (aiErr) {
-            console.warn(`[SalesCopilot] ⚠️ GPT-4o failed, falling back to Mini: ${aiErr.message}`);
-        }
-
-        if (!response) {
             response = await aiProvider.generateText(sysPrompt, usrPrompt, {
                 model: 'gpt-4o-mini',
                 jsonMode: true
             });
+        } catch (aiErr) {
+            console.error(`[SalesCopilot] ❌ Mini model failed: ${aiErr.message}`);
         }
 
         if (!response) {
