@@ -343,11 +343,16 @@ const insertClassification = (cls) => {
 
 const getLeadCards = (lane = 'resolved_lead', limit = 50) => {
   return db.prepare(`
-    SELECT lc.*, rp.post_text, rp.author_name, rp.post_url, rp.group_name 
-    FROM lead_cards lc
-    JOIN raw_posts rp ON lc.raw_post_id = rp.id
-    WHERE lc.lane = ?
-    ORDER BY lc.created_at DESC
+    SELECT 
+      pc.id as classification_id, pc.recommended_lane as lane, pc.reason_summary, pc.confidence,
+      pc.seller_likelihood, pc.pain_score, pc.intent_score,
+      rp.id as id, rp.author_name, rp.post_url, rp.post_text as content, rp.platform, rp.group_name,
+      lc.strategic_summary, lc.suggested_opener, lc.sales_priority_score
+    FROM post_classifications pc
+    JOIN raw_posts rp ON pc.raw_post_id = rp.id
+    LEFT JOIN lead_cards lc ON pc.raw_post_id = lc.raw_post_id
+    WHERE pc.recommended_lane = ?
+    ORDER BY pc.created_at DESC
     LIMIT ?
   `).all(lane, limit);
 };

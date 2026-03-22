@@ -102,7 +102,7 @@ function SignalCard({ signal }: { signal: SISSignal }) {
             </div>
 
             <p className="signal-text">
-                {signal.content || 'Không có nội dung tín hiệu.'}
+                {card?.strategic_summary || cls?.reason_summary || signal.content || 'Không có nội dung tín hiệu.'}
             </p>
 
             {cls && (

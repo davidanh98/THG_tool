@@ -41,9 +41,20 @@ async function classifyPosts(posts) {
         const content = post.content || '';
         if (content.length < 10) continue;
 
+        // [SIS v2.5] Aggressive Competitor Block (Zero-Cost Sieve)
         if (PROVIDER_REGEX.test(content)) {
-            console.log(`[Sieve] 🚫 Discarded (Provider): ${content.substring(0, 50)}`);
-            results.push({ ...post, recommended_lane: 'discard', is_relevant: false, reason_summary: 'Obvious Provider/Ad' });
+            console.log(`[Sieve] 🛡️  Shield: Competitor/Provider detected: ${content.substring(0, 50)}`);
+            const competitorResult = {
+                ...post,
+                recommended_lane: 'competitor_intel',
+                is_relevant: true,
+                entity_type: 'competitor',
+                intent_score: 10,
+                competitor_probability: 95,
+                reason_summary: 'Obvious Provider/Logistics Ad (Sieve Block)'
+            };
+            await saveToSIS(competitorResult);
+            results.push(competitorResult);
             continue;
         }
 
