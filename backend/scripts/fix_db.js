@@ -10,8 +10,10 @@ const fs = require('fs');
 
 const DB_PATH = path.join(__dirname, '..', '..', 'data', 'leads.db');
 if (!fs.existsSync(DB_PATH)) {
-    console.error('❌ Database not found at:', DB_PATH);
-    process.exit(1);
+    console.log('🌱 Database missing. Creating fresh SIS v2 Database...');
+    // Create directory if it doesn't exist
+    const dir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
 const db = new Database(DB_PATH);
