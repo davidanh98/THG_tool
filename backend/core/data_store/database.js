@@ -299,13 +299,8 @@ const getLeadCards = (lane = 'resolved_lead', limit = 50) => {
   `).all(lane, limit);
 
   return rows.map(r => {
-    const signal = {
-      id: r.id,
-      platform: r.platform,
-      author_name: r.author_name,
-      content: r.content,
-      post_url: r.post_url,
-      group_name: r.group_name,
+    return {
+      ...r,
       classification: {
         id: r.classification_id,
         seller_likelihood: r.seller_likelihood,
@@ -314,19 +309,14 @@ const getLeadCards = (lane = 'resolved_lead', limit = 50) => {
         confidence: r.confidence,
         reason_summary: r.reason_summary,
         recommended_lane: r.lane
-      }
-    };
-
-    if (r.strategic_summary) {
-      signal.leadCard = {
+      },
+      leadCard: r.strategic_summary ? {
         strategic_summary: r.strategic_summary,
         suggested_opener: r.suggested_opener,
         sales_priority_score: r.sales_priority_score,
         identity_clues: r.identity_clues
-      };
-    }
-
-    return signal;
+      } : undefined
+    };
   });
 };
 
