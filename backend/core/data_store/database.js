@@ -146,6 +146,31 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_scan_queue_status ON scan_queue(status);
 `);
 
+// ─── Self-Healing Migrations (v2.1) ───────────────────────────────────────
+function migrate() {
+  console.log('[Database] 🛠️  Checking for schema updates...');
+  const tables = {
+    scan_logs: ['duration_seconds', 'leads_detected'],
+    lead_cards: ['account_id'],
+    raw_posts: ['source_platform']
+  };
+
+  for (const [table, cols] of Object.entries(tables)) {
+    cols.forEach(col => {
+      try {
+        db.prepare(`SELECT ${col} FROM ${table} LIMIT 1`).get();
+      } catch (e) {
+        if (e.message.includes('no such column')) {
+          console.log(`[Database] ➕ Adding missing column ${col} to ${table}...`);
+          const type = (col.includes('id') || col.includes('score') || col.includes('seconds') || col.includes('detected')) ? 'INTEGER' : 'TEXT';
+          db.prepare(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`).run();
+        }
+      }
+    });
+  }
+}
+migrate();
+
 // ─── SIS v2 Methods ───────────────────────────────────────────────────────
 
 const insertRawPost = (post) => {

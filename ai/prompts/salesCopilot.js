@@ -31,7 +31,7 @@ async function generateLeadCard(rawPostId) {
 
         // 2. Fetch Account/Clues if any
         const account = database.findAccountByIdentity('fb_profile', rawPost.author_profile_url);
-        const identities = account ? database._db.prepare(`SELECT * FROM identities WHERE account_id = ?`).all(account.id) : [];
+        const identities = account ? database._db.prepare(`SELECT * FROM identity_clues WHERE account_id = ?`).all(account.id) : [];
 
         // 3. Build Strategic Prompt
         const sysPrompt = `Bạn là Trợ lý Chiến lược Sales cấp cao tại THG Logistics. 

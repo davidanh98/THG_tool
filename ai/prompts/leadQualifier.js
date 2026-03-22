@@ -79,7 +79,14 @@ async function classifyPosts(posts) {
 
             console.log(`[SIS v2 Classifier] 🤖 Raw AI Response: ${response.substring(0, 500)}`);
 
-            const outer = JSON.parse(response);
+            let cleanJSON = response;
+            if (response.includes('```json')) {
+                cleanJSON = response.split('```json')[1].split('```')[0].trim();
+            } else if (response.includes('```')) {
+                cleanJSON = response.split('```')[1].split('```')[0].trim();
+            }
+
+            const outer = JSON.parse(cleanJSON);
             const aiResults = outer.results || outer.items || (Array.isArray(outer) ? outer : []);
 
             if (aiResults.length === 0 && !Array.isArray(outer)) {
