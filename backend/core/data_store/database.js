@@ -64,7 +64,8 @@ db.exec(`
   -- 3. Bảng identity clues
   CREATE TABLE IF NOT EXISTS identity_clues (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    raw_post_id INTEGER NOT NULL REFERENCES raw_posts(id) ON DELETE CASCADE,
+    account_id INTEGER, -- FK to accounts(id)
+    raw_post_id INTEGER REFERENCES raw_posts(id) ON DELETE CASCADE,
     clue_type TEXT NOT NULL, -- domain, email, page, instagram, tiktok
     clue_value TEXT NOT NULL,
     confidence_score INTEGER DEFAULT 0,
@@ -152,7 +153,8 @@ function migrate() {
   const tables = {
     scan_logs: ['duration_seconds', 'leads_detected'],
     lead_cards: ['account_id'],
-    raw_posts: ['source_platform']
+    raw_posts: ['source_platform'],
+    identity_clues: ['account_id']
   };
 
   for (const [table, cols] of Object.entries(tables)) {

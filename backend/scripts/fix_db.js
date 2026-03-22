@@ -43,6 +43,7 @@ fix('scan_logs', 'duration_seconds', 'INTEGER');
 fix('scan_logs', 'leads_detected', 'INTEGER');
 fix('lead_cards', 'account_id', 'INTEGER');
 fix('raw_posts', 'source_platform', 'TEXT');
+fix('identity_clues', 'account_id', 'INTEGER');
 
 console.log('🏁 Force Migration Complete.');
 db.close();
