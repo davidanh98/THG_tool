@@ -161,9 +161,16 @@ function migrate() {
         db.prepare(`SELECT ${col} FROM ${table} LIMIT 1`).get();
       } catch (e) {
         if (e.message.includes('no such column')) {
-          console.log(`[Database] ➕ Adding missing column ${col} to ${table}...`);
+          console.log(`[Database] ➕ Adding missing column [${col}] to table [${table}]...`);
           const type = (col.includes('id') || col.includes('score') || col.includes('seconds') || col.includes('detected')) ? 'INTEGER' : 'TEXT';
-          db.prepare(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`).run();
+          try {
+            db.prepare(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`).run();
+            console.log(`[Database] ✅ Column [${col}] added successfully.`);
+          } catch (alterErr) {
+            console.error(`[Database] ❌ Failed to add column [${col}]:`, alterErr.message);
+          }
+        } else {
+          console.warn(`[Database] ⚠️ Unexpected error checking column [${col}] in [${table}]:`, e.message);
         }
       }
     });
