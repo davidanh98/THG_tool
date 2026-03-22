@@ -346,6 +346,7 @@ const updateLeadCard = (raw_post_id, card) => {
     suggested_opener: card.suggested_opener || '',
     objection_prevention: card.objection_prevention || '',
     next_best_action: card.next_best_action || 'monitor',
+    sales_priority_score: isNaN(card.sales_priority_score) ? 50 : card.sales_priority_score
   }).changes;
 };
 
