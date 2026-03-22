@@ -19,7 +19,7 @@ export default function SISDashboard() {
             <header className="sis-header">
                 <div className="header-main">
                     <div>
-                        <h1>Trung Tâm Chỉ Huy SIS v2</h1>
+                        <h1>THG data</h1>
                         <p className="text-muted">Hệ Thống Phân Tích Tín Hiệu Thương Mại — {summary?.total_processed || 0} tín hiệu</p>
                     </div>
                 </div>
