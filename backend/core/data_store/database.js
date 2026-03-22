@@ -8,10 +8,19 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 const DB_PATH = path.join(DATA_DIR, 'leads.db');
-const db = new Database(DB_PATH);
+const db = new Database(DB_PATH, {
+  verbose: (msg) => { if (process.env.DEBUG_DB) console.log(msg); }
+});
 
-// Enable WAL mode for better concurrent performance
-db.pragma('journal_mode = WAL');
+// ═══════════════════════════════════════════════════════
+// RESILIENCE PRAGMAS (Prevent Corruption & Multi-Process Crash)
+// ═══════════════════════════════════════════════════════
+db.pragma('journal_mode = WAL');    // Write-Ahead Logging (Vital for stability)
+db.pragma('synchronous = NORMAL');  // Faster and safe with WAL
+db.pragma('busy_timeout = 5000');   // Wait 5s if DB is locked by another process
+db.pragma('foreign_keys = ON');
+
+console.log(`[Database] 🗄️ SIS v2 Database Loaded (WAL Mode Active)`);
 
 // ─── SIS v2 CORE SCHEMA ──────────────────────────────────────────────────
 db.exec(`
