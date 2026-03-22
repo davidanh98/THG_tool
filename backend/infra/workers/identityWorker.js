@@ -14,6 +14,7 @@
  *  - browser.close() wrapped in try/catch → prevents isProcessing deadlock
  *  - Checkpoint-blocked accounts are skipped gracefully
  *  - cdpSession crash no longer freezes the worker loop
+ *  - [NEW] Signal failure tracking → prevents infinite loop & OOM on unreachable profiles
  */
 
 const { chromium } = require('playwright');
@@ -25,16 +26,52 @@ const { resolveProfile } = require('../scraper/profileScraper');
 const POLL_INTERVAL = 60000; // 60s
 
 // ─── Track checkpoint-blocked accounts to skip them ───────────────────────────
-// Key: account identifier, Value: timestamp blocked
 const blockedAccounts = new Map();
 const BLOCK_COOLDOWN_MS = 60 * 60 * 1000; // Skip blocked accounts for 1 hour
+
+// ─── Track signals that keep failing — prevent infinite loop & OOM ──────────
+const signalFailures = new Map();
+const MAX_SIGNAL_ATTEMPTS = 3;   // After 3 fails → retire signal
+const SKIP_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+function shouldSkipSignal(signalId) {
+    var rec = signalFailures.get(signalId);
+    if (!rec) return false;
+    if (rec.attempts < MAX_SIGNAL_ATTEMPTS) return false;
+
+    if (Date.now() - rec.firstFailAt > SKIP_COOLDOWN_MS) {
+        signalFailures.delete(signalId); // Allow retry after cooldown
+        return false;
+    }
+    return true;
+}
+
+function recordSignalFailure(signalId) {
+    var rec = signalFailures.get(signalId) || { attempts: 0, firstFailAt: Date.now() };
+    rec.attempts++;
+    signalFailures.set(signalId, rec);
+    console.warn('[SIS Identity] ⚠️  Signal #' + signalId + ' failed ' + rec.attempts + '/' + MAX_SIGNAL_ATTEMPTS);
+
+    if (rec.attempts >= MAX_SIGNAL_ATTEMPTS) {
+        try {
+            database._db.prepare(
+                'UPDATE post_classifications SET resolution_confidence = 90, ' +
+                'reason_summary = COALESCE(reason_summary, "") || " [identity_worker: profile_unreachable]" ' +
+                'WHERE id = ? AND resolution_confidence < 90'
+            ).run(signalId);
+            console.warn('[SIS Identity] 🚫 Signal #' + signalId + ' retired (unreachable).');
+        } catch (e) {
+            console.error('[SIS Identity] DB Update failed: ' + e.message);
+        }
+    }
+}
 
 function isAccountBlocked(account) {
     const key = account.id || account.uid || account.email || String(account);
     const blockedAt = blockedAccounts.get(key);
     if (!blockedAt) return false;
     if (Date.now() - blockedAt > BLOCK_COOLDOWN_MS) {
-        blockedAccounts.delete(key); // Cooldown expired, allow retry
+        blockedAccounts.delete(key);
         return false;
     }
     return true;
@@ -42,21 +79,16 @@ function isAccountBlocked(account) {
 
 function markAccountBlocked(account) {
     const key = account.id || account.uid || account.email || String(account);
-    console.warn('[SIS Identity] 🚫 Marking account as blocked (checkpoint): ' + key);
+    console.warn('[SIS Identity] 🚫 Marking account blocked (checkpoint): ' + key);
     blockedAccounts.set(key, Date.now());
 }
 
-// ─── Safe browser close — never throws ───────────────────────────────────────
 async function safeBrowserClose(browser) {
     if (!browser) return;
     try {
         await browser.close();
     } catch (e) {
-        // Browser already dead (cdpSession closed, checkpoint crash, etc.)
-        // This is expected — swallow silently
-        if (process.env.DEBUG_DB) {
-            console.log('[SIS Identity] ℹ️  Browser already closed: ' + e.message);
-        }
+        if (process.env.DEBUG_DB) console.log('[SIS Identity] Browser already closed: ' + e.message);
     }
 }
 
@@ -70,8 +102,6 @@ async function runSISIdentityWorker() {
     let browser = null;
 
     try {
-        // 1. Find a Classification that needs more clues
-        // Priority: partial_lead > anonymous_signal
         const target = database._db.prepare(`
       SELECT pc.*, rp.author_profile_url, rp.author_name, rp.source_platform AS platform
       FROM post_classifications pc
@@ -86,151 +116,94 @@ async function runSISIdentityWorker() {
 
         if (!target) {
             isProcessing = false;
-            return; // Nothing to process
+            return;
         }
 
-        console.log('[SIS Identity] 🔍 Investigating Clues for: ' + target.author_name + ' (Signal #' + target.id + ')');
-
-        // 2. Get a non-blocked account for scraping
-        let account = null;
-        let attempts = 0;
-        const MAX_ACCOUNT_ATTEMPTS = 5;
-
-        while (attempts < MAX_ACCOUNT_ATTEMPTS) {
-            const candidate = accountManager.getNextAccount({ forScraping: true });
-            if (!candidate) break;
-            if (!isAccountBlocked(candidate)) {
-                account = candidate;
-                break;
-            }
-            attempts++;
-            console.warn('[SIS Identity] ⏭️  Skipping blocked account, trying next...');
-        }
-
-        if (!account) {
-            console.warn('[SIS Identity] ⚠️  No unblocked accounts available. Will retry next cycle.');
+        if (shouldSkipSignal(target.id)) {
             isProcessing = false;
             return;
         }
 
-        // 3. Launch browser and resolve profile
-        try {
-            browser = await chromium.launch({
-                headless: true,
-                args: ['--no-sandbox', '--disable-dev-shm-usage']
-            });
+        console.log('[SIS Identity] 🔍 Investigating: ' + target.author_name + ' (Signal #' + target.id + ')');
 
+        let account = null;
+        let attempts = 0;
+        while (attempts < 5) {
+            const candidate = accountManager.getNextAccount({ forScraping: true });
+            if (!candidate) break;
+            if (!isAccountBlocked(candidate)) { account = candidate; break; }
+            attempts++;
+        }
+
+        if (!account) {
+            console.warn('[SIS Identity] ⚠️ No unblocked accounts.');
+            isProcessing = false;
+            return;
+        }
+
+        try {
+            browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
             const context = await getAuthContext(account, browser);
             const page = await context.newPage();
 
-            // ── HUNTING PHASE ──
             const resolved = await resolveProfile(page, target.author_profile_url);
 
-            // Detect checkpoint during profile scrape
             if (resolved && resolved.checkpoint) {
                 markAccountBlocked(account);
-                console.warn('[SIS Identity] 🚨 Checkpoint hit during profile scrape. Account blocked for 1h.');
-                try { await page.close(); } catch (e) { }
+                await page.close().catch(() => { });
                 isProcessing = false;
                 return;
             }
 
             if (resolved && resolved.ok) {
-                // 4. SYNTHESIS PHASE (Transaction)
                 database._db.transaction(() => {
-                    // a) Find/Create Account Card
                     let accId = database.findAccountByIdentity('fb_profile', target.author_profile_url);
                     if (!accId) {
-                        accId = database.insertAccount({
-                            brand_name: target.author_name || 'Anonymous Seller',
-                            status: 'lead'
-                        });
-                        database.insertIdentity({
-                            account_id: accId,
-                            type: 'fb_profile',
-                            value: target.author_profile_url,
-                            discovered_from: 'signal_scrape'
-                        });
+                        accId = database.insertAccount({ brand_name: target.author_name || 'Anonymous', status: 'lead' });
+                        database.insertIdentity({ account_id: accId, type: 'fb_profile', value: target.author_profile_url, discovered_from: 'signal_scrape' });
                     }
 
-                    // b) Save discovered clues
-                    const insertIden = function (type, val) {
-                        try {
-                            database.insertIdentity({
-                                account_id: accId,
-                                type: type,
-                                value: val,
-                                discovered_from: 'identity_worker'
-                            });
-                        } catch (e) {
-                            // Duplicate clue — ignore
-                        }
+                    const insertIden = (type, val) => {
+                        try { database.insertIdentity({ account_id: accId, type: type, value: val, discovered_from: 'identity_worker' }); } catch (e) { }
                     };
 
-                    var newClues = 0;
-                    (resolved.emails || []).forEach(function (e) { insertIden('email', e); newClues++; });
-                    (resolved.websites || []).forEach(function (w) { insertIden('website', w); newClues++; });
-                    (resolved.pages || []).forEach(function (p) { insertIden('fb_page', p); newClues++; });
-                    (resolved.phones || []).forEach(function (ph) { insertIden('phone', ph); newClues++; });
+                    let newClues = 0;
+                    (resolved.emails || []).forEach(e => { insertIden('email', e); newClues++; });
+                    (resolved.websites || []).forEach(w => { insertIden('website', w); newClues++; });
+                    (resolved.pages || []).forEach(p => { insertIden('fb_page', p); newClues++; });
+                    (resolved.phones || []).forEach(ph => { insertIden('phone', ph); newClues++; });
 
-                    // c) Update resolution score
-                    var websiteBonus = (resolved.websites && resolved.websites.length > 0) ? 30 : 0;
-                    var newConfidence = Math.min(100, target.resolution_confidence + (newClues * 15) + websiteBonus);
-                    var newLane = newConfidence >= 80 ? 'resolved_lead' : target.recommended_lane;
+                    let websiteBonus = (resolved.websites && resolved.websites.length > 0) ? 30 : 0;
+                    let newConfidence = Math.min(100, target.resolution_confidence + (newClues * 15) + websiteBonus);
+                    let newLane = newConfidence >= 80 ? 'resolved_lead' : target.recommended_lane;
 
-                    database._db.prepare(
-                        'UPDATE post_classifications SET resolution_confidence = ?, recommended_lane = ? WHERE id = ?'
-                    ).run(newConfidence, newLane, target.id);
-
-                    console.log(
-                        '[SIS Identity] ✅ Identity Updated: Confidence ' +
-                        target.resolution_confidence + ' -> ' + newConfidence +
-                        ' | Lane: ' + newLane
-                    );
-
-                    // d) Update Account primary domain if found
-                    if (resolved.websites && resolved.websites.length > 0) {
-                        database._db.prepare(
-                            'UPDATE accounts SET primary_domain = ? WHERE id = ? AND (primary_domain IS NULL OR primary_domain = "")'
-                        ).run(resolved.websites[0], accId);
-                    }
+                    database._db.prepare('UPDATE post_classifications SET resolution_confidence = ?, recommended_lane = ? WHERE id = ?').run(newConfidence, newLane, target.id);
+                    console.log('[SIS Identity] ✅ Updated Signal #' + target.id + ' | Conf: ' + newConfidence);
                 })();
+            } else {
+                console.warn('[SIS Identity] ⚠️ resolveProfile failed for Signal #' + target.id);
+                recordSignalFailure(target.id);
             }
-
-            // Close page cleanly
-            try { await page.close(); } catch (e) { }
+            await page.close().catch(() => { });
 
         } catch (innerErr) {
-            var msg = innerErr.message || '';
-
-            // Detect checkpoint/session errors from Playwright
-            var isCheckpoint = msg.includes('CHECKPOINT') ||
-                msg.includes('checkpoint') ||
-                msg.includes('Target page') ||
-                msg.includes('context') ||
-                msg.includes('browser') ||
-                msg.includes('cdpSession') ||
-                msg.includes('Session invalid') ||
-                msg.includes('Target closed');
-
-            if (isCheckpoint) {
+            const msg = innerErr.message || '';
+            if (msg.includes('CHECKPOINT') || msg.includes('Target closed') || msg.includes('cdpSession')) {
                 markAccountBlocked(account);
-                console.warn('[SIS Identity] 🚨 Session/Checkpoint error — account blocked: ' + msg);
             } else {
                 console.error('[SIS Identity] 💥 Task failed: ' + msg);
+                recordSignalFailure(target.id);
             }
         }
 
     } catch (outerErr) {
         console.error('[SIS Identity] ❌ Loop error: ' + outerErr.message);
     } finally {
-        // ✅ [FIX] Safe close — never throws, never deadlocks isProcessing
         await safeBrowserClose(browser);
         isProcessing = false;
     }
 }
 
-// ─── Start Worker ─────────────────────────────────────────────────────────────
-console.log('[SIS Identity] 🚀 SIS v2 Identity Worker Started. Polling every ' + (POLL_INTERVAL / 1000) + 's');
+console.log('[SIS Identity] Started. Polling 60s.');
 setInterval(runSISIdentityWorker, POLL_INTERVAL);
 runSISIdentityWorker();
