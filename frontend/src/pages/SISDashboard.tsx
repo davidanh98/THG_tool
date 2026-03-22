@@ -1,10 +1,12 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useSISStore } from '../store/sisStore'
 import type { SISSignal } from '../types/sis'
+import ClosingRoom from '../components/lead/ClosingRoom'
 import '../premium-row.css'
 
 export default function SISDashboard() {
     const { lanes, summary, activeTab, setActiveTab, loadLanes, loadSummary } = useSISStore()
+    const [closingSignal, setClosingSignal] = useState<SISSignal | null>(null)
 
     useEffect(() => {
         loadLanes()
@@ -69,10 +71,18 @@ export default function SISDashboard() {
                             <div className="empty-state-text">Chưa có tín hiệu trong danh mục này</div>
                         </div>
                     ) : (
-                        activeSignals.map(s => <SignalRow key={s.id} signal={s} />)
+                        activeSignals.map(s => <SignalRow key={s.id} signal={s} onOpenClosingRoom={() => setClosingSignal(s)} />)
                     )}
                 </div>
             </main>
+
+            {closingSignal && (
+                <div className="closing-room-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'var(--bg-main)', zIndex: 9999, overflowY: 'auto', padding: 'var(--space-xl)' }}>
+                    <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+                        <ClosingRoom signal={closingSignal} onClose={() => setClosingSignal(null)} />
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
@@ -86,7 +96,7 @@ function Tab({ label, icon, count, active, onClick, id }: { label: string; icon:
     )
 }
 
-function SignalRow({ signal }: { signal: SISSignal }) {
+function SignalRow({ signal, onOpenClosingRoom }: { signal: SISSignal, onOpenClosingRoom: () => void }) {
     const cls = signal.classification
     const card = signal.leadCard
     const { deleteSignal, activeTab } = useSISStore()
@@ -143,9 +153,18 @@ function SignalRow({ signal }: { signal: SISSignal }) {
             <div className="row-actions">
                 <button onClick={handleDelete} className="action-btn-danger" title="Xóa tín hiệu bị sai">🗑️ Xóa</button>
                 {signal.post_url && (
-                    <a href={signal.post_url} target="_blank" rel="noreferrer" className="action-btn" title="Xem chi tiết gốc">
-                        Chi tiết
+                    <a href={signal.post_url} target="_blank" rel="noreferrer" className="action-btn" title="Xem bài post gốc">
+                        📄 Post
                     </a>
+                )}
+                {card && (
+                    <button
+                        className="action-btn"
+                        style={{ background: 'var(--accent)', color: '#fff', border: 'none', fontWeight: 600, padding: '6px 16px' }}
+                        onClick={() => onOpenClosingRoom()}
+                    >
+                        🤝 P. Chốt Đơn
+                    </button>
                 )}
             </div>
         </div>

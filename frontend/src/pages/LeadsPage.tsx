@@ -27,7 +27,28 @@ export default function LeadsPage() {
     if (selectedLeadId) {
         const selectedLead = leads.find((l) => l.id === selectedLeadId)
         if (selectedLead) {
-            return <ClosingRoom lead={selectedLead} onClose={() => selectLead(null)} />
+            // Legacy mapper to SISSignal
+            const fakeSignal = {
+                id: selectedLead.id,
+                platform: selectedLead.platform || 'facebook',
+                author_name: selectedLead.author_name || 'Unknown',
+                author_url: selectedLead.author_url,
+                post_url: selectedLead.post_url || '',
+                content: selectedLead.content || '',
+                created_at: selectedLead.post_created_at || selectedLead.created_at,
+                classification: {
+                    pain_tags: Array.isArray(selectedLead.tags) ? selectedLead.tags : [],
+                    seller_likelihood: selectedLead.score || 0,
+                    pain_score: selectedLead.pain_score || 0,
+                    reason_summary: selectedLead.summary || ''
+                } as any,
+                leadCard: {
+                    suggested_opener: selectedLead.response_draft || selectedLead.suggested_response || '',
+                    strategic_summary: selectedLead.gap_opportunity || '',
+                    sales_priority_score: selectedLead.score || 0
+                } as any
+            } as any
+            return <ClosingRoom signal={fakeSignal} onClose={() => selectLead(null)} />
         }
     }
 

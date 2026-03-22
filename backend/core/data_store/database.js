@@ -454,7 +454,7 @@ const getAccountById = (id) => {
 };
 
 const insertAccount = (acc) => {
-  return db.prepare(`INSERT INTO accounts (brand_name, status) VALUES (?, ?)`).run(acc.brand_name, acc.status || 'lead').lastInsertRowid;
+  return db.prepare(`INSERT INTO accounts (brand_name, account_status) VALUES (?, ?)`).run(acc.brand_name, acc.status || acc.account_status || 'lead').lastInsertRowid;
 };
 
 const findAccountByIdentity = (type, value) => {

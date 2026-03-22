@@ -56,7 +56,7 @@ function recordSignalFailure(signalId) {
         try {
             database._db.prepare(
                 'UPDATE post_classifications SET resolution_confidence = 90, ' +
-                'reason_summary = COALESCE(reason_summary, "") || " [identity_worker: profile_unreachable]" ' +
+                "reason_summary = COALESCE(reason_summary, '') || ' [identity_worker: profile_unreachable]' " +
                 'WHERE id = ? AND resolution_confidence < 90'
             ).run(signalId);
             console.warn('[SIS Identity] 🚫 Signal #' + signalId + ' retired (unreachable).');

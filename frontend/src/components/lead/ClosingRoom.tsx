@@ -1,16 +1,13 @@
-import { useState, useEffect } from 'react'
-import type { Lead } from '../../types/lead'
-import { useLeadStore } from '../../store/leadStore'
-import { updateLead, sendFeedback, closeDeal } from '../../api/leads'
+import { useState } from 'react'
+import type { SISSignal } from '../../types/sis'
+import { useSISStore } from '../../store/sisStore'
 import ScoreBadge from '../ui/ScoreBadge'
-import StatusTag from '../ui/StatusTag'
 
 interface ClosingRoomProps {
-    lead: Lead
+    signal: SISSignal
     onClose: () => void
 }
 
-const STAFF = ['Trang', 'Min', 'Moon', 'Lê Huyền', 'Ngọc Huyền']
 const TEMPLATES: Record<string, Record<string, string>> = {
     quote: {
         friendly: 'Dạ chào bạn! Bên em hiện đang có dịch vụ phù hợp nè. Bạn có thể inbox em để được tư vấn chi tiết và báo giá tốt nhất nhé! 🎉',
@@ -24,7 +21,7 @@ const TEMPLATES: Record<string, Record<string, string>> = {
     },
 }
 
-const API = import.meta.env.VITE_API_URL || ''
+const STAFF = ['AI Copilot', 'Trang', 'Hậu', 'Vinh', 'David']
 
 function timeAgo(dateStr: string): string {
     if (!dateStr) return ''
@@ -38,117 +35,70 @@ function timeAgo(dateStr: string): string {
     return `📅 ${Math.floor(hours / 24)} ngày trước`
 }
 
-export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
-    const { updateLead: storeUpdate, removeLead } = useLeadStore()
+export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
+    const { deleteSignal, activeTab: currentModeTab } = useSISStore()
     const [activeTab, setActiveTab] = useState<'outreach' | 'response' | 'notes' | 'agent'>('outreach')
-    const [response, setResponse] = useState(lead.suggested_response || '')
-    const [notes, setNotes] = useState(lead.notes || '')
+
+    // Safety destructure
+    const cls = signal.classification || {} as any
+    const card = signal.leadCard || {} as any
+
+    const [response, setResponse] = useState(card.suggested_opener || '')
+    const [notes, setNotes] = useState('')
     const [feedbackText, setFeedbackText] = useState('')
     const [tone, setTone] = useState<'friendly' | 'professional' | 'concise'>('friendly')
     const [showDealModal, setShowDealModal] = useState(false)
 
     // ── Outreach state ──
-    // ── Outreach state ──
-    const [outreachMsg, setOutreachMsg] = useState('')
+    const [outreachMsg, setOutreachMsg] = useState(card.suggested_opener || '')
     const [outreachTone, setOutreachTone] = useState<'friendly' | 'professional' | 'urgent'>('friendly')
     const [outreachType, setOutreachType] = useState<'dm' | 'comment'>('dm')
     const [outreachStaff, setOutreachStaff] = useState(STAFF[0])
-    const [outreachLoading, setOutreachLoading] = useState(false)
-    const [outreachHistory, setOutreachHistory] = useState<any[]>([])
+    const [outreachLoading] = useState(false)
+    const [outreachHistory] = useState<any[]>([])
     const [copySuccess, setCopySuccess] = useState(false)
-    const [pipelineStage, setPipelineStage] = useState((lead as any).pipeline_stage || 'new')
+    const [pipelineStage, setPipelineStage] = useState('new')
 
-    // Initialize outreach message with pre-generated draft if it exists
-    useEffect(() => {
-        if (lead.response_draft && !outreachMsg) {
-            setOutreachMsg(lead.response_draft)
-        }
-    }, [lead.response_draft])
-
-    const claimedArr = (lead.claimed_by || lead.assigned_to || '').split(',').map((s) => s.trim()).filter(Boolean)
-    const postDate = lead.post_created_at || lead.scraped_at || lead.created_at
-    const score = lead.score || 0
+    const claimedArr: string[] = [] // Stubbed for now
+    const postDate = signal.created_at || new Date().toISOString()
+    const score = card.sales_priority_score || cls.seller_likelihood || 0
     const hotColor = score >= 80 ? 'var(--hot)' : score >= 60 ? 'var(--warm)' : 'var(--cold)'
 
-    // ── Load outreach history on mount ──
-    useEffect(() => {
-        fetch(`${API}/api/leads/${lead.id}/outreach-history`)
-            .then(r => r.json())
-            .then(d => { if (d.ok) setOutreachHistory(d.data || []) })
-            .catch(() => { })
-    }, [lead.id])
-
-    // ── Outreach handlers ──
+    // ── Outreach handlers (Stubbed for v2) ──
     const handleGenerateOutreach = async () => {
-        setOutreachLoading(true)
-        try {
-            const res = await fetch(`${API}/api/leads/${lead.id}/generate-outreach`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
-                body: JSON.stringify({ staffName: outreachStaff, tone: outreachTone, type: outreachType }),
-            })
-            const data = await res.json()
-            if (data.ok) {
-                setOutreachMsg(data.data.message)
-            } else {
-                alert('Lỗi: ' + (data.error || 'Unknown'))
-            }
-        } catch (e: any) {
-            alert('Lỗi: ' + e.message)
-        } finally {
-            setOutreachLoading(false)
-        }
+        alert('Tính năng Outreach tự động qua API cũ tạm tắt trong bản cập nhật SIS v2. Vui lòng dùng tin nhắn Copilot Draft.')
     }
 
     const handleCopyOutreach = () => {
-        navigator.clipboard.writeText(outreachMsg)
+        navigator.clipboard.writeText(outreachMsg || '')
         setCopySuccess(true)
         setTimeout(() => setCopySuccess(false), 2000)
     }
 
     const handleMarkSent = async () => {
-        if (!outreachMsg) return
-        try {
-            await fetch(`${API}/api/leads/${lead.id}/log-outreach`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
-                body: JSON.stringify({ staffName: outreachStaff, channel: outreachType === 'comment' ? 'comment' : 'messenger', message: outreachMsg }),
-            })
-            setPipelineStage('contacted')
-            storeUpdate(lead.id, { status: 'contacted' } as Partial<Lead>)
-            // Refresh history
-            const histRes = await fetch(`${API}/api/leads/${lead.id}/outreach-history`)
-            const histData = await histRes.json()
-            if (histData.ok) setOutreachHistory(histData.data || [])
-        } catch { }
+        setPipelineStage('contacted')
+        alert('Đã ghi nhận Pipeline: Contacted (Chạy offline mode)')
     }
 
     const handleOpenProfile = () => {
-        if (lead.author_url) window.open(lead.author_url, '_blank')
+        if (signal.author_url) window.open(signal.author_url, '_blank')
     }
 
     const handleOpenPost = () => {
-        if (lead.post_url) window.open(lead.post_url, '_blank')
+        if (signal.post_url) window.open(signal.post_url, '_blank')
     }
 
-    const handleClaim = async (name: string) => {
-        const isActive = claimedArr.includes(name)
-        const newArr = isActive ? claimedArr.filter((s) => s !== name) : [...claimedArr, name]
-        await updateLead(lead.id, {
-            claimed_by: newArr.join(','),
-            action_staff: name,
-        } as unknown as Partial<Lead>)
-        storeUpdate(lead.id, { claimed_by: newArr.join(',') })
+    const handleClaim = async (_name: string) => {
+        alert('Claim account tạm tắt cho v2. Đang chờ Data Model mới.')
     }
 
     const handleStatus = async (status: string) => {
-        await updateLead(lead.id, { status } as Partial<Lead>)
-        storeUpdate(lead.id, { status } as Partial<Lead>)
+        setPipelineStage(status)
     }
 
     const handleDelete = async () => {
-        if (confirm('Xóa lead này?')) {
-            await removeLead(lead.id)
+        if (confirm('Xóa lead này vĩnh viễn khỏi SIS v2?')) {
+            deleteSignal(currentModeTab, signal.id)
             onClose()
         }
     }
@@ -158,22 +108,13 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
         if (tmpl?.[tone]) setResponse(tmpl[tone])
     }
 
-    const handleSaveResponse = async () => {
-        await updateLead(lead.id, { suggested_response: response } as Partial<Lead>)
-    }
-
-    const handleSaveNotes = async () => {
-        await updateLead(lead.id, { notes } as Partial<Lead>)
-    }
-
-    const handleFeedback = async (type: string, correctRole?: string, note?: string) => {
-        await sendFeedback(lead.id, { type, correct_role: correctRole, note: note || feedbackText })
-        setFeedbackText('')
-    }
+    const handleSaveResponse = async () => { }
+    const handleSaveNotes = async () => { }
+    const handleFeedback = async (_type: string, _correctRole?: string, _note?: string) => { }
 
     // Clean content for display
-    let rawContent = lead.content || '—'
-    if (lead.platform === 'facebook') {
+    let rawContent = signal.content || '—'
+    if (signal.platform === 'facebook') {
         rawContent = rawContent.replace(/(Facebook\n)+/gi, '')
         const stops = ['Like\nComment', 'Thích\nBình luận', 'Tất cả cảm xúc:', 'All reactions:']
         for (const s of stops) {
@@ -198,7 +139,7 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
                 <button className="btn btn-secondary btn-sm" onClick={onClose}>← Quay lại</button>
                 <span style={{ color: 'var(--text-muted)' }}>Leads</span>
                 <span style={{ color: 'var(--text-muted)' }}>›</span>
-                <span style={{ fontWeight: 600 }}>{lead.author_name}</span>
+                <span style={{ fontWeight: 600 }}>{signal.author_name}</span>
                 <span style={{ marginLeft: 'auto', fontWeight: 700, color: 'var(--accent)' }}>🎯 The Closing Room</span>
             </div>
 
@@ -235,24 +176,24 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
                             <div style={{ fontSize: '2rem' }}>👤</div>
                             <div>
                                 <div style={{ fontWeight: 700 }}>
-                                    {lead.author_url ? (
-                                        <a href={lead.author_url} target="_blank" rel="noopener noreferrer">{lead.author_name}</a>
-                                    ) : lead.author_name}
+                                    {signal.author_url ? (
+                                        <a href={signal.author_url} target="_blank" rel="noopener noreferrer">{signal.author_name}</a>
+                                    ) : signal.author_name}
                                 </div>
                                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }}>
-                                    <span>📘 {lead.platform}</span>
+                                    <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>📘 {signal.platform}</span>
                                     <span>·</span>
                                     <span>{timeAgo(postDate)}</span>
                                 </div>
                             </div>
                             {/* Quick profile/post links */}
                             <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                                {lead.author_url && (
+                                {signal.author_url && (
                                     <button className="btn btn-secondary btn-sm" onClick={handleOpenProfile} title="Mở profile Facebook">
                                         👤 Profile
                                     </button>
                                 )}
-                                {lead.post_url && (
+                                {signal.post_url && (
                                     <button className="btn btn-secondary btn-sm" onClick={handleOpenPost} title="Mở bài post gốc">
                                         📄 Post
                                     </button>
@@ -260,15 +201,9 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
                             </div>
                         </div>
                         <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
-                            <StatusTag status={lead.status || 'new'} />
-                            {lead.urgency === 'critical' && <span className="status-tag status-tag--ignored">🚨 Critical</span>}
-                            {lead.urgency === 'high' && <span className="status-tag status-tag--contacted">⚡ Cần gấp</span>}
+                            <span className="status-tag" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>{pipelineStage.toUpperCase()}</span>
                             {/* Display Pain Tags */}
-                            {Array.isArray(lead.tags) ? lead.tags.map((tag, i) => (
-                                <span key={i} className="status-tag" style={{ background: 'var(--bg-secondary)', color: 'var(--warning)', borderColor: 'var(--warning)' }}>
-                                    {tag}
-                                </span>
-                            )) : lead.tags && typeof lead.tags === 'string' && lead.tags.startsWith('[') ? JSON.parse(lead.tags).map((tag: string, i: number) => (
+                            {cls.pain_tags && Array.isArray(cls.pain_tags) ? cls.pain_tags.map((tag: string, i: number) => (
                                 <span key={i} className="status-tag" style={{ background: 'var(--bg-secondary)', color: 'var(--warning)', borderColor: 'var(--warning)' }}>
                                     {tag}
                                 </span>
@@ -285,78 +220,42 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
                     </div>
 
                     {/* AI Analysis */}
-                    {(lead.summary || lead.gap_opportunity || lead.response_draft) && (
-                        <div className="card" style={{ border: lead.response_draft ? '1px solid var(--accent)' : undefined }}>
+                    {(cls.reason_summary || card.strategic_summary || card.suggested_opener) && (
+                        <div className="card" style={{ border: card.suggested_opener ? '1px solid var(--accent)' : undefined }}>
                             <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>🧠 AI Analysis</span>
-                                {lead.response_draft && <span style={{ fontSize: '0.6rem', background: 'var(--accent)', color: '#fff', padding: '2px 6px', borderRadius: 4 }}>COPILOT READY</span>}
+                                <span>🧠 AI Analysis (SIS v2)</span>
+                                {card.suggested_opener && <span style={{ fontSize: '0.6rem', background: 'var(--accent)', color: '#fff', padding: '2px 6px', borderRadius: 4 }}>COPILOT READY</span>}
                             </div>
-                            {lead.response_draft && (
+                            {card.suggested_opener && (
                                 <div style={{ marginBottom: 'var(--space-md)', background: 'rgba(99, 102, 241, 0.05)', padding: '10px', borderRadius: '8px', border: '1px dashed var(--accent)' }}>
                                     <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--accent)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        🚀 SALES COPILOT DRAFT
+                                        🚀 BẢN NHÁP SALES (SUGGESTED OPENER)
                                     </div>
                                     <div style={{ fontSize: 'var(--text-sm)', whiteSpace: 'pre-wrap', color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                                        {lead.response_draft}
+                                        {card.suggested_opener}
                                     </div>
                                 </div>
                             )}
-                            {lead.summary && (
+                            {cls.reason_summary && (
                                 <div style={{ marginBottom: 'var(--space-md)' }}>
-                                    <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>💡 Tóm tắt</div>
-                                    <div style={{ fontSize: 'var(--text-sm)' }}>{lead.summary}</div>
+                                    <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>💡 Tóm tắt Signal</div>
+                                    <div style={{ fontSize: 'var(--text-sm)' }}>{cls.reason_summary}</div>
                                 </div>
                             )}
-                            {lead.gap_opportunity && (
+                            {card.strategic_summary && (
                                 <div>
-                                    <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>🔍 Cơ hội (Gap)</div>
-                                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)' }}>{lead.gap_opportunity}</div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Business Identity */}
-                    {lead.account && (
-                        <div className="card" style={{ border: '1px solid var(--success-subtle)' }}>
-                            <div className="card-title" style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                🏢 Business Identity
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
-                                <div>
-                                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Brand Name</div>
-                                    <div style={{ fontWeight: 600 }}>{lead.account.brand_name}</div>
-                                </div>
-                                {lead.account.primary_domain && (
-                                    <div>
-                                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Website</div>
-                                        <a href={lead.account.primary_domain} target="_blank" rel="noopener noreferrer" style={{ fontSize: 'var(--text-sm)', color: 'var(--link)', textDecoration: 'none' }}>
-                                            🌐 {lead.account.primary_domain.replace(/^https?:\/\//, '')}
-                                        </a>
-                                    </div>
-                                )}
-                            </div>
-
-                            {lead.account.identities && lead.account.identities.length > 0 && (
-                                <div style={{ marginTop: 'var(--space-md)', paddingTop: 'var(--space-md)', borderTop: '1px solid var(--border)' }}>
-                                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 8 }}>Discovered Assets</div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                        {lead.account.identities.map((id, i) => (
-                                            <div key={i} style={{ fontSize: 'var(--text-sm)', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-primary)' }}>
-                                                {id.type === 'fb_page' && <span title="Facebook Page">📘</span>}
-                                                {id.type === 'email' && <span title="Email">📧</span>}
-                                                {id.type === 'phone' && <span title="Phone">📞</span>}
-                                                {id.type === 'website' && <span title="Website">🌐</span>}
-                                                {id.type === 'fb_page' ? (
-                                                    <a href={id.value} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--link)', textDecoration: 'none' }}>Fanpage</a>
-                                                ) : <span>{id.value}</span>}
-                                            </div>
-                                        ))}
+                                    <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>🔍 Cơ hội cốt lõi & Hành động</div>
+                                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)' }}>
+                                        {card.strategic_summary}<br /><br />
+                                        <strong>Next action:</strong> {card.next_best_action}<br />
+                                        <strong>Objection prevention:</strong> {card.objection_prevention}
                                     </div>
                                 </div>
                             )}
                         </div>
                     )}
+
+
 
                     {/* Tabs: Outreach / Response / Notes / Agent */}
                     <div className="card">
@@ -468,12 +367,12 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
                                             >
                                                 {copySuccess ? '✅ Đã copy!' : '📋 Copy tin nhắn'}
                                             </button>
-                                            {lead.author_url && (
+                                            {signal.author_url && (
                                                 <button className="btn btn-secondary btn-sm" onClick={() => { handleCopyOutreach(); handleOpenProfile() }}>
                                                     📤 Copy & Mở Profile
                                                 </button>
                                             )}
-                                            {lead.post_url && outreachType === 'comment' && (
+                                            {signal.post_url && outreachType === 'comment' && (
                                                 <button className="btn btn-secondary btn-sm" onClick={() => { handleCopyOutreach(); handleOpenPost() }}>
                                                     💭 Copy & Mở Post
                                                 </button>
@@ -592,17 +491,16 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
                             </div>
                             <div style={{ fontSize: 'var(--text-xs)', color: hotColor, marginTop: 4, fontWeight: 600 }}>Lead Score</div>
                         </div>
-                        {lead.pain_score > 0 && <div style={{ fontSize: 'var(--text-xs)', marginTop: 8, color: 'var(--warning)' }}>⚡ Pain: {lead.pain_score}</div>}
-                        {lead.spam_score > 0 && <div style={{ fontSize: 'var(--text-xs)', color: 'var(--danger)' }}>🚨 Spam: {lead.spam_score}</div>}
+                        {cls.pain_score > 0 && <div style={{ fontSize: 'var(--text-xs)', marginTop: 8, color: 'var(--warning)' }}>⚡ Pain: {cls.pain_score}</div>}
                     </div>
 
                     {/* Quick Actions */}
                     <div className="card">
                         <div className="card-title">⚡ Quick Actions</div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                            <button className={`btn btn-sm ${lead.status === 'contacted' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => handleStatus('contacted')}>📞 Contacted</button>
-                            <button className={`btn btn-sm ${lead.status === 'converted' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => handleStatus('converted')}>✅ Converted</button>
-                            <button className={`btn btn-sm ${lead.status === 'ignored' ? 'btn-danger' : 'btn-secondary'}`} onClick={() => handleStatus('ignored')}>⛔ Ignore</button>
+                            <button className={`btn btn-sm ${pipelineStage === 'contacted' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => handleStatus('contacted')}>📞 Contacted</button>
+                            <button className={`btn btn-sm ${pipelineStage === 'converted' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => handleStatus('won')}>✅ Converted</button>
+                            <button className={`btn btn-sm ${pipelineStage === 'ignored' ? 'btn-danger' : 'btn-secondary'}`} onClick={() => handleStatus('lost')}>⛔ Lost / Ignore</button>
                             <button className="btn btn-sm btn-danger" onClick={handleDelete}>🗑️ Delete</button>
                         </div>
                     </div>
@@ -610,15 +508,9 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
                     {/* Deal */}
                     <div className="card">
                         <div className="card-title">🏆 Deal</div>
-                        {lead.winner_staff ? (
-                            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--success)', fontWeight: 600 }}>
-                                🏆 {lead.winner_staff} đã chốt — ${lead.deal_value || 0}
-                            </div>
-                        ) : (
-                            <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => setShowDealModal(true)}>
-                                🏆 BÁO CÁO CHỐT ĐƠN
-                            </button>
-                        )}
+                        <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => setShowDealModal(true)}>
+                            🏆 BÁO CÁO CHỐT ĐƠN
+                        </button>
                     </div>
 
                     {/* Staff */}
@@ -647,11 +539,11 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
 
                     {/* Lead Info */}
                     <div className="card">
-                        <div className="card-title">📋 Lead Info</div>
+                        <div className="card-title">📋 Signal Info (SIS)</div>
                         <div style={{ fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>ID</span><span>#{lead.id}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Platform</span><span>{lead.platform}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Urgency</span><span>{lead.urgency || '—'}</span></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>ID</span><span>#{signal.id}</span></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Platform</span><span>{signal.platform}</span></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Urgency</span><span>{cls.contactability_score > 70 ? 'High' : 'Normal'}</span></div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Time</span><span>{timeAgo(postDate)}</span></div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Pipeline</span><span style={{ fontWeight: 600 }}>{pipelineStage.toUpperCase()}</span></div>
                         </div>
@@ -661,8 +553,8 @@ export default function ClosingRoom({ lead, onClose }: ClosingRoomProps) {
 
             {/* Deal Modal */}
             {showDealModal && (
-                <DealModal leadId={lead.id} onClose={() => setShowDealModal(false)} onDone={(staff, value) => {
-                    storeUpdate(lead.id, { winner_staff: staff, deal_value: value, status: 'converted' })
+                <DealModal leadId={signal.id} onClose={() => setShowDealModal(false)} onDone={() => {
+                    handleStatus('won')
                     setShowDealModal(false)
                 }} />
             )}
@@ -676,7 +568,7 @@ function DealModal({ leadId, onClose, onDone }: { leadId: number; onClose: () =>
 
     const handleSubmit = async () => {
         if (!staff) return
-        await closeDeal(leadId, { winner_staff: staff, deal_value: value })
+        alert(`Tính năng report Deal lên cloud đang chờ Backend v2 Update. ID: ${leadId}`)
         onDone(staff, value)
     }
 
