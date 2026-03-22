@@ -4,6 +4,10 @@
  * Pipeline: Playwright Stealth → mbasic.facebook.com → FB session cookie → posts
  *
  * SociaVault removed (credits exhausted). This is now the sole scraping engine.
+ *
+ * [FIX v2.5] RAM Guard: MAX_CONCURRENT_ACCOUNTS = 2
+ *   Server có 3.8GB RAM, 4 browser song song = OOM Kill.
+ *   Giới hạn 2 browser đồng thời = ~800MB browser RAM, an toàn cho toàn hệ thống.
  */
 
 const config = require('../../config');
@@ -11,6 +15,11 @@ const fbScraper = require('../scraper');
 const { contentHash } = require('../../../ai/agents/memoryStore');
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+// ── RAM Guard — số browser chạy song song tối đa ─────────────────────────────
+// 3.8GB total, api+ai+identity ~600MB → còn ~3.2GB cho scraper
+// Mỗi Playwright browser ~400-500MB → tối đa 2 browser song song để có buffer
+const MAX_CONCURRENT_ACCOUNTS = 2;
 
 // ── Dedup — compound key to prevent storing duplicates ────────────────────────
 function dedup(posts) {
@@ -49,7 +58,11 @@ async function scrapeFacebook(_keywords, maxPosts = 30, options = {}) {
             console.warn('[Scraper:FB] ⚠️ GroupDB failed, using config fallback');
         }
 
-        const posts = await fbScraper.scrapeFacebookGroups(maxPosts, options, groups);
+        // [FIX] Pass maxConcurrentAccounts to fbScraper to cap browser count
+        const posts = await fbScraper.scrapeFacebookGroups(maxPosts, {
+            ...options,
+            maxConcurrentAccounts: MAX_CONCURRENT_ACCOUNTS,
+        }, groups);
         const deduped = dedup(posts);
         console.log(`[Scraper:FB] ✅ ${deduped.length} posts (before dedup: ${posts.length})`);
         return deduped;
@@ -87,6 +100,7 @@ async function runFullScan(options = {}) {
     console.log(`\n${'═'.repeat(55)}`);
     console.log(`  🤖 THG Self-Hosted Scraper — Playwright Engine`);
     console.log(`  📊 Platforms: ${platforms.join(', ')} | Max: ${maxPerPlatform}/platform`);
+    console.log(`  🛡️  RAM Guard: max ${MAX_CONCURRENT_ACCOUNTS} browsers concurrent`);
     console.log(`${'═'.repeat(55)}\n`);
 
     const results = {};

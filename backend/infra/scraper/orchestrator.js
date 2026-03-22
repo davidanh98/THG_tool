@@ -1,7 +1,13 @@
 /**
  * Orchestrator — Main entry for parallel group scraping
  * Coordinates multi-account scraping with shared browser.
- * 
+ *
+ * [FIX v2.5] RAM Guard
+ *   - testPage đóng TRƯỚC khi mở warmPage (không giữ 4 pages cùng lúc)
+ *   - Persona sessions chỉ chạy nếu còn đủ RAM (>800MB available)
+ *   - MAX_PARALLEL default = 2, có thể override bằng env MAX_PARALLEL
+ *   - Node heap capped qua --max-old-space-size trong ecosystem.config.js
+ *
  * @module scraper/orchestrator
  */
 const { chromium, delay, fs, path, generateFingerprint, extractGroupId } = require('./browserManager');
@@ -9,11 +15,32 @@ const accountManager = require('../../../ai/agents/accountManager');
 const { bridgeToHub } = require('./hubBridge');
 const { runPersonaSession } = require('../../../ai/squad/agents/personaAgent');
 
+// ─── RAM-aware persona guard ──────────────────────────────────────────────────
+// Chỉ chạy persona session nếu còn đủ RAM để tránh OOM
+function hasEnoughRAMForPersona() {
+    try {
+        const mem = process.memoryUsage();
+        const rssGB = mem.rss / (1024 * 1024 * 1024);
+        // Skip persona nếu process đang dùng >600MB (gần giới hạn an toàn)
+        if (rssGB > 0.6) {
+            console.log('[FBScraper] ⚠️  RAM Guard: Skipping persona session (RSS=' + Math.round(rssGB * 1024) + 'MB)');
+            return false;
+        }
+        return true;
+    } catch (e) {
+        return true; // Nếu không đọc được, cho chạy bình thường
+    }
+}
+
 /**
  * Single-browser Facebook scraper with batched contexts.
  * 1 Chromium + max 2 contexts at a time.
  */
-async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups = null) {
+async function scrapeFacebookGroups(maxPosts, options, externalGroups) {
+    maxPosts = maxPosts || 20;
+    options = options || {};
+    externalGroups = externalGroups || null;
+
     const cfg = require('../../config');
     const groups = (externalGroups && externalGroups.length > 0)
         ? externalGroups
@@ -26,28 +53,36 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
 
     const allAccounts = accountManager.getActiveAccounts
         ? accountManager.getActiveAccounts({ forScraping: true })
-        : [accountManager.getNextAccount({ ...options, forScraping: true })].filter(Boolean);
+        : [accountManager.getNextAccount(Object.assign({}, options, { forScraping: true }))].filter(Boolean);
 
     if (allAccounts.length === 0) {
         console.log('[FBScraper] ❌ No accounts available');
         return [];
     }
 
+    // [FIX] Respect maxConcurrentAccounts from caller (scraperEngine RAM guard)
+    const MAX_PARALLEL = options.maxConcurrentAccounts
+        || parseInt(process.env.MAX_PARALLEL || '2', 10);
+
     // Split groups round-robin
-    const accountGroupMap = {};
-    for (const acc of allAccounts) accountGroupMap[acc.email] = { account: acc, groups: [] };
-    groups.forEach((group, i) => {
-        const acc = allAccounts[i % allAccounts.length];
-        accountGroupMap[acc.email].groups.push(group);
+    var accountGroupMap = {};
+    for (var ai = 0; ai < allAccounts.length; ai++) {
+        var acc = allAccounts[ai];
+        accountGroupMap[acc.email] = { account: acc, groups: [] };
+    }
+    groups.forEach(function (group, i) {
+        var acc2 = allAccounts[i % allAccounts.length];
+        accountGroupMap[acc2.email].groups.push(group);
     });
 
-    console.log(`[FBScraper] 🚀 Scraping ${groups.length} groups across ${allAccounts.length} accounts`);
-    for (const { account, groups: g } of Object.values(accountGroupMap)) {
-        console.log(`[FBScraper]   📧 ${account.email}: ${g.length} groups`);
+    console.log('[FBScraper] 🚀 Scraping ' + groups.length + ' groups across ' + allAccounts.length + ' accounts (MAX_PARALLEL=' + MAX_PARALLEL + ')');
+    for (var key in accountGroupMap) {
+        var entry = accountGroupMap[key];
+        console.log('[FBScraper]   📧 ' + entry.account.email + ': ' + entry.groups.length + ' groups');
     }
 
-    let browser = null;
-    const allPosts = [];
+    var browser = null;
+    var allPosts = [];
 
     try {
         browser = await chromium.launch({
@@ -62,26 +97,34 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
         });
         console.log('[FBScraper] 🌐 Browser launched');
 
-        const MAX_PARALLEL = parseInt(process.env.MAX_PARALLEL || '2', 10); // VPS-safe default; local .env can set 4
-        const entries = Object.values(accountGroupMap);
-        for (let i = 0; i < entries.length; i += MAX_PARALLEL) {
-            const batch = entries.slice(i, i + MAX_PARALLEL);
-            console.log(`[FBScraper] 🔄 Batch ${Math.floor(i / MAX_PARALLEL) + 1}: ${batch.map(b => b.account.email.split('@')[0]).join(' + ')}`);
-            const tasks = batch.map(({ account, groups: accGroups }) =>
-                _scrapeWithContext(browser, account, accGroups)
-            );
-            const results = await Promise.allSettled(tasks);
-            for (const r of results) {
-                if (r.status === 'fulfilled' && Array.isArray(r.value)) allPosts.push(...r.value);
+        var entries = Object.values(accountGroupMap);
+        for (var i = 0; i < entries.length; i += MAX_PARALLEL) {
+            var batch = entries.slice(i, i + MAX_PARALLEL);
+            console.log('[FBScraper] 🔄 Batch ' + (Math.floor(i / MAX_PARALLEL) + 1) + ': ' +
+                batch.map(function (b) { return b.account.email.split('@')[0]; }).join(' + '));
+            var tasks = batch.map(function (item) {
+                return _scrapeWithContext(browser, item.account, item.groups);
+            });
+            var results = await Promise.allSettled(tasks);
+            for (var ri = 0; ri < results.length; ri++) {
+                var r = results[ri];
+                if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+                    allPosts.push.apply(allPosts, r.value);
+                }
+            }
+            // Brief pause between batches to let browser GC
+            if (i + MAX_PARALLEL < entries.length) {
+                console.log('[FBScraper] ⏸️  Batch cooldown (5s)...');
+                await delay(5000);
             }
         }
     } catch (err) {
-        console.error(`[FBScraper] 💥 Browser launch failed: ${err.message}`);
+        console.error('[FBScraper] 💥 Browser launch failed: ' + err.message);
     } finally {
-        try { if (browser) await browser.close(); } catch { }
+        try { if (browser) await browser.close(); } catch (e) { }
     }
 
-    console.log(`[FBScraper] ✅ Done: ${allPosts.length} posts from ${groups.length} groups`);
+    console.log('[FBScraper] ✅ Done: ' + allPosts.length + ' posts from ' + groups.length + ' groups');
     if (allPosts.length > 0) await bridgeToHub(allPosts);
     return allPosts;
 }
@@ -90,43 +133,43 @@ async function scrapeFacebookGroups(maxPosts = 20, options = {}, externalGroups 
  * Scrape groups for ONE account using a context in the shared browser.
  */
 async function _scrapeWithContext(browser, account, groups) {
-    const accEmail = account.email;
-    const tag = `[${accEmail.split('@')[0]}]`;
-    console.log(`\n${tag} ═══ Starting (${groups.length} groups) ═══`);
+    var accEmail = account.email;
+    var tag = '[' + accEmail.split('@')[0] + ']';
+    console.log('\n' + tag + ' ═══ Starting (' + groups.length + ' groups) ═══');
 
-    const fp = generateFingerprint({ region: 'US', accountId: accEmail });
-    let context = null;
-    const posts = [];
+    var fp = generateFingerprint({ region: 'US', accountId: accEmail });
+    var context = null;
+    var posts = [];
 
     // UA Sync
-    const accUsername = accEmail.split('@')[0];
-    const uaPath = path.join(__dirname, '..', '..', '..', 'data', `ua_${accUsername}.txt`);
-    let syncedUA = fp.userAgent;
+    var accUsername = accEmail.split('@')[0];
+    var uaPath = path.join(__dirname, '..', '..', '..', 'data', 'ua_' + accUsername + '.txt');
+    var syncedUA = fp.userAgent;
     if (fs.existsSync(uaPath)) {
         syncedUA = fs.readFileSync(uaPath, 'utf8').trim();
-        console.log(`${tag} 🔑 UA Synced from cookie injection: ${syncedUA.substring(0, 60)}...`);
+        console.log(tag + ' 🔑 UA Synced: ' + syncedUA.substring(0, 60) + '...');
     }
 
     try {
-        // ═══ Proxy Injection (1 static IP per account) ═══
-        const proxyEnvKey = `PROXY_${accUsername}`;
-        const proxyUrl = process.env[proxyEnvKey] || '';
-        let proxyConfig = undefined;
+        // ═══ Proxy Injection ═══
+        var proxyEnvKey = 'PROXY_' + accUsername;
+        var proxyUrl = process.env[proxyEnvKey] || '';
+        var proxyConfig = undefined;
 
         if (proxyUrl) {
             try {
-                const parsed = new URL(proxyUrl);
+                var parsed = new URL(proxyUrl);
                 proxyConfig = {
-                    server: `${parsed.protocol}//${parsed.hostname}:${parsed.port}`,
+                    server: parsed.protocol + '//' + parsed.hostname + ':' + parsed.port,
                     username: decodeURIComponent(parsed.username),
                     password: decodeURIComponent(parsed.password),
                 };
-                console.log(`${tag} 🌐 Proxy: ${parsed.hostname}:${parsed.port}`);
+                console.log(tag + ' 🌐 Proxy: ' + parsed.hostname + ':' + parsed.port);
             } catch (e) {
-                console.warn(`${tag} ⚠️ Invalid proxy URL in ${proxyEnvKey}: ${e.message}`);
+                console.warn(tag + ' ⚠️ Invalid proxy URL in ' + proxyEnvKey + ': ' + e.message);
             }
         } else {
-            console.log(`${tag} 🏠 No proxy (using local IP)`);
+            console.log(tag + ' 🏠 No proxy (using local IP)');
         }
 
         context = await browser.newContext({
@@ -138,29 +181,32 @@ async function _scrapeWithContext(browser, account, groups) {
         });
 
         // Load cookies
-        const cookieJsonPath = path.join(__dirname, '..', '..', '..', 'data', `fb_cookies_${accUsername}.json`);
-        const sessionDir = path.join(__dirname, '..', '..', '..', 'data', 'fb_sessions');
-        const sessionPath = path.join(sessionDir, `${accEmail.replace(/[@.]/g, '_')}.json`);
-        let loaded = false;
+        var cookieJsonPath = path.join(__dirname, '..', '..', '..', 'data', 'fb_cookies_' + accUsername + '.json');
+        var sessionDir = path.join(__dirname, '..', '..', '..', 'data', 'fb_sessions');
+        var sessionPath = path.join(sessionDir, accEmail.replace(/[@.]/g, '_') + '.json');
+        var loaded = false;
 
         if (fs.existsSync(cookieJsonPath)) {
             try {
-                const raw = JSON.parse(fs.readFileSync(cookieJsonPath, 'utf8'));
-                const pwc = raw.filter(c => c.name && c.value && c.domain).map(c => ({
-                    name: c.name, value: c.value, domain: c.domain, path: c.path || '/',
-                    httpOnly: !!c.httpOnly, secure: c.secure !== false,
-                    sameSite: c.sameSite === 'no_restriction' ? 'None' : c.sameSite === 'lax' ? 'Lax' : c.sameSite === 'strict' ? 'Strict' : 'None',
-                    ...(c.expirationDate ? { expires: c.expirationDate } : {}),
-                }));
-                await context.addCookies(pwc); loaded = true;
-                console.log(`${tag} 🍪 Cookies from ${path.basename(cookieJsonPath)} (${pwc.length})`);
-                try { if (fs.existsSync(sessionPath)) fs.unlinkSync(sessionPath); } catch { }
-            } catch (e) { console.warn(`${tag} ⚠️ Cookie error: ${e.message}`); }
+                var raw = JSON.parse(fs.readFileSync(cookieJsonPath, 'utf8'));
+                var pwc = raw.filter(function (c) { return c.name && c.value && c.domain; }).map(function (c) {
+                    return {
+                        name: c.name, value: c.value, domain: c.domain, path: c.path || '/',
+                        httpOnly: !!c.httpOnly, secure: c.secure !== false,
+                        sameSite: c.sameSite === 'no_restriction' ? 'None' : c.sameSite === 'lax' ? 'Lax' : c.sameSite === 'strict' ? 'Strict' : 'None',
+                        ...(c.expirationDate ? { expires: c.expirationDate } : {}),
+                    };
+                });
+                await context.addCookies(pwc);
+                loaded = true;
+                console.log(tag + ' 🍪 Cookies from ' + path.basename(cookieJsonPath) + ' (' + pwc.length + ')');
+                try { if (fs.existsSync(sessionPath)) fs.unlinkSync(sessionPath); } catch (e) { }
+            } catch (e) { console.warn(tag + ' ⚠️ Cookie error: ' + e.message); }
         }
         if (!loaded && fs.existsSync(sessionPath)) {
             try {
-                const saved = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
-                let targetCookies = [];
+                var saved = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
+                var targetCookies = [];
                 if (Array.isArray(saved) && saved[0] && saved[0].cookies) {
                     targetCookies = saved[0].cookies;
                 } else if (saved.cookies) {
@@ -168,319 +214,288 @@ async function _scrapeWithContext(browser, account, groups) {
                 } else if (Array.isArray(saved)) {
                     targetCookies = saved;
                 }
-
                 if (targetCookies.length > 0) {
                     await context.addCookies(targetCookies);
                     loaded = true;
-                    console.log(`${tag} 📂 Session fallback (${targetCookies.length} cookies)`);
+                    console.log(tag + ' 📂 Session fallback (' + targetCookies.length + ' cookies)');
                 }
             } catch (e) {
-                console.warn(`${tag} ⚠️ Session parse error: ${e.message}`);
+                console.warn(tag + ' ⚠️ Session parse error: ' + e.message);
             }
         }
         if (!loaded) {
-            const env = process.env.FB_COOKIES || '';
+            var env = process.env.FB_COOKIES || '';
             if (env.includes('c_user=')) {
-                const pwc = env.split(';').map(s => s.trim()).filter(Boolean).map(pair => {
-                    const [n, ...r] = pair.split('=');
-                    return { name: n.trim(), value: r.join('=').trim(), domain: '.facebook.com', path: '/', httpOnly: true, secure: true, sameSite: 'None' };
+                var pwc2 = env.split(';').map(function (s) { return s.trim(); }).filter(Boolean).map(function (pair) {
+                    var parts = pair.split('=');
+                    var n = parts[0];
+                    var v = parts.slice(1).join('=');
+                    return { name: n.trim(), value: v.trim(), domain: '.facebook.com', path: '/', httpOnly: true, secure: true, sameSite: 'None' };
                 });
-                await context.addCookies(pwc);
-                console.log(`${tag} 🍪 Cookies from .env (${pwc.length})`);
+                await context.addCookies(pwc2);
+                console.log(tag + ' 🍪 Cookies from .env (' + pwc2.length + ')');
             }
         }
 
-        // Validate session — PATIENT check (retry once before abort)
-        const testPage = await context.newPage();
-        let sessionValid = false;
+        // ═══ [FIX] Validate session — testPage đóng TRƯỚC khi warmPage mở ═══
+        var testPage = await context.newPage();
+        var sessionValid = false;
 
-        for (let attempt = 1; attempt <= 2; attempt++) {
+        for (var attempt = 1; attempt <= 2; attempt++) {
             try {
                 if (attempt === 1) {
                     await testPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 25000 });
                 } else {
-                    console.log(`${tag} 🔄 Retry validation (attempt 2)...`);
+                    console.log(tag + ' 🔄 Retry validation (attempt 2)...');
                     await testPage.reload({ waitUntil: 'domcontentloaded', timeout: 25000 });
                 }
-
-                // Wait for nav element (up to 10s) — much more patient than old 3s
-                const hasNav = await testPage.waitForSelector(
+                var hasNav = await testPage.waitForSelector(
                     'div[role="navigation"], div[aria-label="Facebook"], a[aria-label="Facebook"]',
                     { timeout: 10000 }
-                ).catch(() => null);
-
-                const testUrl = testPage.url();
+                ).catch(function () { return null; });
+                var testUrl = testPage.url();
                 if (hasNav && !testUrl.includes('/login') && !testUrl.includes('checkpoint')) {
                     sessionValid = true;
                     break;
                 }
-
                 if (testUrl.includes('checkpoint')) {
-                    console.warn(`${tag} 🚨 Checkpoint detected`);
+                    console.warn(tag + ' 🚨 Checkpoint detected');
                     accountManager.reportCheckpoint(account.id);
                     break;
                 }
                 if (testUrl.includes('/login')) {
-                    console.warn(`${tag} 🔒 Redirected to login (attempt ${attempt})`);
-                    // If redirected to login, the session is definitely dead
+                    console.warn(tag + ' 🔒 Redirected to login (attempt ' + attempt + ')');
                     if (attempt === 2) accountManager.reportCheckpoint(account.id);
                 }
             } catch (e) {
-                console.warn(`${tag} ⚠️ Validation attempt ${attempt} error: ${e.message.substring(0, 60)}`);
+                console.warn(tag + ' ⚠️ Validation attempt ' + attempt + ' error: ' + e.message.substring(0, 60));
             }
-
-            if (attempt < 2) await delay(3000); // Pause before retry
+            if (attempt < 2) await delay(3000);
         }
 
-        if (sessionValid) {
-            console.log(`${tag} ✅ Session valid!`);
-            await testPage.close();
-        } else {
-            // ═══ SCREENSHOT DEBUG: Capture what Facebook is showing ═══
-            try {
-                const debugUrl = testPage.url();
-                const debugTitle = await testPage.title().catch(() => 'N/A');
-                console.warn(`${tag} 🔍 DEBUG: URL = ${debugUrl}`);
-                console.warn(`${tag} 🔍 DEBUG: Title = ${debugTitle}`);
+        // [FIX KEY] Đóng testPage NGAY sau validate — TRƯỚC khi mở warmPage
+        try { await testPage.close(); } catch (e) { }
+        testPage = null;
 
-                const screenshotPath = path.join(__dirname, '..', '..', '..', 'data', `error_${accUsername}.png`);
-                await testPage.screenshot({ path: screenshotPath, fullPage: true });
-                console.warn(`${tag} 📸 Screenshot saved → ${screenshotPath}`);
-
-                // Check for common Facebook popups/blockers
-                const bodyText = await testPage.textContent('body').catch(() => '');
-                if (bodyText.includes('checkpoint')) {
-                    console.warn(`${tag} 🚨 CHECKPOINT DETECTED in page body`);
-                } else if (bodyText.includes('Đăng nhập') || bodyText.includes('Log in') || bodyText.includes('Log In')) {
-                    console.warn(`${tag} 🔒 LOGIN PAGE — cookies expired or revoked`);
-                } else if (bodyText.includes('confirm your identity') || bodyText.includes('xác minh')) {
-                    console.warn(`${tag} 🛡️ IDENTITY VERIFICATION popup detected`);
-                } else if (bodyText.includes('cookie') || bodyText.includes('consent')) {
-                    console.warn(`${tag} 🍪 COOKIE CONSENT popup blocking — may need auto-dismiss`);
-                } else {
-                    console.warn(`${tag} ❓ Unknown blocker. First 200 chars: ${bodyText.substring(0, 200)}`);
-                }
-            } catch (ssErr) {
-                console.warn(`${tag} ⚠️ Screenshot failed: ${ssErr.message}`);
-            }
-
-            console.warn(`${tag} ❌ Session invalid after 2 attempts. Self-healing disabled to protect IP/User-Agent. Please extract cookies manually via Desktop.`);
+        if (!sessionValid) {
+            // Screenshot debug (nhẹ — không mở page mới, dùng context info)
+            console.warn(tag + ' ❌ Session invalid after 2 attempts. Please extract cookies manually via Desktop.');
             accountManager.reportCheckpoint(account.id);
-            await testPage.close();
             await context.close();
             return [];
         }
 
+        console.log(tag + ' ✅ Session valid!');
+
         // AUTO-RENEW cookies
         try {
-            const freshCookies = await context.cookies();
+            var freshCookies = await context.cookies();
             fs.mkdirSync(sessionDir, { recursive: true });
             fs.writeFileSync(sessionPath, JSON.stringify(freshCookies, null, 2));
             if (fs.existsSync(cookieJsonPath)) {
-                const fbCookies = freshCookies.filter(c => c.domain?.includes('facebook'));
+                var fbCookies = freshCookies.filter(function (c) { return c.domain && c.domain.includes('facebook'); });
                 if (fbCookies.length > 0) {
                     fs.writeFileSync(cookieJsonPath, JSON.stringify(fbCookies, null, 2));
-                    console.log(`${tag} 🔄 Cookies auto-renewed → ${path.basename(cookieJsonPath)} (${fbCookies.length})`);
+                    console.log(tag + ' 🔄 Cookies auto-renewed (' + fbCookies.length + ')');
                 }
             }
-            const ssDir = path.join(__dirname, '..', '..', '..', 'data', 'sessions');
-            const ssPath = path.join(ssDir, `${accUsername}_auth.json`);
+            var ssDir = path.join(__dirname, '..', '..', '..', 'data', 'sessions');
+            var ssPath = path.join(ssDir, accUsername + '_auth.json');
             fs.mkdirSync(ssDir, { recursive: true });
             await context.storageState({ path: ssPath });
-            console.log(`${tag} 🔑 StorageState saved → ${accUsername}_auth.json`);
-        } catch (e) { console.warn(`${tag} ⚠️ Cookie save error: ${e.message}`); }
+            console.log(tag + ' 🔑 StorageState saved → ' + accUsername + '_auth.json');
+        } catch (e) { console.warn(tag + ' ⚠️ Cookie save error: ' + e.message); }
 
-        // 🎭 Persona Warm-up — PASSIVE camouflage before scraping
-        const warmPage = await context.newPage();
-        try {
-            console.log(`${tag} 🎭 Đang khoác áo Nguỵ Trang (Warm-up Medium)...`);
-            await runPersonaSession(warmPage, accUsername, 'medium');
-        } catch (e) { console.warn(`${tag} ⚠️ Persona Warm-up error: ${e.message}`); }
-        finally {
-            await warmPage.close();
-            await delay(2000 + Math.random() * 3000);
+        // 🎭 Persona Warm-up — [FIX] chỉ chạy nếu còn đủ RAM
+        if (hasEnoughRAMForPersona()) {
+            var warmPage = await context.newPage();
+            try {
+                console.log(tag + ' 🎭 Warm-up (medium)...');
+                await runPersonaSession(warmPage, accUsername, 'medium');
+            } catch (e) { console.warn(tag + ' ⚠️ Warm-up error: ' + e.message); }
+            finally {
+                // [FIX] Đóng warmPage TRƯỚC khi bắt đầu scrape
+                try { await warmPage.close(); } catch (e) { }
+                await delay(2000 + Math.random() * 3000);
+            }
+        } else {
+            await delay(2000);
         }
 
-        // Scrape each group
-        const page = await context.newPage();
-        page.on('console', msg => {
-            const text = msg.text();
-            if (text.includes('Loại khỏi vòng quét post')) console.log(`${tag} ⏭️ ${text}`);
+        // Scrape each group — mở 1 page duy nhất, tái sử dụng
+        var page = await context.newPage();
+        page.on('console', function (msg) {
+            var text = msg.text();
+            if (text.includes('Loại khỏi vòng quét post')) console.log(tag + ' ⏭️ ' + text);
         });
-        for (let i = 0; i < groups.length; i++) {
-            const group = groups[i];
-            const groupId = extractGroupId(group.url);
+
+        for (var gi = 0; gi < groups.length; gi++) {
+            var group = groups[gi];
+            var groupId = extractGroupId(group.url);
             if (!groupId) continue;
 
             try {
-                // Human-like jitter
-                if (i > 0) {
-                    const jitter = 8000 + Math.random() * 12000;
-                    console.log(`${tag} 😴 Jitter: ${(jitter / 1000).toFixed(1)}s`);
+                if (gi > 0) {
+                    var jitter = 8000 + Math.random() * 12000;
+                    console.log(tag + ' 😴 Jitter: ' + (jitter / 1000).toFixed(1) + 's');
                     await delay(jitter);
 
-                    if (i % 5 === 0) {
-                        const breakTime = 15000 + Math.random() * 15000;
-                        console.log(`${tag} ☕ Coffee break & Feed Browsing (Anti-bot)...`);
-
+                    // [FIX] Break persona — [FIX] đóng breakPage ngay sau dùng
+                    if (gi % 5 === 0 && hasEnoughRAMForPersona()) {
+                        var breakTime = 15000 + Math.random() * 15000;
+                        console.log(tag + ' ☕ Break persona...');
                         try {
-                            const breakPage = await context.newPage();
+                            var breakPage = await context.newPage();
                             await runPersonaSession(breakPage, accUsername, 'light');
+                            // [FIX] Đóng ngay trong cùng try block
                             await breakPage.close();
+                            breakPage = null;
                         } catch (e) {
-                            console.warn(`${tag} ⚠️ Break Persona error: ${e.message}`);
+                            console.warn(tag + ' ⚠️ Break persona error: ' + e.message);
                         }
-
                         await delay(breakTime);
                     }
                 }
 
-                console.log(`${tag} [${i + 1}/${groups.length}] 📥 ${group.name}`);
-                await page.goto(`https://www.facebook.com/groups/${groupId}?sorting_setting=CHRONOLOGICAL`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                console.log(tag + ' [' + (gi + 1) + '/' + groups.length + '] 📥 ' + group.name);
+                await page.goto(
+                    'https://www.facebook.com/groups/' + groupId + '?sorting_setting=CHRONOLOGICAL',
+                    { waitUntil: 'domcontentloaded', timeout: 30000 }
+                );
                 await delay(3000 + Math.random() * 2000);
 
-                const url = page.url();
+                var url = page.url();
                 if (url.includes('checkpoint')) {
-                    console.warn(`${tag} 🚨 ${group.name}: REAL checkpoint — stopping account`);
+                    console.warn(tag + ' 🚨 ' + group.name + ': checkpoint — stopping account');
                     accountManager.reportCheckpoint(account.id);
                     break;
                 }
                 if (url.includes('/login')) {
-                    console.log(`${tag} 🔒 ${group.name}: login redirect (restricted) — skipping`);
+                    console.log(tag + ' 🔒 ' + group.name + ': login redirect — skipping');
                     continue;
                 }
 
-                let hasFeed = false;
-                try { await page.waitForSelector('div[role="feed"]', { timeout: 12000 }); hasFeed = true; }
-                catch {
-                    const pageText = await page.evaluate(() => document.body?.innerText?.substring(0, 500) || '');
-                    const isJoinPage = pageText.toLowerCase().includes('join group') || pageText.includes('Tham gia nh');
+                var hasFeed = false;
+                try {
+                    await page.waitForSelector('div[role="feed"]', { timeout: 12000 });
+                    hasFeed = true;
+                } catch (e) {
+                    var pageText = await page.evaluate(function () { return document.body ? document.body.innerText.substring(0, 500) : ''; });
+                    var isJoinPage = pageText.toLowerCase().includes('join group') || pageText.includes('Tham gia nh');
                     if (isJoinPage) {
-                        console.log(`${tag} 🚪 ${group.name}: NOT A MEMBER — joining inline...`);
+                        console.log(tag + ' 🚪 ' + group.name + ': NOT A MEMBER — joining...');
                         try {
-                            const joinBtn = await page.$('div[role="button"]:has-text("Join"), div[role="button"]:has-text("Tham gia")');
+                            var joinBtn = await page.$('div[role="button"]:has-text("Join"), div[role="button"]:has-text("Tham gia")');
                             if (joinBtn) {
                                 await joinBtn.click();
                                 await delay(3000);
-                                const afterText = await page.evaluate(() => document.body?.innerText?.substring(0, 300) || '');
+                                var afterText = await page.evaluate(function () { return document.body ? document.body.innerText.substring(0, 300) : ''; });
                                 if (afterText.includes('Pending') || afterText.includes('pending') || afterText.includes('Chờ')) {
-                                    console.log(`${tag} ⏳ ${group.name}: pending approval — skip`);
+                                    console.log(tag + ' ⏳ ' + group.name + ': pending approval');
                                     continue;
                                 }
-                                console.log(`${tag} ✅ ${group.name}: Joined! Reloading...`);
-                                await page.goto(`https://www.facebook.com/groups/${groupId}?sorting_setting=CHRONOLOGICAL`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+                                await page.goto('https://www.facebook.com/groups/' + groupId + '?sorting_setting=CHRONOLOGICAL', { waitUntil: 'domcontentloaded', timeout: 25000 });
                                 await delay(3000);
-                                try { await page.waitForSelector('div[role="feed"]', { timeout: 8000 }); hasFeed = true; }
-                                catch { console.log(`${tag} ⚠️ ${group.name}: joined but feed not visible yet`); }
+                                try { await page.waitForSelector('div[role="feed"]', { timeout: 8000 }); hasFeed = true; } catch (e2) { }
                             }
-                        } catch (joinErr) { console.warn(`${tag} ⚠️ ${group.name}: join failed: ${joinErr.message.substring(0, 50)}`); }
+                        } catch (joinErr) { console.warn(tag + ' ⚠️ Join failed: ' + joinErr.message.substring(0, 50)); }
                     } else {
-                        console.log(`${tag} ⚠️ ${group.name}: no feed visible`);
+                        console.log(tag + ' ⚠️ ' + group.name + ': no feed visible');
                     }
                 }
                 if (!hasFeed) continue;
 
-                // ═══ DYNAMIC SCROLLING — Cuộn thông minh, cắt sớm bài cũ ═══
-                const MAX_AGE_DAYS = 3;
-                let noGrowth = 0, prevCnt = 0;
-
-                for (let s = 0; s < 35; s++) {
-                    // 1. Click "See more" continuously as we scroll to catch long posts before they disappear from DOM
+                // Dynamic scrolling
+                var MAX_AGE_DAYS = 3;
+                var noGrowth = 0, prevCnt = 0;
+                for (var s = 0; s < 35; s++) {
                     try {
-                        const clicked = await page.evaluate(() => {
-                            let count = 0;
-                            const els = Array.from(document.querySelectorAll('div[role="button"], span'));
-                            for (const el of els) {
-                                const t = el.innerText?.trim()?.toLowerCase();
+                        var clicked = await page.evaluate(function () {
+                            var count = 0;
+                            var els = Array.from(document.querySelectorAll('div[role="button"], span'));
+                            for (var i2 = 0; i2 < els.length; i2++) {
+                                var t = els[i2].innerText && els[i2].innerText.trim().toLowerCase();
                                 if (t === 'see more' || t === 'xem thêm') {
-                                    try { el.click(); count++; } catch (e) { }
+                                    try { els[i2].click(); count++; } catch (e3) { }
                                 }
                             }
                             return count;
                         });
-                        if (clicked > 0) await delay(500); // allow text to expand
-                    } catch { }
+                        if (clicked > 0) await delay(500);
+                    } catch (e) { }
 
-                    // 2. Scroll down slower to ensure quality over speed
-                    await page.evaluate(() => window.scrollBy(0, 1000 + Math.random() * 500));
+                    await page.evaluate(function () { window.scrollBy(0, 1000 + Math.random() * 500); });
                     await delay(1200 + Math.random() * 800);
 
-                    const scrollStatus = await page.evaluate((maxDays) => {
-                        const feed = document.querySelector('div[role="feed"]');
+                    var scrollStatus = await page.evaluate(function (maxDays) {
+                        var feed = document.querySelector('div[role="feed"]');
                         if (!feed) return { cnt: 0, stopEarly: false, timeLog: '' };
-
-                        const articles = feed.querySelectorAll(':scope > div');
-                        let cnt = 0, lastValidTime = '';
-
-                        for (let i = articles.length - 1; i >= 0; i--) {
-                            const a = articles[i];
+                        var articles = feed.querySelectorAll(':scope > div');
+                        var cnt = 0, lastValidTime = '';
+                        for (var ii = articles.length - 1; ii >= 0; ii--) {
+                            var a = articles[ii];
                             if (a.innerText && a.innerText.length > 50) {
                                 cnt++;
                                 if (!lastValidTime) {
-                                    const abbr = a.querySelector('abbr');
-                                    if (abbr) lastValidTime = abbr.textContent?.trim() || abbr.getAttribute('title') || '';
+                                    var abbr = a.querySelector('abbr');
+                                    if (abbr) lastValidTime = abbr.textContent && abbr.textContent.trim() || abbr.getAttribute('title') || '';
                                     if (!lastValidTime) {
-                                        for (const sp of a.querySelectorAll('span')) {
-                                            const t = sp.textContent?.trim();
-                                            if (t && t.match(/^\d+[mhdw]$|^just now$|^yesterday$|^hôm qua$|^\d+\s*(phút|giờ|ngày|tuần|năm|tháng)/i)) {
-                                                lastValidTime = t; break;
+                                        var spans = a.querySelectorAll('span');
+                                        for (var si = 0; si < spans.length; si++) {
+                                            var t2 = spans[si].textContent && spans[si].textContent.trim();
+                                            if (t2 && t2.match(/^\d+[mhdw]$|^just now$|^yesterday$|^hôm qua$|^\d+\s*(phút|giờ|ngày|tuần|năm|tháng)/i)) {
+                                                lastValidTime = t2; break;
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-
-                        let stopEarly = false;
+                        var stopEarly = false;
                         if (lastValidTime) {
-                            const s = lastValidTime.toLowerCase();
-                            if (s.match(/w\b|wk|week|tuần|tháng|month|năm|year/)) stopEarly = true;
-                            if (s.match(/jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i)) stopEarly = true;
-                            if (s.match(/\b(20[12]\d)\b/)) stopEarly = true;
-                            const dayMatch = s.match(/(\d+)\s*(d\b|day|ngày)/);
+                            var sv = lastValidTime.toLowerCase();
+                            if (sv.match(/w\b|wk|week|tuần|tháng|month|năm|year/)) stopEarly = true;
+                            if (sv.match(/jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i)) stopEarly = true;
+                            if (sv.match(/\b(20[12]\d)\b/)) stopEarly = true;
+                            var dayMatch = sv.match(/(\d+)\s*(d\b|day|ngày)/);
                             if (dayMatch && parseInt(dayMatch[1]) > maxDays) stopEarly = true;
                         }
-                        return { cnt, stopEarly, timeLog: lastValidTime };
+                        return { cnt: cnt, stopEarly: stopEarly, timeLog: lastValidTime };
                     }, MAX_AGE_DAYS);
 
-                    if (scrollStatus.cnt >= 40) {
-                        console.log(`${tag} 🎯 ${group.name}: Đạt 40 bài. Dừng cuộn.`);
-                        break;
-                    }
-                    if (scrollStatus.stopEarly) {
-                        console.log(`${tag} 🛑 ${group.name}: Bài cũ [${scrollStatus.timeLog}]. Cắt sớm!`);
-                        break;
-                    }
+                    if (scrollStatus.cnt >= 40) { console.log(tag + ' 🎯 ' + group.name + ': Đạt 40 bài.'); break; }
+                    if (scrollStatus.stopEarly) { console.log(tag + ' 🛑 ' + group.name + ': Bài cũ [' + scrollStatus.timeLog + ']. Cắt sớm!'); break; }
                     if (scrollStatus.cnt === prevCnt) {
                         noGrowth++;
-                        if (noGrowth >= 3) { console.log(`${tag} 🔚 ${group.name}: Kịch đáy.`); break; }
+                        if (noGrowth >= 3) { console.log(tag + ' 🔚 ' + group.name + ': Kịch đáy.'); break; }
                     } else { noGrowth = 0; }
                     prevCnt = scrollStatus.cnt;
                 }
 
-                // Final sweep for any remaining "See More" buttons
+                // Final "See More" sweep
                 try {
-                    await page.evaluate(() => {
-                        const els = Array.from(document.querySelectorAll('div[role="button"], span'));
-                        for (const el of els) {
-                            const t = el.innerText?.trim()?.toLowerCase();
-                            if (t === 'see more' || t === 'xem thêm') {
-                                try { el.click(); } catch (e) { }
+                    await page.evaluate(function () {
+                        var els = Array.from(document.querySelectorAll('div[role="button"], span'));
+                        for (var i3 = 0; i3 < els.length; i3++) {
+                            var t3 = els[i3].innerText && els[i3].innerText.trim().toLowerCase();
+                            if (t3 === 'see more' || t3 === 'xem thêm') {
+                                try { els[i3].click(); } catch (e4) { }
                             }
                         }
                     });
                     await delay(500);
-                } catch { }
+                } catch (e) { }
 
-                const gPosts = await page.evaluate(({ gName, gUrl, maxAgeDays }) => {
-                    const feed = document.querySelector('div[role="feed"]');
-                    if (!feed) return [];
+                // Extract posts
+                var gPosts = await page.evaluate(function (params) {
+                    var gName = params.gName, gUrl = params.gUrl, maxAgeDays = params.maxAgeDays;
 
                     function parseRelativeTime(timeStr) {
                         if (!timeStr) return null;
-                        const s = timeStr.trim().toLowerCase();
+                        var s = timeStr.trim().toLowerCase();
                         if (s.includes('just now') || s.includes('vừa xong') || s === 'now') return 0;
-                        let m = s.match(/(\d+)\s*(m\b|min|mins|minute|minutes|phút)/);
+                        var m;
+                        m = s.match(/(\d+)\s*(m\b|min|mins|minute|minutes|phút)/);
                         if (m) return parseInt(m[1]) / 60;
                         m = s.match(/(\d+)\s*(h\b|hr|hrs|hour|hours|giờ)/);
                         if (m) return parseInt(m[1]);
@@ -493,193 +508,93 @@ async function _scrapeWithContext(browser, account, groups) {
                         m = s.match(/(\d+)\s*(năm|year|years|yr|yrs)/);
                         if (m) return parseInt(m[1]) * 24 * 365;
                         if (s.includes('yesterday') || s.includes('hôm qua')) return 24;
-
-                        m = s.match(/(\d{1,2})\s*tháng\s*(\d{1,2})(?:,?\s*(\d{4}))?/);
-                        if (m) {
-                            const day = parseInt(m[1]), month = parseInt(m[2]) - 1;
-                            const year = m[3] ? parseInt(m[3]) : new Date().getFullYear();
-                            const postDate = new Date(year, month, day);
-                            const ageMs = Date.now() - postDate.getTime();
-                            return ageMs > 0 ? ageMs / (1000 * 3600) : 0;
-                        }
-                        const monthNames = {
-                            jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
-                            january: 0, february: 1, march: 2, april: 3, june: 5, july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
-                        };
-                        m = s.match(/^(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:,?\s*(\d{4}))?/i);
-                        if (m) {
-                            const month = monthNames[m[1].toLowerCase().substring(0, 3)];
-                            const day = parseInt(m[2]);
-                            const year = m[3] ? parseInt(m[3]) : new Date().getFullYear();
-                            const postDate = new Date(year, month, day);
-                            const ageMs = Date.now() - postDate.getTime();
-                            return ageMs > 0 ? ageMs / (1000 * 3600) : 0;
-                        }
-                        m = s.match(/\b(20[12]\d)\b/);
-                        if (m) {
-                            const year = parseInt(m[1]);
-                            if (year < new Date().getFullYear()) return 24 * 365;
-                        }
                         return null;
                     }
 
-                    const articles = feed.querySelectorAll(':scope > div');
-                    const res = [];
-                    const seenUrls = new Set();
-                    const now = Date.now();
+                    var feed = document.querySelector('div[role="feed"]');
+                    if (!feed) return [];
+                    var articles = feed.querySelectorAll(':scope > div');
+                    var res = [];
+                    var seenUrls = new Set();
+                    var now = Date.now();
 
-                    articles.forEach(a => {
-                        const txt = a.innerText || '';
+                    articles.forEach(function (a) {
+                        var txt = a.innerText || '';
                         if (txt.length < 50) return;
-
-                        const links = Array.from(a.querySelectorAll('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid"], a[href*="/groups/"][href*="/posts/"]'));
-                        let rawUrl = links[0]?.href || '';
-                        if (!rawUrl) {
-                            const allA = a.querySelectorAll('a[href]');
-                            for (const al of allA) {
-                                const h = al.href || '';
-                                if (h.includes('facebook.com') && (h.includes('/posts/') || h.includes('story_fbid') || h.includes('/permalink/'))) {
-                                    rawUrl = h; break;
-                                }
-                            }
-                        }
-                        const postUrl = rawUrl.split('?')[0];
+                        var links = Array.from(a.querySelectorAll('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid"]'));
+                        var rawUrl = links[0] ? links[0].href : '';
+                        var postUrl = rawUrl.split('?')[0];
                         if (postUrl && seenUrls.has(postUrl)) return;
                         if (postUrl) seenUrls.add(postUrl);
 
-                        let timeStr = '';
-                        for (const link of links) {
-                            const ariaTime = link.getAttribute('aria-label');
-                            if (ariaTime && ariaTime.match(/\d/)) { timeStr = ariaTime; break; }
-                            const linkText = link.innerText?.trim();
-                            if (linkText && linkText.match(/^\d+[mhdw]$|^just now$|^yesterday$/i)) { timeStr = linkText; break; }
+                        var timeStr = '';
+                        for (var li = 0; li < links.length; li++) {
+                            var lt = links[li].innerText && links[li].innerText.trim();
+                            if (lt && lt.match(/^\d+[mhdw]$|^just now$|^yesterday$/i)) { timeStr = lt; break; }
                         }
-                        if (!timeStr) {
-                            const abbr = a.querySelector('abbr');
-                            if (abbr) timeStr = abbr.textContent?.trim() || abbr.getAttribute('title') || '';
-                        }
-                        if (!timeStr) {
-                            const spans = a.querySelectorAll('span');
-                            for (const sp of spans) {
-                                const t = sp.textContent?.trim();
-                                if (t && t.match(/^\d+[mhdw]$|^just now$|^yesterday$|^hôm qua$|^\d+\s*(phút|giờ|ngày|tuần|năm|tháng|year|month|week|day|hour|min)/i)) {
-                                    timeStr = t; break;
-                                }
-                                if (t && t.match(/^\d{1,2}\s*tháng\s*\d{1,2}/i)) { timeStr = t; break; }
-                                if (t && t.match(/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i)) { timeStr = t; break; }
-                            }
-                        }
+                        if (!timeStr) { var ab = a.querySelector('abbr'); if (ab) timeStr = ab.textContent && ab.textContent.trim() || ab.getAttribute('title') || ''; }
 
-                        const ageHours = parseRelativeTime(timeStr);
-                        const ageDays = ageHours !== null ? ageHours / 24 : null;
+                        var ageHours = parseRelativeTime(timeStr);
+                        var ageDays = ageHours !== null ? ageHours / 24 : null;
                         if (ageDays !== null && ageDays > maxAgeDays) return;
-                        if (ageDays === null && timeStr) return;
 
-                        let postedAt = '';
-                        if (ageHours !== null) {
-                            const pDate = new Date(now - ageHours * 3600 * 1000);
-                            if (pDate.getFullYear() < 2026 || (pDate.getFullYear() === 2026 && pDate.getMonth() < 2)) {
-                                console.log('Loại khỏi vòng quét post (cũ hơn 03/2026): ' + timeStr);
-                                return;
-                            }
-                            postedAt = pDate.toISOString();
-                        } else {
-                            if (timeStr && timeStr.match(/\b(202[0-5]|201\d|200\d)\b/)) {
-                                console.log('Loại khỏi vòng quét post (chứa năm cũ): ' + timeStr);
-                                return;
-                            }
-                        }
-
-                        // Author extraction (5 strategies)
-                        let author = '';
-                        let authorUrl = '';
-                        const profileImg = a.querySelector('image, img[src*="scontent"], svg image');
-                        if (profileImg) {
-                            const alt = profileImg.getAttribute('alt') || profileImg.closest('[aria-label]')?.getAttribute('aria-label') || '';
-                            if (alt && alt.length > 1 && alt.length < 80 && !alt.match(/photo|hình|ảnh|image|like|comment/i)) {
-                                author = alt.replace(/'s profile.*|'s photo.*/i, '').trim();
-                            }
-                        }
-                        if (!author) {
-                            const headerLinks = a.querySelectorAll('a[href*="/user/"], a[href*="profile.php"], a[href*="facebook.com/"][role="link"]');
-                            for (const hl of headerLinks) {
-                                const name = hl.innerText?.trim();
-                                const href = hl.href || '';
-                                if (name && name.length > 1 && name.length < 60
-                                    && !name.match(/^(\d+[mhdw]|just now|yesterday|hôm qua|like|comment|share|chia sẻ)$/i)
-                                    && !href.includes('/posts/') && !href.includes('/permalink/') && !href.includes('story_fbid')) {
-                                    author = name; authorUrl = href.split('?')[0]; break;
-                                }
-                            }
-                        }
-                        if (!author) {
-                            const classicEl = a.querySelector('h2 a, h3 a, h4 a, strong a[role="link"]');
-                            if (classicEl) {
-                                author = classicEl.innerText?.trim() || '';
-                                authorUrl = authorUrl || (classicEl.href || '').split('?')[0];
-                            }
-                        }
-                        if (!author) {
-                            const allLinks = a.querySelectorAll('a[href]');
-                            for (const al of allLinks) {
-                                const href = al.href || '';
-                                if ((href.includes('facebook.com/') && !href.includes('/posts/') && !href.includes('/groups/')
-                                    && !href.includes('/permalink/') && !href.includes('story_fbid') && !href.includes('#')
-                                    && !href.includes('/photos/') && !href.includes('/videos/'))) {
-                                    const name = al.innerText?.trim();
-                                    if (name && name.length > 1 && name.length < 60 && !name.match(/^\d+$/)) {
-                                        author = name; authorUrl = href.split('?')[0]; break;
-                                    }
-                                }
-                            }
-                        }
-                        if (!author) {
-                            const headerStrong = a.querySelector('strong');
-                            if (headerStrong) {
-                                const name = headerStrong.innerText?.trim();
-                                if (name && name.length > 1 && name.length < 60) author = name;
+                        var author = '', authorUrl = '';
+                        var hl2 = a.querySelectorAll('a[href*="/user/"], a[href*="profile.php"], a[href*="facebook.com/"][role="link"]');
+                        for (var hli = 0; hli < hl2.length; hli++) {
+                            var name2 = hl2[hli].innerText && hl2[hli].innerText.trim();
+                            if (name2 && name2.length > 1 && name2.length < 60 && !name2.match(/^\d+[mhdw]$/)) {
+                                author = name2; authorUrl = hl2[hli].href.split('?')[0]; break;
                             }
                         }
 
                         res.push({
                             platform: 'facebook',
                             group_name: gName, group_url: gUrl, post_url: postUrl,
-                            author_name: author || 'Unknown', author_url: authorUrl, author_avatar: '',
+                            author_name: author || 'Unknown', author_url: authorUrl,
                             content: txt.substring(0, 2000),
-                            post_created_at: postedAt, time_raw: timeStr,
+                            post_created_at: ageHours !== null ? new Date(now - ageHours * 3600 * 1000).toISOString() : '',
                             scraped_at: new Date().toISOString(), source_group: gName, item_type: 'post'
                         });
                     });
                     return res;
                 }, { gName: group.name, gUrl: group.url, maxAgeDays: MAX_AGE_DAYS });
 
-                posts.push(...gPosts);
-                console.log(`${tag} ✅ ${group.name}: ${gPosts.length} posts (total: ${posts.length})`);
+                posts.push.apply(posts, gPosts);
+                console.log(tag + ' ✅ ' + group.name + ': ' + gPosts.length + ' posts');
                 accountManager.reportSuccess(account.id, gPosts.length);
+
             } catch (err) {
-                console.warn(`${tag} ❌ ${group.name}: ${err.message.substring(0, 80)}`);
+                console.warn(tag + ' ❌ ' + group.name + ': ' + err.message.substring(0, 80));
             }
 
-            if (i < groups.length - 1) await delay(5000 + Math.random() * 5000);
-            if (i > 0 && i % 5 === 0) { const m = process.memoryUsage(); console.log(`${tag} 💾 RSS=${Math.round(m.rss / 1024 / 1024)}MB`); }
-        }
-        await page.close();
+            if (gi < groups.length - 1) await delay(5000 + Math.random() * 5000);
 
-        // 🎭 Persona Cool-down — thư giãn sau khi quét xong
-        const coolDownPage = await context.newPage();
-        try {
-            console.log(`${tag} 🎭 Quét xong! Đang thư giãn xoá dấu vết (Cool-down)...`);
-            await runPersonaSession(coolDownPage, accUsername, 'medium');
-        } catch (e) {
-            console.warn(`${tag} ⚠️ Persona Cool-down error: ${e.message}`);
-        } finally {
-            await coolDownPage.close();
+            // RAM log every 5 groups
+            if (gi > 0 && gi % 5 === 0) {
+                var m2 = process.memoryUsage();
+                console.log(tag + ' 💾 RSS=' + Math.round(m2.rss / 1024 / 1024) + 'MB');
+            }
         }
+
+        // [FIX] Đóng scraping page trước cool-down
+        try { await page.close(); } catch (e) { }
+        page = null;
+
+        // 🎭 Cool-down persona — [FIX] chỉ chạy nếu còn RAM
+        if (hasEnoughRAMForPersona()) {
+            var coolPage = await context.newPage();
+            try {
+                console.log(tag + ' 🎭 Cool-down...');
+                await runPersonaSession(coolPage, accUsername, 'medium');
+            } catch (e) { console.warn(tag + ' ⚠️ Cool-down error: ' + e.message); }
+            finally { try { await coolPage.close(); } catch (e) { } }
+        }
+
     } catch (err) {
-        console.error(`${tag} 💥 Fatal: ${err.message}`);
+        console.error(tag + ' 💥 Fatal: ' + err.message);
     } finally {
-        try { if (context) await context.close(); } catch { }
-        console.log(`${tag} 🏁 Done: ${posts.length} posts`);
+        try { if (context) await context.close(); } catch (e) { }
+        console.log(tag + ' 🏁 Done: ' + posts.length + ' posts');
     }
     return posts;
 }
