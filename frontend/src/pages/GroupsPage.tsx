@@ -35,32 +35,51 @@ export default function GroupsPage() {
     useEffect(load, [catFilter, statusFilter])
 
     const addGroup = async () => {
-        if (!newGroup.name || !newGroup.url) return
-        const res: any = await apiPost('/api/groups', newGroup)
-        if (res && res.success === false) {
-            alert('Lỗi thêm Group: ' + res.error)
-            return
+        if (!newGroup.name || !newGroup.url) {
+            alert("Tên và URL không được bỏ trống");
+            return;
         }
-        setShowAdd(false)
-        setNewGroup({ name: '', url: '', category: 'fulfillment', notes: '' })
-        load()
+        try {
+            const res: any = await apiPost('/api/groups', newGroup)
+            if (res && res.success === false) {
+                alert('Lỗi thêm Group: ' + res.error)
+                return
+            }
+            setShowAdd(false)
+            setNewGroup({ name: '', url: '', category: 'fulfillment', notes: '' })
+            load()
+        } catch (e: any) {
+            alert('Lỗi hệ thống khi thêm Group: ' + e.message);
+        }
     }
 
     const deleteGroup = async (url: string) => {
         if (!confirm('Bạn có chắc chắn muốn XÓA group này khỏi cơ sở dữ liệu vĩnh viễn không?')) return;
-        await apiDelete(`/api/groups/${encodeURIComponent(url)}`);
-        load();
+        try {
+            await apiDelete(`/api/groups/${encodeURIComponent(url)}`);
+            load();
+        } catch (e: any) {
+            alert('Lỗi xóa Group: ' + e.message);
+        }
     }
 
     const deleteCategory = async (cat: string) => {
         if (!confirm(`Bạn có CHẮC CHẮN muốn XÓA TOÀN BỘ thư mục (Category) '${cat}' và TẤT CẢ TỪNG GROUP bên trong nó khỏi cơ sở dữ liệu không?\nHành động này không thể hoàn tác!`)) return;
-        await apiDelete(`/api/groups/category/${encodeURIComponent(cat)}`);
-        load();
+        try {
+            await apiDelete(`/api/groups/category/${encodeURIComponent(cat)}`);
+            load();
+        } catch (e: any) {
+            alert('Lỗi xóa Category: ' + e.message);
+        }
     }
 
     const toggleStatus = async (url: string, newStatus: string) => {
-        await apiPatch(`/api/groups/${encodeURIComponent(url)}/status`, { status: newStatus })
-        load()
+        try {
+            await apiPatch(`/api/groups/${encodeURIComponent(url)}/status`, { status: newStatus })
+            load()
+        } catch (e: any) {
+            alert('Lỗi đổi trạng thái Group: ' + e.message);
+        }
     }
 
     return (
