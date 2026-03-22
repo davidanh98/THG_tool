@@ -157,27 +157,20 @@ async function runSISIdentityWorker() {
 
             if (resolved && resolved.ok) {
                 database._db.transaction(() => {
-                    let accId = database.findAccountByIdentity('fb_profile', target.author_profile_url);
-                    if (!accId) {
-                        accId = database.insertAccount({ brand_name: target.author_name || 'Anonymous', status: 'lead' });
-                        database.insertIdentity({ account_id: accId, type: 'fb_profile', value: target.author_profile_url, discovered_from: 'signal_scrape' });
-                    }
-
-                    const insertIden = (type, val) => {
-                        try { database.insertIdentity({ account_id: accId, type: type, value: val, discovered_from: 'identity_worker' }); } catch (e) { }
-                    };
-
                     let newClues = 0;
-                    (resolved.emails || []).forEach(e => { insertIden('email', e); newClues++; });
-                    (resolved.websites || []).forEach(w => { insertIden('website', w); newClues++; });
-                    (resolved.pages || []).forEach(p => { insertIden('fb_page', p); newClues++; });
-                    (resolved.phones || []).forEach(ph => { insertIden('phone', ph); newClues++; });
+                    const idenObj = { emails: [], websites: [], pages: [], phones: [] };
+
+                    (resolved.emails || []).forEach(e => { idenObj.emails.push(e); newClues++; });
+                    (resolved.websites || []).forEach(w => { idenObj.websites.push(w); newClues++; });
+                    (resolved.pages || []).forEach(p => { idenObj.pages.push(p); newClues++; });
+                    (resolved.phones || []).forEach(ph => { idenObj.phones.push(ph); newClues++; });
 
                     let websiteBonus = (resolved.websites && resolved.websites.length > 0) ? 30 : 0;
                     let newConfidence = Math.min(100, target.resolution_confidence + (newClues * 15) + websiteBonus);
                     let newLane = newConfidence >= 80 ? 'resolved_lead' : target.recommended_lane;
 
-                    database._db.prepare('UPDATE post_classifications SET resolution_confidence = ?, recommended_lane = ? WHERE id = ?').run(newConfidence, newLane, target.id);
+                    database._db.prepare('UPDATE post_classifications SET resolution_confidence = ?, recommended_lane = ?, identity_clues = ? WHERE id = ?')
+                        .run(newConfidence, newLane, JSON.stringify(idenObj), target.id);
                     console.log('[SIS Identity] ✅ Updated Signal #' + target.id + ' | Conf: ' + newConfidence);
                 })();
             } else {

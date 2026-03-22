@@ -21,8 +21,8 @@ db.pragma('journal_mode = WAL');
 
 console.log('☢️  Starting Absolute Force Migration v2.4...');
 
-// 1. Radical Purge: Delete legacy v1 tables to avoid "Data Chaos"
-const legacyTables = ['leads', 'analysis_results', 'group_members', 'search_tasks', 'agents', 'messages', 'v1_posts'];
+// 1. Radical Purge: Delete legacy v1 tables and deduplicated v2 tables to avoid "Data Chaos"
+const legacyTables = ['leads', 'analysis_results', 'group_members', 'search_tasks', 'agents', 'messages', 'v1_posts', 'accounts', 'identity_clues', 'lead_cards'];
 legacyTables.forEach(t => {
     try {
         db.prepare(`DROP TABLE IF EXISTS ${t}`).run();
@@ -46,7 +46,7 @@ const schema = {
       )`
     },
     post_classifications: {
-        cols: ['raw_post_id', 'model_name', 'is_relevant', 'entity_type', 'seller_likelihood', 'pain_score', 'intent_score', 'resolution_confidence', 'contactability_score', 'competitor_probability', 'recommended_lane', 'reason_summary'],
+        cols: ['raw_post_id', 'model_name', 'is_relevant', 'entity_type', 'seller_likelihood', 'pain_score', 'intent_score', 'resolution_confidence', 'contactability_score', 'competitor_probability', 'recommended_lane', 'reason_summary', 'strategic_summary', 'suggested_opener', 'objection_prevention', 'next_best_action', 'sales_priority_score', 'identity_clues'],
         create: `CREATE TABLE post_classifications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         raw_post_id INTEGER NOT NULL REFERENCES raw_posts(id) ON DELETE CASCADE,
@@ -56,27 +56,9 @@ const schema = {
         competitor_probability INTEGER NOT NULL, pain_tags TEXT DEFAULT '[]', market_tags TEXT DEFAULT '[]',
         seller_stage_estimate TEXT DEFAULT 'unknown', recommended_lane TEXT NOT NULL,
         reason_summary TEXT, confidence TEXT DEFAULT 'low', raw_response TEXT DEFAULT '{}',
+        strategic_summary TEXT, suggested_opener TEXT, objection_prevention TEXT,
+        next_best_action TEXT, sales_priority_score INTEGER DEFAULT 0, identity_clues TEXT DEFAULT '{}',
         created_at TEXT DEFAULT (datetime('now'))
-      )`
-    },
-    identity_clues: {
-        cols: ['account_id', 'raw_post_id', 'clue_type', 'clue_value', 'discovered_by'],
-        create: `CREATE TABLE identity_clues (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        account_id INTEGER, raw_post_id INTEGER REFERENCES raw_posts(id) ON DELETE CASCADE,
-        clue_type TEXT NOT NULL, clue_value TEXT NOT NULL, confidence_score INTEGER DEFAULT 0,
-        discovered_by TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now'))
-      )`
-    },
-    lead_cards: {
-        cols: ['raw_post_id', 'account_id', 'lane', 'strategic_summary', 'suggested_opener', 'objection_prevention', 'next_best_action', 'sales_priority_score'],
-        create: `CREATE TABLE lead_cards (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        raw_post_id INTEGER REFERENCES raw_posts(id) ON DELETE SET NULL,
-        account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
-        lane TEXT NOT NULL, strategic_summary TEXT, suggested_opener TEXT,
-        objection_prevention TEXT, next_best_action TEXT, sales_priority_score INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
       )`
     },
     scan_logs: {

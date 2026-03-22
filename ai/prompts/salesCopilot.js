@@ -29,9 +29,9 @@ async function generateLeadCard(rawPostId) {
             return null;
         }
 
-        // 2. Fetch Account/Clues if any
-        const account = database.findAccountByIdentity('fb_profile', rawPost.author_profile_url);
-        const identities = account ? database._db.prepare(`SELECT * FROM identity_clues WHERE account_id = ?`).all(account.id) : [];
+        // 2. Fetch Account/Clues if any from the flattened classification
+        let identities = { emails: [], websites: [], pages: [], phones: [] };
+        try { identities = JSON.parse(classification.identity_clues || '{}'); } catch (e) { }
 
         // 3. Build Strategic Prompt
         const sysPrompt = `Bạn là Trợ lý Chiến lược Sales cấp cao tại THG Logistics. 
@@ -60,7 +60,9 @@ RUBRIC:
 - Pain Tags: ${classification.pain_tags}
 
 DANH TÍNH ĐÃ BIẾT (Clues):
-${identities.map(i => `- ${i.type}: ${i.value}`).join('\n')}
+${identities.emails?.length ? `- Emails: ${identities.emails.join(', ')}` : ''}
+${identities.phones?.length ? `- Phones: ${identities.phones.join(', ')}` : ''}
+${identities.websites?.length ? `- Websites: ${identities.websites.join(', ')}` : ''}
 
 Hãy soạn Lead Card chiến lược:`;
 
@@ -89,11 +91,8 @@ Hãy soạn Lead Card chiến lược:`;
 
         const cardData = JSON.parse(response);
 
-        // 5. Save to DB
-        const cardId = database.insertLeadCard({
-            raw_post_id: rawPostId,
-            account_id: account ? account.id : null,
-            lane: classification.recommended_lane,
+        // 5. Save to DB (Update the single post_classifications record)
+        database.updateLeadCard(rawPostId, {
             strategic_summary: cardData.strategic_summary,
             suggested_opener: cardData.suggested_opener,
             objection_prevention: cardData.objection_prevention,
@@ -101,8 +100,8 @@ Hãy soạn Lead Card chiến lược:`;
             sales_priority_score: cardData.sales_priority_score || classification.intent_score
         });
 
-        console.log(`[SalesCopilot] ✅ Lead Card Generated: #${cardId} (Priority: ${cardData.sales_priority_score})`);
-        return cardId;
+        console.log(`[SalesCopilot] ✅ Lead Card Generated & Merged for Post #${rawPostId} (Priority: ${cardData.sales_priority_score})`);
+        return rawPostId;
 
     } catch (err) {
         console.error(`[SalesCopilot] ❌ Synthesis failed for Signal #${rawPostId}:`, err.message);

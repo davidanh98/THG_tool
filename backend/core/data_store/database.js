@@ -67,53 +67,13 @@ db.exec(`
     reason_summary TEXT,
     confidence TEXT DEFAULT 'low',
     raw_response TEXT DEFAULT '{}',
-    created_at TEXT DEFAULT (datetime('now'))
-  );
-
-  -- 3. Bảng identity clues
-  CREATE TABLE IF NOT EXISTS identity_clues (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    account_id INTEGER, -- FK to accounts(id)
-    raw_post_id INTEGER REFERENCES raw_posts(id) ON DELETE CASCADE,
-    clue_type TEXT NOT NULL, -- domain, email, page, instagram, tiktok
-    clue_value TEXT NOT NULL,
-    confidence_score INTEGER DEFAULT 0,
-    discovered_by TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
-
-  -- 4. Bảng account hợp nhất (v2)
-  CREATE TABLE IF NOT EXISTS accounts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    brand_name TEXT,
-    primary_domain TEXT,
-    primary_email TEXT,
-    primary_page_url TEXT,
-    instagram_handle TEXT,
-    tiktok_handle TEXT,
-    seller_likelihood INTEGER DEFAULT 0,
-    pain_score INTEGER DEFAULT 0,
-    intent_score INTEGER DEFAULT 0,
-    resolution_confidence INTEGER DEFAULT 0,
-    sales_priority_score INTEGER DEFAULT 0,
-    account_status TEXT DEFAULT 'active',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
-  );
-
-  -- 5. Bảng lead card cho sales
-  CREATE TABLE IF NOT EXISTS lead_cards (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    raw_post_id INTEGER REFERENCES raw_posts(id) ON DELETE SET NULL,
-    account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
-    lane TEXT NOT NULL,
     strategic_summary TEXT,
     suggested_opener TEXT,
     objection_prevention TEXT,
     next_best_action TEXT,
     sales_priority_score INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    identity_clues TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now'))
   );
 
   -- 6. Scan Queue (IPC)
@@ -160,8 +120,8 @@ db.exec(`
 function absoluteSync() {
   console.log('[Database] 🛡️  Absolute Sync: Ensuring 100% Schema & Constraint Parity...');
 
-  // 1. Radical Purge: Delete legacy v1 tables to avoid "Data Chaos"
-  const legacyTables = ['leads', 'analysis_results', 'group_members', 'search_tasks', 'agents', 'messages', 'v1_posts'];
+  // 1. Radical Purge: Delete legacy v1 tables and deduplicated v2 tables to avoid "Data Chaos"
+  const legacyTables = ['leads', 'analysis_results', 'group_members', 'search_tasks', 'agents', 'messages', 'v1_posts', 'accounts', 'identity_clues', 'lead_cards'];
   legacyTables.forEach(t => {
     try {
       db.prepare(`DROP TABLE IF EXISTS ${t}`).run();
@@ -184,7 +144,7 @@ function absoluteSync() {
       )`
     },
     post_classifications: {
-      cols: ['raw_post_id', 'model_name', 'is_relevant', 'entity_type', 'seller_likelihood', 'pain_score', 'intent_score', 'resolution_confidence', 'contactability_score', 'competitor_probability', 'recommended_lane', 'reason_summary'],
+      cols: ['raw_post_id', 'model_name', 'is_relevant', 'entity_type', 'seller_likelihood', 'pain_score', 'intent_score', 'resolution_confidence', 'contactability_score', 'competitor_probability', 'recommended_lane', 'reason_summary', 'strategic_summary', 'suggested_opener', 'objection_prevention', 'next_best_action', 'sales_priority_score', 'identity_clues'],
       create: `CREATE TABLE post_classifications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         raw_post_id INTEGER NOT NULL REFERENCES raw_posts(id) ON DELETE CASCADE,
@@ -194,27 +154,9 @@ function absoluteSync() {
         competitor_probability INTEGER NOT NULL, pain_tags TEXT DEFAULT '[]', market_tags TEXT DEFAULT '[]',
         seller_stage_estimate TEXT DEFAULT 'unknown', recommended_lane TEXT NOT NULL,
         reason_summary TEXT, confidence TEXT DEFAULT 'low', raw_response TEXT DEFAULT '{}',
+        strategic_summary TEXT, suggested_opener TEXT, objection_prevention TEXT,
+        next_best_action TEXT, sales_priority_score INTEGER DEFAULT 0, identity_clues TEXT DEFAULT '{}',
         created_at TEXT DEFAULT (datetime('now'))
-      )`
-    },
-    identity_clues: {
-      cols: ['account_id', 'raw_post_id', 'clue_type', 'clue_value', 'discovered_by'],
-      create: `CREATE TABLE identity_clues (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        account_id INTEGER, raw_post_id INTEGER REFERENCES raw_posts(id) ON DELETE CASCADE,
-        clue_type TEXT NOT NULL, clue_value TEXT NOT NULL, confidence_score INTEGER DEFAULT 0,
-        discovered_by TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now'))
-      )`
-    },
-    lead_cards: {
-      cols: ['raw_post_id', 'account_id', 'lane', 'strategic_summary', 'suggested_opener', 'objection_prevention', 'next_best_action', 'sales_priority_score'],
-      create: `CREATE TABLE lead_cards (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        raw_post_id INTEGER REFERENCES raw_posts(id) ON DELETE SET NULL,
-        account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
-        lane TEXT NOT NULL, strategic_summary TEXT, suggested_opener TEXT,
-        objection_prevention TEXT, next_best_action TEXT, sales_priority_score INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
       )`
     },
     scan_logs: {
@@ -346,38 +288,41 @@ const getLeadCards = (lane = 'resolved_lead', limit = 50) => {
     SELECT 
       pc.id as classification_id, pc.recommended_lane as lane, pc.reason_summary, pc.confidence,
       pc.seller_likelihood, pc.pain_score, pc.intent_score,
-      rp.id as id, rp.author_name, rp.post_url, rp.post_text as content, rp.source_platform as platform, rp.group_name,
-      lc.strategic_summary, lc.suggested_opener, lc.sales_priority_score
+      pc.strategic_summary, pc.suggested_opener, pc.sales_priority_score, pc.identity_clues,
+      rp.id as id, rp.author_name, rp.post_url, rp.post_text as content, rp.source_platform as platform, rp.group_name
     FROM post_classifications pc
     JOIN raw_posts rp ON pc.raw_post_id = rp.id
-    LEFT JOIN lead_cards lc ON pc.raw_post_id = lc.raw_post_id
     WHERE pc.recommended_lane = ?
-    GROUP BY rp.id
     ORDER BY pc.created_at DESC
     LIMIT ?
   `).all(lane, limit);
 };
 
-const insertLeadCard = (card) => {
+const updateLeadCard = (raw_post_id, card) => {
   const stmt = db.prepare(`
-    INSERT INTO lead_cards (
-      raw_post_id, account_id, lane, strategic_summary, 
-      suggested_opener, objection_prevention, next_best_action, sales_priority_score
-    ) VALUES (
-      @raw_post_id, @account_id, @lane, @strategic_summary, 
-      @suggested_opener, @objection_prevention, @next_best_action, @sales_priority_score
-    )
+    UPDATE post_classifications 
+    SET strategic_summary = @strategic_summary, 
+        suggested_opener = @suggested_opener, 
+        objection_prevention = @objection_prevention, 
+        next_best_action = @next_best_action, 
+        sales_priority_score = @sales_priority_score
+    WHERE raw_post_id = @raw_post_id
   `);
   return stmt.run({
-    raw_post_id: card.raw_post_id,
-    account_id: card.account_id || null,
-    lane: card.lane || 'anonymous_signal',
+    raw_post_id: raw_post_id,
     strategic_summary: card.strategic_summary || '',
     suggested_opener: card.suggested_opener || '',
     objection_prevention: card.objection_prevention || '',
     next_best_action: card.next_best_action || 'monitor',
-    sales_priority_score: card.sales_priority_score || 0
-  }).lastInsertRowid;
+  }).changes;
+};
+
+const getLeadCardByPost = (raw_post_id) => {
+  return db.prepare(`
+    SELECT strategic_summary, suggested_opener, objection_prevention, next_best_action, sales_priority_score 
+    FROM post_classifications 
+    WHERE raw_post_id = ? AND strategic_summary IS NOT NULL
+  `).get(raw_post_id);
 };
 
 const getSISSummary = () => {
@@ -443,30 +388,7 @@ const failScan = (id, error) => {
     .run(error, id);
 };
 
-// ─── Account & Identity ────────────────────────────────────────────────────
-
-const getAccounts = (limit = 100) => {
-  return db.prepare(`SELECT * FROM accounts ORDER BY sales_priority_score DESC, created_at DESC LIMIT ?`).all(limit);
-};
-
-const getAccountById = (id) => {
-  return db.prepare(`SELECT * FROM accounts WHERE id = ?`).get(id);
-};
-
-const insertAccount = (acc) => {
-  return db.prepare(`INSERT INTO accounts (brand_name, account_status) VALUES (?, ?)`).run(acc.brand_name, acc.status || acc.account_status || 'lead').lastInsertRowid;
-};
-
-const findAccountByIdentity = (type, value) => {
-  const rel = db.prepare(`SELECT account_id FROM identity_clues WHERE clue_type = ? AND clue_value = ?`).get(type, value);
-  return rel ? rel.account_id : null;
-};
-
-const insertIdentity = (clue) => {
-  return db.prepare(`INSERT INTO identity_clues (account_id, clue_type, clue_value, discovered_by) VALUES (?, ?, ?, ?)`).run(
-    clue.account_id, clue.type || clue.clue_type, clue.value || clue.clue_value, clue.discovered_from || 'system'
-  ).lastInsertRowid;
-};
+// ─── Human Feedback ────────────────────────────────────────────────────────
 
 const insertFeedback = (fb) => {
   return db.prepare(`
@@ -480,18 +402,14 @@ module.exports = {
   insertRawPost,
   insertClassification,
   getLeadCards,
-  insertLeadCard,
+  getLeadCardByPost,
+  updateLeadCard,
   getSISSummary,
   enqueueScan,
   claimNextScan,
   completeScan,
   failScan,
   getScanQueueStatus: () => db.prepare(`SELECT status, COUNT(*) as count FROM scan_queue GROUP BY status`).all(),
-  insertAccount,
-  getAccounts,
-  getAccountById,
-  findAccountByIdentity,
-  insertIdentity,
   insertFeedback,
   _db: db
 };
