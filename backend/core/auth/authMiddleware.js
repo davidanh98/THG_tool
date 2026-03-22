@@ -7,6 +7,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'thg-secret-change-in-production';
  * Skips /api/auth/* routes automatically (handled in server.js routing order).
  */
 function verifyToken(req, res, next) {
+    // Public routes — no auth required
+    const PUBLIC_PATHS = ['/api/sis/', '/api/auth/'];
+    if (PUBLIC_PATHS.some(p => req.path.startsWith(p))) return next();
+
     // 1. Try Authorization: Bearer <token>
     let token = null;
     const authHeader = req.headers['authorization'];

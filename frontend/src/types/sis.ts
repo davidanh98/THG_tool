@@ -35,17 +35,28 @@ export interface SISLeadCard {
 
 export interface SISSignal {
     id: number;
+    classification_id?: number;
+    lane?: string;
     platform: string;
     author_name: string;
-    author_url: string;
+    author_url?: string;
     author_avatar?: string;
     content: string;
     post_url: string;
+    group_name?: string;
     source_group?: string;
-    item_type: 'post' | 'comment';
-    created_at: string;
+    item_type?: string;
+    created_at?: string;
     classification?: SISClassification;
     leadCard?: SISLeadCard;
+    reason_summary?: string;
+    confidence?: string;
+    seller_likelihood?: number;
+    pain_score?: number;
+    intent_score?: number;
+    strategic_summary?: string;
+    suggested_opener?: string;
+    sales_priority_score?: number;
 }
 
 export interface SISSummary {
