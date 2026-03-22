@@ -21,6 +21,7 @@ const scanRoutes = require('./routes/scan.routes');
 const devRoutes = require('./routes/dev.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const sisRoutes = require('./routes/sis.routes'); // Primary SIS v2 Routes
+const groupRoutes = require('./routes/group.routes');
 
 // ╔═══════════════════════════════════════════════════════════╗
 // ║  IN-MEMORY LOG CAPTURE (for Dev Dashboard)                ║
@@ -134,6 +135,7 @@ app.use(scanRoutes);
 app.use(devRoutes);
 app.use(webhookRoutes);
 app.use(sisRoutes); // Seller Intelligence System (SIS v2)
+app.use(groupRoutes);
 
 // ── Initialize Group Discovery DB ───────────────────────────────────────────
 try {
