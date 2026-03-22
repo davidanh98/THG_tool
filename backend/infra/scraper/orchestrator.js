@@ -217,10 +217,13 @@ async function _scrapeWithContext(browser, account, groups) {
 
                 if (testUrl.includes('checkpoint')) {
                     console.warn(`${tag} 🚨 Checkpoint detected`);
+                    accountManager.reportCheckpoint(account.id);
                     break;
                 }
                 if (testUrl.includes('/login')) {
                     console.warn(`${tag} 🔒 Redirected to login (attempt ${attempt})`);
+                    // If redirected to login, the session is definitely dead
+                    if (attempt === 2) accountManager.reportCheckpoint(account.id);
                 }
             } catch (e) {
                 console.warn(`${tag} ⚠️ Validation attempt ${attempt} error: ${e.message.substring(0, 60)}`);
@@ -262,6 +265,7 @@ async function _scrapeWithContext(browser, account, groups) {
             }
 
             console.warn(`${tag} ❌ Session invalid after 2 attempts. Self-healing disabled to protect IP/User-Agent. Please extract cookies manually via Desktop.`);
+            accountManager.reportCheckpoint(account.id);
             await testPage.close();
             await context.close();
             return [];
