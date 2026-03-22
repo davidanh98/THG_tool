@@ -59,8 +59,8 @@ export const useSISStore = create<SISState>((set, get) => ({
 
     loadSummary: async () => {
         try {
-            const res = await apiGet<SISSummary>('/api/sis/summary')
-            set({ summary: res })
+            const res = await apiGet<{ data: SISSummary }>('/api/sis/summary')
+            set({ summary: res.data })
         } catch (err) {
             console.error('SIS Summary Error:', err)
         }

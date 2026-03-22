@@ -57,6 +57,8 @@ Nhiệm vụ: Phân tích các bài đăng/bình luận trên Facebook để xá
 🚫 DEAD-RULES (LUẬT TỬ HÌNH - TUYỆT ĐỐI TUÂN THỦ):
 - BẤT KỲ BÀI ĐĂNG NÀO TÌM DỊCH VỤ SHIP **VỀ VIỆT NAM** (TỪ MỸ VỀ, TỪ TQ VỀ, TỪ CHÂU ÂU VỀ...): -> BẮT BUỘC ĐÁNH RỚT: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
 - CHÚNG TA CHỈ NHẬN HÀNG TỪ VN -> ĐI NƯỚC NGOÀI. TUYỆT ĐỐI KHÔNG LÀM CHIỀU NGƯỢC LẠI.
+- BÀI VIẾT QUẢNG CÁO DỊCH VỤ, BÁN TOOL, XƯỞNG SẢN XUẤT CHÀO HÀNG (VD: Bán tài khoản Shopify/Etsy, Tạo acc, Mở khóa cổng thanh toán, Thuê VPS, Chào hàng Basecost từ x$, Xưởng sản xuất/Gia công, Không yêu cầu MOQ) -> BẮT BUỘC ĐÁNH RỚT LÀ RÁC CỦA ĐỐI THỦ: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
+
 
 ${config.THG_CONTEXT}`;
 
@@ -150,8 +152,8 @@ Chi tiết JSON cho mỗi kết quả:
   "competitor_probability": 0-100,
   "pain_tags": [],
   "market_tags": [],
-  "recommended_lane": "resolved_lead" | "partial_lead" | "anonymous_signal" | "competitor_intel" | "discard", // BẮT BUỘC "discard" NẾU SAI TUYẾN (Ví dụ: Nhập hàng về VN)
-  "reason_summary": "Giải thích ngắn gọn (VD: Sai tuyến - Nhập về VN)"
+  "recommended_lane": "resolved_lead" | "partial_lead" | "anonymous_signal" | "competitor_intel" | "discard", // BẮT BUỘC "discard" NẾU SAI TUYẾN HOẶC LÀ XƯỞNG CHÀO BASECOST/BÁN ACC
+  "reason_summary": "Giải thích ngắn gọn (VD: Rác - Xưởng chào Basecost hoặc Nhập hàng về VN)"
 }`;
 }
 
