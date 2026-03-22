@@ -306,8 +306,8 @@ const insertClassification = (cls) => {
       raw_post_id, model_name, is_relevant, entity_type, 
       seller_likelihood, pain_score, intent_score, resolution_confidence,
       contactability_score, competitor_probability,
-      pain_tags TEXT DEFAULT '[]', market_tags TEXT DEFAULT '[]',
-      seller_stage_estimate TEXT DEFAULT 'unknown', 
+      contactability_score, competitor_probability,
+      pain_tags, market_tags, seller_stage_estimate, 
       recommended_lane, reason_summary, confidence, raw_response
     ) VALUES (
       @raw_post_id, @model_name, @is_relevant, @entity_type, 
