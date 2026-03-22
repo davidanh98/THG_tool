@@ -64,8 +64,8 @@ async function classifyPosts(posts) {
 
     console.log(`[SIS v2 Classifier] 🔍 Sieve: ${results.length} filtered, ${toClassify.length} -> AI Brain`);
 
-    // Layer 2: AI Classification (Batch of 5)
-    const BATCH_SIZE = 5;
+    // Layer 2: AI Classification (Batch of 3)
+    const BATCH_SIZE = 3;
     for (let i = 0; i < toClassify.length; i += BATCH_SIZE) {
         const batch = toClassify.slice(i, i + BATCH_SIZE);
         const sysPrompt = buildSystemPrompt(batch.map(b => b.content).join(' '));
@@ -74,7 +74,7 @@ async function classifyPosts(posts) {
         try {
             const response = await aiProvider.generateText(sysPrompt, usrPrompt, {
                 model: 'gpt-4o-mini',
-                maxTokens: 2000,
+                maxTokens: 2500,
                 jsonMode: true
             });
 
@@ -156,7 +156,7 @@ async function saveToSIS(data) {
             market_tags: data.market_tags || [],
             seller_stage_estimate: data.seller_stage_estimate || 'unknown',
             recommended_lane: data.recommended_lane || 'discard',
-            reason_summary: data.reason_summary || '',
+            reason_summary: (data.reason_summary || '').substring(0, 1000),
             confidence: data.confidence || 'low',
             raw_response: data
         });

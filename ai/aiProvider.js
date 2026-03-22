@@ -41,7 +41,7 @@ async function generateText(systemPrompt, userPrompt, options = {}) {
 
     const {
         model = 'gpt-4o-mini',
-        maxTokens = 2000,
+        maxTokens = 3000,
         temperature = 0.3,
         jsonMode = false
     } = options;
