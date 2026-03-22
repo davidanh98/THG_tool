@@ -91,6 +91,14 @@ const schema = {
 };
 
 for (const [table, config] of Object.entries(schema)) {
+    const tableExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='?';`.replace('?', table)).get();
+
+    if (!tableExists) {
+        console.log(`🌱 Creating fresh table [${table}]...`);
+        db.exec(config.create);
+        continue;
+    }
+
     const currentTableInfo = db.prepare(`PRAGMA table_info(${table})`).all();
     const currentColNames = currentTableInfo.map(c => c.name);
 
