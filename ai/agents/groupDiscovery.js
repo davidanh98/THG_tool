@@ -171,7 +171,7 @@ function getAllGroups(filters = {}) {
     const params = [];
     if (filters.category) { q += ' AND category = ?'; params.push(filters.category); }
     if (filters.status) { q += ' AND status = ?'; params.push(filters.status); }
-    q += ' ORDER BY relevance_score DESC, name ASC';
+    q += ' ORDER BY id DESC, relevance_score DESC';
     if (filters.limit) { q += ' LIMIT ?'; params.push(filters.limit); }
     return db.prepare(q).all(...params);
 }
