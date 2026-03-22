@@ -1,7 +1,7 @@
 /**
- * SIS v2: Force Database Migration
+ * SIS v2: Absolute Database Migration (v2.4)
  * 
- * Run this manually if self-healing migration is blocked by SQLite locks.
+ * Rebuilds tables with legacy constraints and purges v1 "dust" tables.
  * Usage: node backend/scripts/fix_db.js
  */
 const Database = require('better-sqlite3');
@@ -17,7 +17,16 @@ if (!fs.existsSync(DB_PATH)) {
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 
-console.log('☢️  Starting Absolute Force Migration...');
+console.log('☢️  Starting Absolute Force Migration v2.4...');
+
+// 1. Radical Purge: Delete legacy v1 tables to avoid "Data Chaos"
+const legacyTables = ['leads', 'analysis_results', 'group_members', 'search_tasks', 'agents', 'messages', 'v1_posts'];
+legacyTables.forEach(t => {
+    try {
+        db.prepare(`DROP TABLE IF EXISTS ${t}`).run();
+        console.log(`🧹 Purged legacy table: ${t}`);
+    } catch (e) { }
+});
 
 const schema = {
     raw_posts: {
@@ -88,7 +97,7 @@ for (const [table, config] of Object.entries(schema)) {
     const legacyNotNull = currentTableInfo.filter(c => c.notnull === 1 && !config.cols.includes(c.name) && c.name !== 'id');
 
     if (missingCols.length > 0 || legacyNotNull.length > 0) {
-        console.log(`☢️  REBUILDING [${table}]...`);
+        console.log(`☢️  ABSOLUTE SYNC: Rebuilding [${table}]...`);
         try {
             db.transaction(() => {
                 db.prepare(`ALTER TABLE ${table} RENAME TO ${table}_old`).run();
@@ -107,6 +116,5 @@ for (const [table, config] of Object.entries(schema)) {
     }
 }
 
-console.log('🏁 Absolute Migration Complete.');
-db.close();
+console.log('🏁 Absolute Migration v2.4 Complete.');
 db.close();

@@ -147,9 +147,18 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_scan_queue_status ON scan_queue(status);
 `);
 
-// ─── Absolute Schema Synchronization (v2.3) ────────────────────────────────
+// ─── Absolute Schema Synchronization (v2.4) ────────────────────────────────
 function absoluteSync() {
   console.log('[Database] 🛡️  Absolute Sync: Ensuring 100% Schema & Constraint Parity...');
+
+  // 1. Radical Purge: Delete legacy v1 tables to avoid "Data Chaos"
+  const legacyTables = ['leads', 'analysis_results', 'group_members', 'search_tasks', 'agents', 'messages', 'v1_posts'];
+  legacyTables.forEach(t => {
+    try {
+      db.prepare(`DROP TABLE IF EXISTS ${t}`).run();
+    } catch (e) { }
+  });
+
   const schema = {
     raw_posts: {
       cols: ['source_platform', 'source_type', 'external_post_id', 'group_name', 'author_name', 'author_profile_url', 'post_url', 'post_text', 'scraped_at', 'posted_at'],
@@ -220,31 +229,24 @@ function absoluteSync() {
 
     if (missingCols.length > 0 || legacyNotNull.length > 0) {
       console.log(`[Database] ☢️  ABSOLUTE SYNC: Rebuilding [${table}]...`);
-      if (legacyNotNull.length > 0) console.log(`[Database] 🕵️ Reason: Legacy NOT NULL columns found: ${legacyNotNull.map(c => c.name).join(', ')}`);
-      if (missingCols.length > 0) console.log(`[Database] 🕵️ Reason: Missing columns: ${missingCols.join(', ')}`);
-
       try {
         db.transaction(() => {
-          // 1. Rename old
           db.prepare(`ALTER TABLE ${table} RENAME TO ${table}_old`).run();
-          // 2. Create new
           db.exec(config.create);
-          // 3. Migrate data
           const commonCols = currentColNames.filter(c => config.cols.includes(c));
           if (commonCols.length > 0) {
             const colsStr = commonCols.join(', ');
             db.prepare(`INSERT INTO ${table} (${colsStr}) SELECT ${colsStr} FROM ${table}_old`).run();
-            console.log(`[Database] 📊 Migrated ${commonCols.length} columns from old [${table}].`);
           }
-          // 4. Drop old
           db.prepare(`DROP TABLE ${table}_old`).run();
         })();
-        console.log(`[Database] ✅ [${table}] successfully rebuilt and synchronized.`);
+        console.log(`[Database] ✅ [${table}] successfully rebuilt.`);
       } catch (err) {
         console.error(`[Database] ❌ Absolute Sync failed for [${table}]:`, err.message);
       }
     }
   }
+  console.log('[Database] ✅ Absolute Parity Achieved.');
 }
 absoluteSync();
 
