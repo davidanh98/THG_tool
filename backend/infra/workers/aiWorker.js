@@ -23,7 +23,7 @@ async function runSISAIWorker() {
             JOIN raw_posts rp ON pc.raw_post_id = rp.id
             LEFT JOIN lead_cards lc ON pc.raw_post_id = lc.raw_post_id
             WHERE pc.is_relevant = 1 
-            AND pc.recommended_lane != 'discard'
+            AND pc.recommended_lane IN ('resolved_lead', 'partial_lead')
             AND lc.id IS NULL
             ORDER BY pc.intent_score DESC
             LIMIT 1

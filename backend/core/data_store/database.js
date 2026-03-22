@@ -386,13 +386,23 @@ const getSISSummary = () => {
     GROUP BY recommended_lane
   `).all();
 
-  const lanes = {};
-  lanesRows.forEach(r => lanes[r.lane] = r.count);
+  const mapping = {
+    'resolved_lead': 'resolved',
+    'partial_lead': 'partial',
+    'anonymous_signal': 'anonymous',
+    'competitor_intel': 'competitor'
+  };
+
+  const lanes = { resolved: 0, partial: 0, anonymous: 0, competitor: 0 };
+  lanesRows.forEach(r => {
+    const key = mapping[r.lane];
+    if (key) lanes[key] = r.count;
+  });
 
   const stats = db.prepare(`
     SELECT 
       COUNT(*) as total_processed,
-      SUM(CASE WHEN is_relevant = 1 THEN 1 ELSE 0 END) as total_relevant
+      SUM(CASE WHEN is_relevant = 1 AND recommended_lane != 'discard' THEN 1 ELSE 0 END) as total_relevant
     FROM post_classifications
   `).get();
 

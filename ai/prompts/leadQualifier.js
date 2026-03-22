@@ -75,8 +75,8 @@ async function classifyPosts(posts) {
 
     console.log(`[SIS v2 Classifier] 🔍 Sieve: ${results.length} filtered, ${toClassify.length} -> AI Brain`);
 
-    // Layer 2: AI Classification (Batch of 3)
-    const BATCH_SIZE = 3;
+    // Layer 2: AI Classification (Batch of 10)
+    const BATCH_SIZE = 10;
     for (let i = 0; i < toClassify.length; i += BATCH_SIZE) {
         const batch = toClassify.slice(i, i + BATCH_SIZE);
         const sysPrompt = buildSystemPrompt(batch.map(b => b.content).join(' '));
