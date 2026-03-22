@@ -17,75 +17,96 @@ if (!fs.existsSync(DB_PATH)) {
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 
-console.log('☢️  Starting Nuclear Force Migration...');
+console.log('☢️  Starting Absolute Force Migration...');
 
 const schema = {
     raw_posts: {
-        source_platform: 'TEXT DEFAULT "facebook"',
-        source_type: 'TEXT',
-        external_post_id: 'TEXT',
-        group_name: 'TEXT',
-        author_name: 'TEXT',
-        author_profile_url: 'TEXT',
-        post_url: 'TEXT',
-        post_text: 'TEXT',
-        scraped_at: 'TEXT',
-        posted_at: 'TEXT'
+        cols: ['source_platform', 'source_type', 'external_post_id', 'group_name', 'author_name', 'author_profile_url', 'post_url', 'post_text', 'scraped_at', 'posted_at'],
+        create: `CREATE TABLE raw_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_platform TEXT NOT NULL DEFAULT 'facebook',
+        source_type TEXT NOT NULL,
+        external_post_id TEXT UNIQUE NOT NULL,
+        group_name TEXT, group_id TEXT, author_name TEXT, author_profile_url TEXT,
+        author_external_id TEXT, post_url TEXT, post_text TEXT, post_language TEXT,
+        links_found TEXT DEFAULT '[]', media_urls TEXT DEFAULT '[]',
+        engagement_json TEXT DEFAULT '{}', top_comments TEXT DEFAULT '[]',
+        scraped_at TEXT DEFAULT (datetime('now')), posted_at TEXT, raw_payload TEXT DEFAULT '{}'
+      )`
     },
     post_classifications: {
-        raw_post_id: 'INTEGER',
-        model_name: 'TEXT',
-        is_relevant: 'INTEGER',
-        entity_type: 'TEXT',
-        seller_likelihood: 'INTEGER',
-        pain_score: 'INTEGER',
-        intent_score: 'INTEGER',
-        resolution_confidence: 'INTEGER',
-        contactability_score: 'INTEGER',
-        competitor_probability: 'INTEGER',
-        recommended_lane: 'TEXT',
-        reason_summary: 'TEXT'
+        cols: ['raw_post_id', 'model_name', 'is_relevant', 'entity_type', 'seller_likelihood', 'pain_score', 'intent_score', 'resolution_confidence', 'contactability_score', 'competitor_probability', 'recommended_lane', 'reason_summary'],
+        create: `CREATE TABLE post_classifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        raw_post_id INTEGER NOT NULL REFERENCES raw_posts(id) ON DELETE CASCADE,
+        model_name TEXT NOT NULL, is_relevant INTEGER NOT NULL, entity_type TEXT NOT NULL,
+        seller_likelihood INTEGER NOT NULL, pain_score INTEGER NOT NULL, intent_score INTEGER NOT NULL,
+        resolution_confidence INTEGER NOT NULL, contactability_score INTEGER NOT NULL,
+        competitor_probability INTEGER NOT NULL, pain_tags TEXT DEFAULT '[]', market_tags TEXT DEFAULT '[]',
+        seller_stage_estimate TEXT DEFAULT 'unknown', recommended_lane TEXT NOT NULL,
+        reason_summary TEXT, confidence TEXT DEFAULT 'low', raw_response TEXT DEFAULT '{}',
+        created_at TEXT DEFAULT (datetime('now'))
+      )`
     },
     identity_clues: {
-        account_id: 'INTEGER',
-        raw_post_id: 'INTEGER',
-        clue_type: 'TEXT',
-        clue_value: 'TEXT',
-        discovered_by: 'TEXT'
+        cols: ['account_id', 'raw_post_id', 'clue_type', 'clue_value', 'discovered_by'],
+        create: `CREATE TABLE identity_clues (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER, raw_post_id INTEGER REFERENCES raw_posts(id) ON DELETE CASCADE,
+        clue_type TEXT NOT NULL, clue_value TEXT NOT NULL, confidence_score INTEGER DEFAULT 0,
+        discovered_by TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now'))
+      )`
     },
     lead_cards: {
-        raw_post_id: 'INTEGER',
-        account_id: 'INTEGER',
-        lane: 'TEXT',
-        strategic_summary: 'TEXT',
-        suggested_opener: 'TEXT',
-        objection_prevention: 'TEXT',
-        next_best_action: 'TEXT',
-        sales_priority_score: 'INTEGER'
+        cols: ['raw_post_id', 'account_id', 'lane', 'strategic_summary', 'suggested_opener', 'objection_prevention', 'next_best_action', 'sales_priority_score'],
+        create: `CREATE TABLE lead_cards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        raw_post_id INTEGER REFERENCES raw_posts(id) ON DELETE SET NULL,
+        account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+        lane TEXT NOT NULL, strategic_summary TEXT, suggested_opener TEXT,
+        objection_prevention TEXT, next_best_action TEXT, sales_priority_score INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+      )`
     },
     scan_logs: {
-        platform: 'TEXT',
-        posts_found: 'INTEGER',
-        leads_detected: 'INTEGER',
-        duration_seconds: 'INTEGER',
-        status: 'TEXT'
+        cols: ['platform', 'posts_found', 'leads_detected', 'duration_seconds', 'status'],
+        create: `CREATE TABLE scan_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        platform TEXT, keywords_used TEXT, posts_found INTEGER DEFAULT 0,
+        leads_detected INTEGER DEFAULT 0, duration_seconds INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'running', error TEXT, started_at TEXT DEFAULT (datetime('now'))
+      )`
     }
 };
 
-for (const [table, cols] of Object.entries(schema)) {
-    const currentCols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
-    for (const [col, type] of Object.entries(cols)) {
-        if (!currentCols.includes(col)) {
-            console.log(`➕ Adding missing column [${col}] to [${table}]...`);
-            try {
-                db.prepare(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`).run();
-                console.log(`✨ Success: ${table}.${col} added.`);
-            } catch (err) {
-                console.error(`❌ Failed: ${err.message}`);
-            }
+for (const [table, config] of Object.entries(schema)) {
+    const currentTableInfo = db.prepare(`PRAGMA table_info(${table})`).all();
+    const currentColNames = currentTableInfo.map(c => c.name);
+
+    // Check for 1. Missing columns OR 2. Legacy NOT NULL columns
+    const missingCols = config.cols.filter(c => !currentColNames.includes(c));
+    const legacyNotNull = currentTableInfo.filter(c => c.notnull === 1 && !config.cols.includes(c.name) && c.name !== 'id');
+
+    if (missingCols.length > 0 || legacyNotNull.length > 0) {
+        console.log(`☢️  REBUILDING [${table}]...`);
+        try {
+            db.transaction(() => {
+                db.prepare(`ALTER TABLE ${table} RENAME TO ${table}_old`).run();
+                db.exec(config.create);
+                const commonCols = currentColNames.filter(c => config.cols.includes(c));
+                if (commonCols.length > 0) {
+                    const colsStr = commonCols.join(', ');
+                    db.prepare(`INSERT INTO ${table} (${colsStr}) SELECT ${colsStr} FROM ${table}_old`).run();
+                }
+                db.prepare(`DROP TABLE ${table}_old`).run();
+            })();
+            console.log(`✅ [${table}] successfully rebuilt.`);
+        } catch (err) {
+            console.error(`❌ Failed: ${err.message}`);
         }
     }
 }
 
-console.log('🏁 Nuclear Migration Complete.');
+console.log('🏁 Absolute Migration Complete.');
+db.close();
 db.close();
