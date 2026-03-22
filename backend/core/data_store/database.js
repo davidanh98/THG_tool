@@ -275,10 +275,11 @@ const insertRawPost = (post) => {
       @scraped_at, @posted_at, @raw_payload
     ) ON CONFLICT(external_post_id) DO UPDATE SET
       engagement_json = excluded.engagement_json,
-      top_comments = excluded.top_comments
+      top_comments    = excluded.top_comments
+    RETURNING id
   `);
 
-  return stmt.run({
+  const row = stmt.get({
     source_platform: post.source_platform || 'facebook',
     source_type: post.source_type || 'post',
     external_post_id: post.external_post_id || post.post_url,
@@ -297,7 +298,9 @@ const insertRawPost = (post) => {
     scraped_at: post.scraped_at || new Date().toISOString(),
     posted_at: post.posted_at || post.post_created_at || new Date().toISOString(),
     raw_payload: JSON.stringify(post.raw_payload || {})
-  }).lastInsertRowid;
+  });
+
+  return row.id;
 };
 
 const insertClassification = (cls) => {
