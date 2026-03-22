@@ -24,7 +24,7 @@ jobs:
             --exclude='.pm2' \
             ${{ github.workspace }}/ /root/THG_tool/
 
-          # Sync config files from data/ (excluded by rsync above)
+          # Sync config files from data/ (cookies, groups — NOT leads.db)
           mkdir -p /root/THG_tool/data
           mkdir -p /root/THG_tool/data/sessions
           mkdir -p /root/THG_tool/logs
@@ -32,11 +32,9 @@ jobs:
           cp -f ${{ github.workspace }}/data/fb_cookies_*.json /root/THG_tool/data/ 2>/dev/null || true
           cp -f ${{ github.workspace }}/data/recovery_codes_*.json /root/THG_tool/data/ 2>/dev/null || true
           cp -f ${{ github.workspace }}/data/ua_*.txt /root/THG_tool/data/ 2>/dev/null || true
-
           echo "✅ Code synced!"
 
-          # Update API keys in VPS .env (.env excluded from rsync)
-          # OpenAI API key (Main provider)
+          # Update OpenAI API key in .env
           if [ ! -z "${{ secrets.OPENAI_API_KEY }}" ]; then
             if grep -q 'OPENAI_API_KEY=' /root/THG_tool/.env; then
               sed -i "s|OPENAI_API_KEY=.*|OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}|" /root/THG_tool/.env
@@ -44,39 +42,13 @@ jobs:
               echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> /root/THG_tool/.env
             fi
           fi
-
-          # Ollama (self-hosted, primary)
-          if grep -q 'OLLAMA_BASE_URL=' /root/THG_tool/.env; then
-            echo "✅ OLLAMA_BASE_URL already in .env"
-          else
-            echo "OLLAMA_BASE_URL=http://127.0.0.1:11434" >> /root/THG_tool/.env
-            echo "OLLAMA_MODEL=qwen2.5:3b" >> /root/THG_tool/.env
-          fi
-
-          # Cerebras API key (cloud fallback)
-          if [ ! -z "${{ secrets.CEREBRAS_API_KEY }}" ]; then
-             if grep -q 'CEREBRAS_API_KEY=' /root/THG_tool/.env; then
-               sed -i "s|CEREBRAS_API_KEY=.*|CEREBRAS_API_KEY=${{ secrets.CEREBRAS_API_KEY }}|" /root/THG_tool/.env
-             else
-               echo "CEREBRAS_API_KEY=${{ secrets.CEREBRAS_API_KEY }}" >> /root/THG_tool/.env
-             fi
-          fi
-
-          # Sambanova API key (cloud fallback 2)
-          if [ ! -z "${{ secrets.SAMBANOVA_API_KEY }}" ]; then
-            if grep -q 'SAMBANOVA_API_KEY=' /root/THG_tool/.env; then
-              sed -i "s|SAMBANOVA_API_KEY=.*|SAMBANOVA_API_KEY=${{ secrets.SAMBANOVA_API_KEY }}|" /root/THG_tool/.env
-            else
-              echo "SAMBANOVA_API_KEY=${{ secrets.SAMBANOVA_API_KEY }}" >> /root/THG_tool/.env
-            fi
-          fi
           echo "🔑 API keys updated in .env"
 
-          # Update NGINX config to support new Domains
+          # Update NGINX config
           echo "🌐 Reloading NGINX configuration..."
           sudo cp -f /root/THG_tool/nginx/thg-lead-gen.conf /etc/nginx/sites-available/thg-lead-gen 2>/dev/null || true
           sudo ln -sf /etc/nginx/sites-available/thg-lead-gen /etc/nginx/sites-enabled/thg-lead-gen 2>/dev/null || true
-          sudo nginx -t && sudo systemctl reload nginx || echo "⚠️ NGINX reload failed or NGINX not installed natively"
+          sudo nginx -t && sudo systemctl reload nginx || echo "⚠️ NGINX reload failed"
 
       - name: Install Dependencies
         run: |
@@ -91,98 +63,45 @@ jobs:
           npm run build
           echo "✅ Frontend built → frontend/dist/"
 
-      - name: Stop Docker (if running)
-        run: |
-          cd /root/THG_tool
-          docker compose down --timeout 5 2>/dev/null || true
-          docker stop $(docker ps -q --filter "publish=3000") 2>/dev/null || true
-          docker rm $(docker ps -aq --filter "publish=3000") 2>/dev/null || true
-          echo "✅ Docker stopped (or was not running)"
-
-      - name: Ensure Ollama is Running
-        continue-on-error: true
-        env:
-          HOME: /root
-        run: |
-          # Check if Ollama is installed
-          if ! command -v ollama &> /dev/null; then
-            echo "⚠️ Ollama not installed — cloud fallbacks (Cerebras/Sambanova) will be used"
-            exit 0
-          fi
-
-          export HOME=${HOME:-/root}
-
-          sudo systemctl start ollama 2>/dev/null || (ollama serve &>/dev/null &)
-          sleep 3
-
-          if ollama list 2>/dev/null | grep -q "qwen2.5:3b"; then
-            echo "✅ Ollama running with qwen2.5:3b"
-          else
-            echo "📥 Pulling qwen2.5:3b model..."
-            ollama pull qwen2.5:3b || echo "⚠️ Model pull failed — will use cloud fallbacks"
-          fi
-
-          HTTP=$(curl -so /dev/null -w "%{http_code}" http://127.0.0.1:11434/api/tags 2>/dev/null || echo "000")
-          echo "🩺 Ollama health: HTTP ${HTTP}"
-
       - name: Restart PM2 Processes
         run: |
           cd /root/THG_tool
 
           # Verify frontend build exists
-          echo "📂 Checking frontend/dist..."
-          ls -la frontend/dist/ 2>/dev/null || echo "❌ frontend/dist NOT FOUND!"
           ls -la frontend/dist/index.html 2>/dev/null || echo "❌ index.html NOT FOUND!"
 
-          # Ensure PM2 is installed
           which pm2 || sudo npm install -g pm2
-          
-          # CRITICAL: Force Github Actions to use the root PM2 daemon
-          # We must use sudo to ensure it hooks into the actual root daemon
           export PM2_HOME=/root/.pm2
 
-          # Full stop — kill ALL PM2 processes AND any orphaned node process on port 3000
+          # Stop all processes
           sudo env PM2_HOME=/root/.pm2 pm2 kill 2>/dev/null || true
           sleep 1
-          # Force kill anything still holding port 3000 using ultimate lsof nuke
           fuser -k 3000/tcp 2>/dev/null || true
           pkill -f 'node backend/' 2>/dev/null || true
-          killall -9 node 2>/dev/null || true
-          # Find EXACT PID holding port 3000 and blast it
           PORT_PID=$(lsof -t -i:3000 2>/dev/null || true)
           if [ ! -z "$PORT_PID" ]; then
-            echo "⚠️ Found stubborn process $PORT_PID holding Port 3000. Forcing kill..."
             kill -9 $PORT_PID 2>/dev/null || true
           fi
-          
           sleep 4
 
           # Fresh start
           sudo env PM2_HOME=/root/.pm2 pm2 start devops/ecosystem.config.js
           sudo env PM2_HOME=/root/.pm2 pm2 save
 
+          # Health check
           echo "⏳ Waiting for API..."
           sleep 5
           for i in $(seq 1 10); do
             sleep 2
             HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/health 2>/dev/null || echo "000")
             if [ "$HTTP" = "200" ]; then
-              echo "✅ Health check: HTTP 200 in $((i*2+5))s"
-              
-              # Test root path specifically
-              ROOT_HTTP=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/ 2>/dev/null || echo "000")
-              echo "🌐 Root path test: HTTP ${ROOT_HTTP}"
-              ROOT_BODY=$(curl -s http://localhost:3000/ 2>/dev/null | head -c 200)
-              echo "📄 Root body: ${ROOT_BODY}"
-              
+              echo "✅ Health check passed in $((i*2+5))s"
               sudo env PM2_HOME=/root/.pm2 pm2 status
               break
             fi
             echo "  [$((i*2+5))s] HTTP ${HTTP}..."
           done
 
-          # Show PM2 logs (last 10 lines) for debugging
           echo "📋 PM2 API logs:"
           sudo env PM2_HOME=/root/.pm2 pm2 logs thg-api --lines 10 --nostream 2>/dev/null || true
-
-          echo "🎉 THG PM2 Deploy hoàn tất!"
+          echo "🎉 THG Deploy hoàn tất!"
