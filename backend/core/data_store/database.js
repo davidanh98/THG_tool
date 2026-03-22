@@ -284,7 +284,7 @@ const insertClassification = (cls) => {
 };
 
 const getLeadCards = (lane = 'resolved_lead', limit = 50) => {
-  return db.prepare(`
+  const rows = db.prepare(`
     SELECT 
       pc.id as classification_id, pc.recommended_lane as lane, pc.reason_summary, pc.confidence,
       pc.seller_likelihood, pc.pain_score, pc.intent_score,
@@ -297,6 +297,37 @@ const getLeadCards = (lane = 'resolved_lead', limit = 50) => {
     ORDER BY pc.created_at DESC
     LIMIT ?
   `).all(lane, limit);
+
+  return rows.map(r => {
+    const signal = {
+      id: r.id,
+      platform: r.platform,
+      author_name: r.author_name,
+      content: r.content,
+      post_url: r.post_url,
+      group_name: r.group_name,
+      classification: {
+        id: r.classification_id,
+        seller_likelihood: r.seller_likelihood,
+        pain_score: r.pain_score,
+        intent_score: r.intent_score,
+        confidence: r.confidence,
+        reason_summary: r.reason_summary,
+        recommended_lane: r.lane
+      }
+    };
+
+    if (r.strategic_summary) {
+      signal.leadCard = {
+        strategic_summary: r.strategic_summary,
+        suggested_opener: r.suggested_opener,
+        sales_priority_score: r.sales_priority_score,
+        identity_clues: r.identity_clues
+      };
+    }
+
+    return signal;
+  });
 };
 
 const updateLeadCard = (raw_post_id, card) => {
