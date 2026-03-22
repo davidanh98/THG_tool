@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useSISStore } from '../store/sisStore'
 import type { SISSignal } from '../types/sis'
+import '../premium-card.css'
 
 export default function SISDashboard() {
     const { lanes, summary, activeTab, setActiveTab, loadLanes, loadSummary } = useSISStore()
@@ -88,6 +89,14 @@ function Tab({ label, icon, count, active, onClick, id }: { label: string; icon:
 function SignalCard({ signal }: { signal: SISSignal }) {
     const cls = signal.classification
     const card = signal.leadCard
+    const { deleteSignal, activeTab } = useSISStore()
+
+    const handleDelete = (e: React.MouseEvent) => {
+        e.preventDefault()
+        if (confirm('🗑️ Xóa vĩnh viễn lead này khỏi hệ thống? ⚡')) {
+            deleteSignal(activeTab, signal.id)
+        }
+    }
 
     return (
         <div className={`signal-card ${card ? 'has-strategy' : ''}`}>
@@ -124,11 +133,14 @@ function SignalCard({ signal }: { signal: SISSignal }) {
                         <span style={{ color: 'var(--text-muted)' }}>Confidence: {cls?.confidence || 'thấp'}</span>
                     )}
                 </div>
-                {signal.post_url && (
-                    <a href={signal.post_url} target="_blank" rel="noreferrer" className="action-btn">
-                        Xem chi tiết
-                    </a>
-                )}
+                <div className="card-actions">
+                    <button onClick={handleDelete} className="action-btn-danger" title="Xóa tín hiệu bị sai">🗑️ Xóa</button>
+                    {signal.post_url && (
+                        <a href={signal.post_url} target="_blank" rel="noreferrer" className="action-btn">
+                            Xem chi tiết
+                        </a>
+                    )}
+                </div>
             </div>
         </div>
     )

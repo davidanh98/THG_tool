@@ -352,6 +352,7 @@ const getLeadCards = (lane = 'resolved_lead', limit = 50) => {
     JOIN raw_posts rp ON pc.raw_post_id = rp.id
     LEFT JOIN lead_cards lc ON pc.raw_post_id = lc.raw_post_id
     WHERE pc.recommended_lane = ?
+    GROUP BY rp.id
     ORDER BY pc.created_at DESC
     LIMIT ?
   `).all(lane, limit);

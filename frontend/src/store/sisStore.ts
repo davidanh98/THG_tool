@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { apiGet } from '../api/client'
+import { apiGet, apiDelete } from '../api/client'
 import type { SISSignal, SISSummary } from '../types/sis'
 
 interface SISState {
@@ -16,9 +16,10 @@ interface SISState {
     loadLanes: () => Promise<void>
     loadSummary: () => Promise<void>
     setActiveTab: (tab: 'resolved' | 'partial' | 'anonymous' | 'competitor') => void
+    deleteSignal: (lane: 'resolved' | 'partial' | 'anonymous' | 'competitor', id: number) => Promise<void>
 }
 
-export const useSISStore = create<SISState>((set) => ({
+export const useSISStore = create<SISState>((set, get) => ({
     lanes: {
         resolved: [],
         partial: [],
@@ -62,6 +63,24 @@ export const useSISStore = create<SISState>((set) => ({
             set({ summary: res })
         } catch (err) {
             console.error('SIS Summary Error:', err)
+        }
+    },
+
+    deleteSignal: async (lane, id) => {
+        try {
+            await apiDelete(`/api/sis/signals/${id}`)
+            const store = get()
+            const currentLanes = store.lanes
+            set({
+                lanes: {
+                    ...currentLanes,
+                    [lane]: currentLanes[lane].filter((s: SISSignal) => s.id !== id)
+                }
+            })
+            // Optionally, we could also loadSummary() here to update the counts
+            store.loadSummary()
+        } catch (err) {
+            console.error('Delete Signal Error:', err)
         }
     }
 }))
