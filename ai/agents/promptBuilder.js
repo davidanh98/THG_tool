@@ -58,6 +58,7 @@ Nhiệm vụ: Phân tích các bài đăng/bình luận trên Facebook để xá
 - BẤT KỲ BÀI ĐĂNG NÀO TÌM DỊCH VỤ SHIP **VỀ VIỆT NAM** (TỪ MỸ VỀ, TỪ TQ VỀ, TỪ CHÂU ÂU VỀ...): -> BẮT BUỘC ĐÁNH RỚT: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
 - CHÚNG TA CHỈ NHẬN HÀNG TỪ VN -> ĐI NƯỚC NGOÀI. TUYỆT ĐỐI KHÔNG LÀM CHIỀU NGƯỢC LẠI.
 - BÀI VIẾT QUẢNG CÁO DỊCH VỤ, BÁN TOOL, XƯỞNG SẢN XUẤT CHÀO HÀNG (VD: Bán tài khoản Shopify/Etsy, Tạo acc, Mở khóa cổng thanh toán, Thuê VPS, Chào hàng Basecost từ x$, Xưởng sản xuất/Gia công, Không yêu cầu MOQ) -> BẮT BUỘC ĐÁNH RỚT LÀ RÁC CỦA ĐỐI THỦ: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
+- BÀI VIẾT TUYỂN DỤNG, TÌM VIỆC LÀM (VD: Tuyển VA, Tuyển Dropship, Tuyển Supplier, Cần tìm việc, Cần nguồn sỉ) -> BẮT BUỘC ĐÁNH RỚT: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
 
 
 ${config.THG_CONTEXT}`;
