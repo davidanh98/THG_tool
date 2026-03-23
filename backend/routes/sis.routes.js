@@ -123,4 +123,52 @@ router.delete('/api/sis/signals/:id', (req, res) => {
     }
 });
 
+// ─── Meta Inbox Integration Route Stubs ───────────────────────────────────
+
+router.get('/meta/conversations', (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 50;
+        const convos = database.getMetaConversations(limit);
+        res.json(convos);
+    } catch (err) {
+        console.error('[SIS API] Meta Get Convos Error:', err.message);
+        res.status(500).json({ error: 'Failed to retrieve Meta conversations' });
+    }
+});
+
+router.get('/meta/conversations/:id/messages', (req, res) => {
+    try {
+        const msgs = database.getMetaMessages(req.params.id);
+        res.json(msgs);
+    } catch (err) {
+        console.error('[SIS API] Meta Get Messages Error:', err.message);
+        res.status(500).json({ error: 'Failed to retrieve Meta messages' });
+    }
+});
+
+router.post('/meta/send/:id', async (req, res) => {
+    try {
+        const { messageText } = req.body;
+        const recipientId = req.params.id; // FB Page Scoped ID (PSID)
+
+        // This is a placeholder for the actual Graph API call.
+        // It requires a PAGE_ACCESS_TOKEN and standard 24h messaging window compliance.
+        console.log(`[Meta API] 📤 Sending message to ${recipientId}: "${messageText}"`);
+
+        // Example Graph API Call:
+        /*
+        const axios = require('axios');
+        await axios.post(`https://graph.facebook.com/v19.0/me/messages?access_token=${process.env.FB_PAGE_TOKEN}`, {
+            recipient: { id: recipientId },
+            message: { text: messageText }
+        });
+        */
+
+        res.json({ success: true, message: `Message designated for delivery to ${recipientId}` });
+    } catch (e) {
+        console.error('[SIS API] Meta Send Error:', e.message);
+        res.status(500).json({ error: 'Failed to dispatch Meta message' });
+    }
+});
+
 module.exports = router;

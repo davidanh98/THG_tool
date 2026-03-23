@@ -167,6 +167,43 @@ function absoluteSync() {
         leads_detected INTEGER DEFAULT 0, duration_seconds INTEGER DEFAULT 0,
         status TEXT DEFAULT 'running', error TEXT, started_at TEXT DEFAULT (datetime('now'))
       )`
+    },
+    meta_conversations: {
+      cols: ['external_id', 'platform', 'status', 'last_message_at', 'unread_count', 'assigned_to'],
+      create: `CREATE TABLE meta_conversations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        external_id TEXT UNIQUE NOT NULL,
+        platform TEXT DEFAULT 'messenger',
+        status TEXT DEFAULT 'open',
+        last_message_at TEXT,
+        unread_count INTEGER DEFAULT 0,
+        assigned_to TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )`
+    },
+    meta_messages: {
+      cols: ['conversation_id', 'sender_id', 'sender_role', 'message_text', 'attachments_json'],
+      create: `CREATE TABLE meta_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id INTEGER NOT NULL REFERENCES meta_conversations(id) ON DELETE CASCADE,
+        sender_id TEXT NOT NULL,
+        sender_role TEXT DEFAULT 'customer',
+        message_text TEXT,
+        attachments_json TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )`
+    },
+    meta_participants: {
+      cols: ['conversation_id', 'participant_id', 'name', 'profile_pic'],
+      create: `CREATE TABLE meta_participants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id INTEGER NOT NULL REFERENCES meta_conversations(id) ON DELETE CASCADE,
+        participant_id TEXT NOT NULL,
+        name TEXT,
+        profile_pic TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(conversation_id, participant_id)
+      )`
     }
   };
 
@@ -420,6 +457,85 @@ const insertFeedback = (fb) => {
     `).run(fb.raw_post_id, fb.is_correct ? 1 : 0, fb.corrected_lane, fb.feedback_text).lastInsertRowid;
 };
 
+// ─── Meta Inbox Methods ───────────────────────────────────────────────────
+
+const upsertMetaConversation = (conv) => {
+  const stmt = db.prepare(`
+    INSERT INTO meta_conversations (
+      external_id, platform, status, last_message_at, unread_count, assigned_to
+    ) VALUES (
+      @external_id, @platform, @status, @last_message_at, @unread_count, @assigned_to
+    ) ON CONFLICT(external_id) DO UPDATE SET
+      last_message_at = excluded.last_message_at,
+      unread_count = meta_conversations.unread_count + excluded.unread_count
+    RETURNING id
+  `);
+  return stmt.get({
+    external_id: conv.external_id,
+    platform: conv.platform || 'messenger',
+    status: conv.status || 'open',
+    last_message_at: conv.last_message_at || new Date().toISOString(),
+    unread_count: conv.unread_count || 1,
+    assigned_to: conv.assigned_to || null
+  }).id;
+};
+
+const insertMetaMessage = (msg) => {
+  const stmt = db.prepare(`
+    INSERT INTO meta_messages (
+      conversation_id, sender_id, sender_role, message_text, attachments_json, created_at
+    ) VALUES (
+      @conversation_id, @sender_id, @sender_role, @message_text, @attachments_json, @created_at
+    )
+  `);
+  return stmt.run({
+    conversation_id: msg.conversation_id,
+    sender_id: msg.sender_id,
+    sender_role: msg.sender_role || 'customer',
+    message_text: msg.message_text || '',
+    attachments_json: JSON.stringify(msg.attachments_json || []),
+    created_at: msg.created_at || new Date().toISOString()
+  }).lastInsertRowid;
+};
+
+const upsertMetaParticipant = (part) => {
+  const stmt = db.prepare(`
+    INSERT INTO meta_participants (
+      conversation_id, participant_id, name, profile_pic
+    ) VALUES (
+      @conversation_id, @participant_id, @name, @profile_pic
+    ) ON CONFLICT(conversation_id, participant_id) DO UPDATE SET
+      name = excluded.name,
+      profile_pic = excluded.profile_pic
+  `);
+  return stmt.run({
+    conversation_id: part.conversation_id,
+    participant_id: part.participant_id,
+    name: part.name || 'Unknown',
+    profile_pic: part.profile_pic || ''
+  }).changes;
+};
+
+const getMetaConversations = (limit = 50) => {
+  return db.prepare(`
+    SELECT mc.*, 
+           (SELECT message_text FROM meta_messages WHERE conversation_id = mc.id ORDER BY created_at DESC LIMIT 1) as last_message,
+           (SELECT name FROM meta_participants WHERE conversation_id = mc.id AND participant_id = mc.external_id LIMIT 1) as sender_name,
+           (SELECT profile_pic FROM meta_participants WHERE conversation_id = mc.id AND participant_id = mc.external_id LIMIT 1) as sender_pic
+    FROM meta_conversations mc
+    ORDER BY mc.last_message_at DESC
+    LIMIT ?
+  `).all(limit);
+};
+
+const getMetaMessages = (conversation_id) => {
+  return db.prepare(`
+    SELECT * FROM meta_messages 
+    WHERE conversation_id = ? 
+    ORDER BY created_at ASC
+  `).all(conversation_id);
+};
+
 module.exports = {
   db,
   insertRawPost,
@@ -434,5 +550,10 @@ module.exports = {
   failScan,
   getScanQueueStatus: () => db.prepare(`SELECT status, COUNT(*) as count FROM scan_queue GROUP BY status`).all(),
   insertFeedback,
+  upsertMetaConversation,
+  insertMetaMessage,
+  upsertMetaParticipant,
+  getMetaConversations,
+  getMetaMessages,
   _db: db
 };
