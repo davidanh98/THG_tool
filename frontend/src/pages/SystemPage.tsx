@@ -1,28 +1,28 @@
 export default function SystemPage() {
     const TOOLS = [
         {
-            icon: '🤖', name: 'CrawBot (Facebook Scraper)', sub: 'Playwright + Stealth Mode', color: '#60a5fa', border: 'rgba(59,130,246,0.2)',
-            features: ['Vào 50+ group Facebook mỗi 1 tiếng, quét bài + comment', 'Vượt qua bảo mật nền tảng (Fingerprint bypass)', 'Đọc Messenger Sales → học văn phong mỗi đêm 2AM'],
-            note: 'Thay thế hoàn toàn SociaVault — tiết kiệm 100% chi phí API'
+            icon: '🤖', name: 'CrawBot (Self-Hosted Scraper)', sub: 'Playwright + Chromium Pipeline', color: '#60a5fa', border: 'rgba(59,130,246,0.2)',
+            features: ['Quét tự động 50+ group Facebook theo chu kỳ Cron', 'Hoạt động độc lập không tốn Token bên thứ ba', 'Xử lý kháng block tĩnh với đa trình duyệt ảo'],
+            note: 'Zero-cost Data Acquisition'
         },
         {
-            icon: '🧠', name: 'AI Classifier Pipeline', sub: 'Regex → ProviderGuard → Gemini AI', color: '#a78bfa', border: 'rgba(139,92,246,0.2)',
-            features: ['Phase 1: Regex filter — loại rác, không tốn AI', 'Phase 2: ProviderGuard — loại đơn vị khác', 'Phase 3: Gemini AI chấm điểm 0–100 + phân loại'],
-            note: 'Độ chính xác ~85% — tự cải thiện theo feedback'
+            icon: '🧠', name: 'AI Classifier (SIS v2 Intelligence)', sub: 'Regex Intercepter + Gemini AI', color: '#a78bfa', border: 'rgba(139,92,246,0.2)',
+            features: ['Sàng lọc rác / quảng cáo (0 cost) bằng Multi-Regex', 'Gemini đo lường 6 chỉ số: Nhu Cầu, Nỗi Đau, Tỷ Lệ Chốt...', 'Tự điều hướng tín hiệu thành 4 luồng thao tác trên Dashboard'],
+            note: 'Độ chuẩn xác nhận diện Intent > 85%'
         },
         {
-            icon: '💬', name: 'Personal Sales Agent', sub: 'AI học giọng của từng Sales', color: '#34d399', border: 'rgba(16,185,129,0.2)',
-            features: ['Học từ lịch sử Messenger của Sales', 'Phân tích văn phong, tone, cách xưng hô', 'Tự reply đúng giọng Trang / Moon / Min...'],
-            note: 'Học thêm mỗi đêm — Agent ngày càng giỏi hơn'
+            icon: '💬', name: 'The Closing Room & Telegram', sub: 'Hub Phản Hồi Tốc Độ Cao', color: '#34d399', border: 'rgba(16,185,129,0.2)',
+            features: ['Phễu Lead được bắn về Telegram ngay lập tức (High Intent)', 'AI Copilot phác thảo mẫu tin nhắn tư vấn / offer cá nhân hóa', 'Đo lường KPI của Trang, Min, Moon... theo Conversion Rate'],
+            note: 'Lead không bị thất thoát'
         },
     ]
 
     const PIPELINE = [
-        { icon: '🔍', label: 'SĂN LEAD', detail: '50+ groups • 1 tiếng', color: '#60a5fa' },
-        { icon: '🧹', label: 'LỌC RÁC', detail: 'Regex + Guard', color: '#fbbf24' },
-        { icon: '🧠', label: 'PHÂN LOẠI', detail: 'Gemini 0–100', color: '#4ade80' },
-        { icon: '📬', label: 'SALES NHẬN', detail: 'Dashboard', color: '#f87171' },
-        { icon: '💜', label: 'AGENT HỌC', detail: 'Messenger • 2AM', color: '#a78bfa' },
+        { icon: '🔍', label: 'SĂN LEAD', detail: 'Quét nội bộ', color: '#60a5fa' },
+        { icon: '🧹', label: 'BỘ LỌC TỪ KHÓA', detail: 'Chặn QC Sales', color: '#fbbf24' },
+        { icon: '🧠', label: 'AI ĐÁNH GIÁ', detail: 'Chấm Điểm Đau', color: '#4ade80' },
+        { icon: '🔀', label: 'ĐIỀU HƯỚNG', detail: '4 SIS v2 Lanes', color: '#a78bfa' },
+        { icon: '📬', label: 'CHỐT ĐƠN', labelColor: '#f87171', detail: 'The Closing Room', color: '#f87171' },
     ]
 
     const SECURITY = [

@@ -21,7 +21,7 @@ const TEMPLATES: Record<string, Record<string, string>> = {
     },
 }
 
-const STAFF = ['AI Copilot', 'Trang', 'Hậu', 'Vinh', 'David']
+const STAFF = ["Đức Anh's Agent", 'Trang', 'Lê Huyền', 'Ngọc Huyền', 'Hạnh', 'Min', 'Moon']
 
 function timeAgo(dateStr: string): string {
     if (!dateStr) return ''

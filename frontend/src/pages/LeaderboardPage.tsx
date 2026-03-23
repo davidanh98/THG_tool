@@ -4,7 +4,7 @@ import { apiGet } from '../api/client'
 interface Ranking { name: string; total_points: number; contacted: number; converted: number; deals_closed: number; total_deal_value: number }
 interface LogEntry { id: number; staff_name: string; action_type: string; points: number; note: string; created_at: string }
 
-const STAFF_EMOJI: Record<string, string> = { Trang: '💗', Min: '💜', Moon: '🩵', 'Lê Huyền': '🧡', 'Ngọc Huyền': '💚' }
+const STAFF_EMOJI: Record<string, string> = { "Đức Anh's Agent": '🤖', Trang: '💗', 'Lê Huyền': '🧡', 'Ngọc Huyền': '💚', Hạnh: '💛', Min: '💜', Moon: '🩵' }
 const MEDALS = ['🥇', '🥈', '🥉']
 
 function relativeTime(ts: string) {
