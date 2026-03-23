@@ -52,14 +52,6 @@ export default function SISDashboard() {
                         active={activeTab === 'anonymous'}
                         onClick={() => setActiveTab('anonymous')}
                     />
-                    <Tab
-                        id="competitor"
-                        label="Đối Thủ"
-                        icon="🔴"
-                        count={summary?.lanes?.competitor || 0}
-                        active={activeTab === 'competitor'}
-                        onClick={() => setActiveTab('competitor')}
-                    />
                 </div>
             </header>
 
