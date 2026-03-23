@@ -6,8 +6,8 @@ export default function SystemPage() {
             note: 'Zero-cost Data Acquisition'
         },
         {
-            icon: '🧠', name: 'AI Classifier (SIS v2 Intelligence)', sub: 'Regex Intercepter + Gemini AI', color: '#a78bfa', border: 'rgba(139,92,246,0.2)',
-            features: ['Sàng lọc rác / quảng cáo (0 cost) bằng Multi-Regex', 'Gemini đo lường 6 chỉ số: Nhu Cầu, Nỗi Đau, Tỷ Lệ Chốt...', 'Tự điều hướng tín hiệu thành 4 luồng thao tác trên Dashboard'],
+            icon: '🧠', name: 'AI Classifier (SIS v2 Intelligence)', sub: 'Regex Intercepter + OpenAI (GPT-4o)', color: '#a78bfa', border: 'rgba(139,92,246,0.2)',
+            features: ['Sàng lọc rác / quảng cáo (0 cost) bằng Multi-Regex', 'GPT-4o đo lường 6 chỉ số: Nhu Cầu, Nỗi Đau, Tỷ Lệ Chốt...', 'Tự điều hướng tín hiệu thành 4 luồng thao tác trên Dashboard'],
             note: 'Độ chuẩn xác nhận diện Intent > 85%'
         },
         {
@@ -20,7 +20,7 @@ export default function SystemPage() {
     const PIPELINE = [
         { icon: '🔍', label: 'SĂN LEAD', detail: 'Quét nội bộ', color: '#60a5fa' },
         { icon: '🧹', label: 'BỘ LỌC TỪ KHÓA', detail: 'Chặn QC Sales', color: '#fbbf24' },
-        { icon: '🧠', label: 'AI ĐÁNH GIÁ', detail: 'Chấm Điểm Đau', color: '#4ade80' },
+        { icon: '🧠', label: 'AI ĐÁNH GIÁ', detail: 'OpenAI GPT-4o', color: '#4ade80' },
         { icon: '🔀', label: 'ĐIỀU HƯỚNG', detail: '4 SIS v2 Lanes', color: '#a78bfa' },
         { icon: '📬', label: 'CHỐT ĐƠN', labelColor: '#f87171', detail: 'The Closing Room', color: '#f87171' },
     ]
@@ -46,7 +46,7 @@ export default function SystemPage() {
                     </div>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {['🤖 CrawBot — Máy Săn Lead', '🧠 AI Classifier (Gemini)', '💬 Sales Copilot Agent', '📊 Multi-Sales Tracker', '🔍 Facebook Scraper'].map(tag => (
+                    {['🤖 CrawBot — Máy Săn Lead', '🧠 AI Classifier (GPT-4o)', '💬 Sales Copilot Agent', '📊 Multi-Sales Tracker', '🔍 Facebook Scraper'].map(tag => (
                         <span key={tag} style={{ padding: '4px 12px', background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: 20, fontSize: '0.75rem', color: '#a78bfa' }}>{tag}</span>
                     ))}
                 </div>
