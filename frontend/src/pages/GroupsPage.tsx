@@ -22,14 +22,16 @@ export default function GroupsPage() {
     const [statusFilter, setStatusFilter] = useState('')
     const [showAdd, setShowAdd] = useState(false)
     const [newGroup, setNewGroup] = useState({ name: '', url: '', category: 'fulfillment', notes: '' })
+    const [apiDebug, setApiDebug] = useState<string>('')
 
     const load = () => {
         setLoading(true)
         const params = new URLSearchParams()
         if (catFilter) params.set('category', catFilter)
         if (statusFilter) params.set('status', statusFilter)
+        params.set('_t', Date.now().toString()) // Bypassing aggressive browser cache
         apiGet<{ data: Group[] }>(`/api/groups?${params}`).then((r) => setGroups(r.data || [])).catch(() => { }).finally(() => setLoading(false))
-        apiGet<{ data: GroupStats }>('/api/groups/stats').then((r) => setStats(r.data || null)).catch(() => { })
+        apiGet<{ data: GroupStats }>(`/api/groups/stats?_t=${Date.now()}`).then((r) => setStats(r.data || null)).catch(() => { })
     }
 
     useEffect(load, [catFilter, statusFilter])
@@ -40,15 +42,20 @@ export default function GroupsPage() {
             return;
         }
         try {
+            setApiDebug('Sending request to /api/groups...');
             const res: any = await apiPost('/api/groups', newGroup)
+            setApiDebug('Response: ' + JSON.stringify(res));
             if (res && res.success === false) {
                 alert('Lỗi thêm Group: ' + res.error)
                 return
             }
+            alert('Thêm Group thành công! Hệ thống đã ghi nhận.');
             setShowAdd(false)
             setNewGroup({ name: '', url: '', category: 'fulfillment', notes: '' })
+            setApiDebug('');
             load()
         } catch (e: any) {
+            setApiDebug('Crashed: ' + e.message);
             alert('Lỗi hệ thống khi thêm Group: ' + e.message);
         }
     }
@@ -114,8 +121,15 @@ export default function GroupsPage() {
             )}
 
             {showAdd && (
-                <div className="card" style={{ marginBottom: 'var(--space-lg)' }}>
+                <div className="card" style={{ marginBottom: 'var(--space-lg)', border: '2px solid #3b82f6' }}>
                     <div className="card-title">➕ Add New Group</div>
+
+                    {apiDebug && (
+                        <div style={{ background: '#1e293b', color: '#10b981', padding: '8px', fontFamily: 'monospace', marginBottom: '10px', borderRadius: '4px' }}>
+                            [API DEBUG]: {apiDebug}
+                        </div>
+                    )}
+
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
                         <input placeholder="Group Name" value={newGroup.name} onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })} />
                         <input placeholder="Group URL" value={newGroup.url} onChange={(e) => setNewGroup({ ...newGroup, url: e.target.value })} />
