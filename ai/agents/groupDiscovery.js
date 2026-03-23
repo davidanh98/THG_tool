@@ -99,7 +99,8 @@ function upsertGroup(group) {
             group_id = COALESCE(excluded.group_id, fb_groups.group_id),
             member_count = CASE WHEN excluded.member_count > 0 THEN excluded.member_count ELSE fb_groups.member_count END,
             relevance_score = excluded.relevance_score,
-            status = 'active'
+            status = 'active',
+            discovered_at = datetime('now')
     `);
     return stmt.run({
         name: group.name,
@@ -171,7 +172,7 @@ function getAllGroups(filters = {}) {
     const params = [];
     if (filters.category) { q += ' AND category = ?'; params.push(filters.category); }
     if (filters.status) { q += ' AND status = ?'; params.push(filters.status); }
-    q += ' ORDER BY id DESC, relevance_score DESC';
+    q += ' ORDER BY discovered_at DESC, id DESC';
     if (filters.limit) { q += ' LIMIT ?'; params.push(filters.limit); }
     return db.prepare(q).all(...params);
 }
