@@ -350,9 +350,10 @@ const getLeadCardByPost = (raw_post_id) => {
 
 const getSISSummary = () => {
   const lanesRows = db.prepare(`
-    SELECT recommended_lane as lane, COUNT(*) as count 
-    FROM post_classifications 
-    GROUP BY recommended_lane
+    SELECT pc.recommended_lane as lane, COUNT(DISTINCT pc.raw_post_id) as count 
+    FROM post_classifications pc
+    JOIN raw_posts rp ON pc.raw_post_id = rp.id
+    GROUP BY pc.recommended_lane
   `).all();
 
   const mapping = {
@@ -370,9 +371,11 @@ const getSISSummary = () => {
 
   const stats = db.prepare(`
     SELECT 
-      COUNT(*) as total_processed,
-      SUM(CASE WHEN is_relevant = 1 AND recommended_lane != 'discard' THEN 1 ELSE 0 END) as total_relevant
-    FROM post_classifications
+    SELECT 
+      COUNT(DISTINCT pc.raw_post_id) as total_processed,
+      COUNT(DISTINCT CASE WHEN pc.is_relevant = 1 AND pc.recommended_lane != 'discard' THEN pc.raw_post_id ELSE NULL END) as total_relevant
+    FROM post_classifications pc
+    JOIN raw_posts rp ON pc.raw_post_id = rp.id
   `).get();
 
   return { lanes, ...stats };
