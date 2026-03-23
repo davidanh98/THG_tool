@@ -23,6 +23,7 @@ export default function GroupsPage() {
     const [showAdd, setShowAdd] = useState(false)
     const [newGroup, setNewGroup] = useState({ name: '', url: '', category: 'fulfillment', notes: '' })
     const [apiDebug, setApiDebug] = useState<string>('')
+    const [rawDbDump, setRawDbDump] = useState<string>('')
 
     const load = () => {
         setLoading(true)
@@ -89,12 +90,35 @@ export default function GroupsPage() {
         }
     }
 
+    const testDbDirect = async () => {
+        setRawDbDump('Loading raw hardware database state...');
+        try {
+            const r: any = await apiGet(`/api/groups/debug_db?_t=${Date.now()}`);
+            setRawDbDump(JSON.stringify(r.data, null, 2));
+        } catch (e: any) {
+            setRawDbDump('Failed to reach Node.js: ' + e.message);
+        }
+    }
+
     return (
         <div>
-            <div className="page-header">
+            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 className="page-title">👥 Groups <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', fontWeight: 400 }}>({groups.length})</span></h2>
-                <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(!showAdd)}>+ Add Group</button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-secondary btn-sm" onClick={testDbDirect}>🔍 DB Check</button>
+                    <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(!showAdd)}>+ Add Group</button>
+                </div>
             </div>
+
+            {rawDbDump && (
+                <div style={{ background: '#2d1b2e', border: '1px solid #e11d48', padding: '16px', borderRadius: '8px', color: '#fca5a5', fontFamily: 'monospace', whiteSpace: 'pre-wrap', marginBottom: '16px', maxHeight: '400px', overflowY: 'auto' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#fff' }}>[DIAGNOSTICS] Top 10 newest DB rows:</div>
+                    {rawDbDump}
+                    <div style={{ marginTop: '12px' }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setRawDbDump('')}>Close</button>
+                    </div>
+                </div>
+            )}
 
             {stats && (
                 <div className="stat-grid">

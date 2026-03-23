@@ -2,6 +2,17 @@ const express = require('express');
 const router = express.Router();
 const groupDiscovery = require('../../ai/agents/groupDiscovery');
 
+// GET /api/groups/debug_db
+router.get('/api/groups/debug_db', async (req, res) => {
+    try {
+        const db = groupDiscovery.getDb();
+        const raw = db.prepare('SELECT * FROM fb_groups ORDER BY id DESC LIMIT 10').all();
+        res.json({ success: true, data: raw });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // GET /api/groups/stats
 router.get('/api/groups/stats', async (req, res) => {
     try {
