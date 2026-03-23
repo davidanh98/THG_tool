@@ -44,6 +44,7 @@ export interface SISSignal {
     content: string;
     post_url: string;
     group_name?: string;
+    language?: string;
     source_group?: string;
     item_type?: string;
     created_at?: string;

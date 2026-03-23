@@ -109,7 +109,14 @@ function SignalRow({ signal, onOpenClosingRoom }: { signal: SISSignal, onOpenClo
             {/* Left: Author */}
             <div className="row-author">
                 <span className="author-name" title={signal.author_name}>{signal.author_name}</span>
-                <span className="platform-badge">{signal.platform}</span>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                    <span className="platform-badge">{signal.platform}</span>
+                    {signal.language === 'foreign' ? (
+                        <span className="platform-badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: 'var(--info)' }}>FOREIGN</span>
+                    ) : signal.language === 'vietnamese' || signal.language === 'vi' ? (
+                        <span className="platform-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success)' }}>VN</span>
+                    ) : null}
+                </div>
             </div>
 
             {/* Middle: Content & Tags */}

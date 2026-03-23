@@ -57,8 +57,12 @@ Nhiệm vụ: Phân tích các bài đăng/bình luận trên Facebook để xá
 🚫 DEAD-RULES (LUẬT TỬ HÌNH - TUYỆT ĐỐI TUÂN THỦ):
 - BẤT KỲ BÀI ĐĂNG NÀO TÌM DỊCH VỤ SHIP **VỀ VIỆT NAM** (TỪ MỸ VỀ, TỪ TQ VỀ, TỪ CHÂU ÂU VỀ...): -> BẮT BUỘC ĐÁNH RỚT: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
 - CHÚNG TA CHỈ NHẬN HÀNG TỪ VN -> ĐI NƯỚC NGOÀI. TUYỆT ĐỐI KHÔNG LÀM CHIỀU NGƯỢC LẠI.
-- BÀI VIẾT QUẢNG CÁO DỊCH VỤ, BÁN TOOL, XƯỞNG SẢN XUẤT CHÀO HÀNG (VD: Bán tài khoản Shopify/Etsy, Tạo acc, Mở khóa cổng thanh toán, Thuê VPS, Chào hàng Basecost từ x$, Xưởng sản xuất/Gia công, Không yêu cầu MOQ) -> BẮT BUỘC ĐÁNH RỚT LÀ RÁC CỦA ĐỐI THỦ: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
-- BÀI VIẾT TUYỂN DỤNG, TÌM VIỆC LÀM (VD: Tuyển VA, Tuyển Dropship, Tuyển Supplier, Cần tìm việc, Cần nguồn sỉ) -> BẮT BUỘC ĐÁNH RỚT: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
+- BÀI VIẾT QUẢNG CÁO DỊCH VỤ, BÁN TOOL, XƯỞNG SẢN XUẤT CHÀO HÀNG -> BẮT BUỘC ĐÁNH RỚT LÀ RÁC CỦA ĐỐI THỦ: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
+- BÀI VIẾT TUYỂN DỤNG, TÌM VIỆC LÀM -> BẮT BUỘC ĐÁNH RỚT: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
+
+🌎 ĐA NGÔN NGỮ (MULTILINGUAL):
+- Bài đăng bằng tiếng Anh (Foreign) tìm dịch vụ fulfillment, 3PL, Dropship, Sourcing TỪ Việt Nam BẮT BUỘC phải được giữ lại và khai thác! Không được đánh rớt bài tiếng Anh.
+- Hãy phân loại \`language\` thành "vietnamese" hoặc "foreign".
 
 
 ${config.THG_CONTEXT}`;
@@ -120,6 +124,7 @@ Trả về JSON object:
   "market_tags": ["US", "AU", "EU", etc],
   "seller_stage_estimate": "newbie" | "operator" | "scaling" | "unknown",
   "language_signals": ["thuật ngữ kỹ thuật"],
+  "language": "vietnamese" | "foreign",
   "possible_identity_clues": ["website.com, @handle, brand_name"],
   "recommended_lane": "resolved_lead" | "partial_lead" | "anonymous_signal" | "competitor_intel" | "discard",
   "reason_summary": "Giải thích ngắn gọn tại sao chọn lane này.",
@@ -153,6 +158,7 @@ Chi tiết JSON cho mỗi kết quả:
   "competitor_probability": 0-100,
   "pain_tags": [],
   "market_tags": [],
+  "language": "vietnamese" hay "foreign",
   "recommended_lane": "resolved_lead" | "partial_lead" | "anonymous_signal" | "competitor_intel" | "discard", // BẮT BUỘC "discard" NẾU SAI TUYẾN HOẶC LÀ XƯỞNG CHÀO BASECOST/BÁN ACC
   "reason_summary": "Giải thích ngắn gọn (VD: Rác - Xưởng chào Basecost hoặc Nhập hàng về VN)"
 }`;
