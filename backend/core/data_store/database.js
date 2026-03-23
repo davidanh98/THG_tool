@@ -371,7 +371,6 @@ const getSISSummary = () => {
 
   const stats = db.prepare(`
     SELECT 
-    SELECT 
       COUNT(DISTINCT pc.raw_post_id) as total_processed,
       COUNT(DISTINCT CASE WHEN pc.is_relevant = 1 AND pc.recommended_lane != 'discard' THEN pc.raw_post_id ELSE NULL END) as total_relevant
     FROM post_classifications pc
