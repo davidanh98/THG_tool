@@ -17,6 +17,31 @@ router.get('/api/sis/summary', (req, res) => {
     }
 });
 
+// ── GET /api/leaderboard — Dashboard KPI ──────────────────────────────────────
+router.get('/api/leaderboard', (req, res) => {
+    try {
+        const staffList = ["Đức Anh's Agent", 'Trang', 'Lê Huyền', 'Ngọc Huyền', 'Hạnh', 'Min', 'Moon'];
+        const rankings = staffList.map(name => ({
+            name,
+            total_points: 0,
+            contacted: 0,
+            converted: 0,
+            deals_closed: 0,
+            total_deal_value: 0
+        }));
+
+        res.json({
+            ok: true,
+            data: {
+                rankings,
+                log: []
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // ── GET /api/sis/lanes/:lane — Fetch Lead Cards for a Lane ────────────────────
 router.get('/api/sis/lanes/:lane', (req, res) => {
     try {
