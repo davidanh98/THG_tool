@@ -41,7 +41,8 @@ Nhiệm vụ: Phân tích các bài đăng/bình luận trên Facebook để xá
    - (+) Ship chậm, delivery dài, khách complain, vendor fail, stuck customs, giá cao, support kém.
 
 3. Intent Score (0-100): Đang THẬT SỰ tìm giải pháp hay chỉ than vãn?
-   - (+) "Cần gấp", "ai đang dùng kho US", "cần agent", "đang tìm đơn vị mới", "xin giá".
+   - (+) Cực kỳ Cao (90-100): Khách hàng (Seller) trực tiếp đưa ra yêu cầu (VD: "looking for reliable dropshipping", "need a supplier who sells", "tìm đơn vị ff dòng này uy tín", "cần gấp", "đang tìm đơn vị mới", "xin giá").
+   - (+) Vừa: Đang phàn nàn và chê đơn vị hiện tại.
 
 4. Resolution Confidence (0-100): Khả năng truy ra business/brand từ các manh mối (Identity Clues)?
    - (+) Có link website, domain, page, email, IG handle, Brand name.
@@ -50,8 +51,9 @@ Nhiệm vụ: Phân tích các bài đăng/bình luận trên Facebook để xá
 5. Contactability Score (0-100): Có đường nào chạm được (reach) không?
    - (+) Email public, website form, page active, có SĐT.
 
-6. Competitor Probability (0-100): Có phải đối thủ hoặc service spam?
-   - (+) "Bên em nhận", "Inbox báo giá", để lại SĐT/Zalo, giới thiệu dịch vụ logistics khác.
+6. Competitor Probability (0-100): Nghiệp vụ PHÂN BIỆT KHÁCH HÀNG (CUSTOMER) vs ĐỐI THỦ (PROVIDER / AGENCY SPAM):
+   - ĐẶC ĐIỂM ĐỐI THỦ (Providers): Thường viết bài RẤT DÀI, format trình bày cầu kỳ (nhiều hoa thị, gạch đầu dòng, danh sách lợi ích), giọng văn PR, chào mời "Bên em nhận", "Inbox báo giá", cam kết "không phát sinh chi phí", và để lại SĐT/Zalo lộ liễu. ĐIỂM: 90-100.
+   - ĐẶC ĐIỂM KHÁCH HÀNG (Customers/Sellers): Thường viết NGẮN GỌN, đi thẳng vào vấn đề cần hỏi/tìm kiếm (VD: "Need a reliable dropshipping supplier", "Tìm đơn vị ff uy tín", "Looking for..."). KHÔNG có list ưu điểm. ĐIỂM: 0-10.
 
 ---
 🚫 DEAD-RULES (LUẬT TỬ HÌNH - TUYỆT ĐỐI TUÂN THỦ):
@@ -60,8 +62,8 @@ Nhiệm vụ: Phân tích các bài đăng/bình luận trên Facebook để xá
 - BÀI VIẾT QUẢNG CÁO DỊCH VỤ, BÁN TOOL, XƯỞNG SẢN XUẤT CHÀO HÀNG -> BẮT BUỘC ĐÁNH RỚT LÀ RÁC CỦA ĐỐI THỦ: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
 - BÀI VIẾT TUYỂN DỤNG, TÌM VIỆC LÀM -> BẮT BUỘC ĐÁNH RỚT: \`is_relevant=false\` VÀ \`recommended_lane="discard"\`.
 
-🌎 ĐA NGÔN NGỮ (MULTILINGUAL):
-- Bài đăng bằng tiếng Anh (Foreign) tìm dịch vụ fulfillment, 3PL, Dropship, Sourcing TỪ Việt Nam BẮT BUỘC phải được giữ lại và khai thác! Không được đánh rớt bài tiếng Anh.
+🌎 ĐA NGÔN NGỮ & THU THẬP TỐI ĐA (MULTILINGUAL):
+- Bài đăng bằng tiếng Anh (Foreign) tìm dịch vụ fulfillment, 3PL, Dropship, Supplier (VD: "looking for reliable dropshipping", "need a supplier") LÀ TỆP KHÁCH HÀNG CHỦ LỰC VÀ GIÁ TRỊ NHẤT! BẮT BUỘC phải \`is_relevant=true\` và cho điểm \`intent_score\` > 80.
 - Hãy phân loại \`language\` thành "vietnamese" hoặc "foreign".
 
 
@@ -159,8 +161,8 @@ Chi tiết JSON cho mỗi kết quả:
   "pain_tags": [],
   "market_tags": [],
   "language": "vietnamese" hay "foreign",
-  "recommended_lane": "resolved_lead" | "partial_lead" | "anonymous_signal" | "competitor_intel" | "discard", // BẮT BUỘC "discard" NẾU SAI TUYẾN HOẶC LÀ XƯỞNG CHÀO BASECOST/BÁN ACC
-  "reason_summary": "Giải thích ngắn gọn (VD: Rác - Xưởng chào Basecost hoặc Nhập hàng về VN)"
+  "recommended_lane": "resolved_lead" | "partial_lead" | "anonymous_signal" | "competitor_intel" | "discard", // CHÚ Ý: NẾU KHÁCH TÌM KIẾM DỊCH VỤ ("seeking dropship", "need supplier", "tìm đơn vị") -> BẮT BUỘC RATE VÀO "resolved_lead" HOẶC "partial_lead". KHÔNG ĐƯỢC DISCARD!!!
+  "reason_summary": "Giải thích ngắn gọn (VD: Rác - Xưởng chào Basecost hoặc Nhập hàng về VN; hoặc Lead Chất - Seeking dropship supplier)"
 }`;
 }
 
