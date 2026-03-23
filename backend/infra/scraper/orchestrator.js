@@ -125,7 +125,7 @@ async function scrapeFacebookGroups(maxPosts, options, externalGroups) {
     }
 
     console.log('[FBScraper] ✅ Done: ' + allPosts.length + ' posts from ' + groups.length + ' groups');
-    if (allPosts.length > 0) await bridgeToHub(allPosts);
+    // if (allPosts.length > 0) await bridgeToHub(allPosts); // Disabled in SIS v2 
     return allPosts;
 }
 

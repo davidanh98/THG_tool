@@ -60,76 +60,80 @@ class PredictiveScoring {
         const db = database._db;
         if (!db) return;
 
-        // Lấy tất cả khách hàng đã chốt thành công
-        const wonDeals = db.prepare(`
+        try {
+            // Lấy tất cả khách hàng đã chốt thành công
+            const wonDeals = db.prepare(`
             SELECT pain_score, revenue_score, urgency_score, switching_score 
             FROM accounts 
             WHERE status IN ('pilot', 'active_customer')
         `).all();
 
-        if (wonDeals.length < 5) {
-            console.log('[PredictiveScoring] Data chưa đủ để Machine Learning (<5 Won Deals). Giữ nguyên trọng số.');
-            return;
-        }
+            if (wonDeals.length < 5) {
+                console.log('[PredictiveScoring] Data chưa đủ để Machine Learning (<5 Won Deals). Giữ nguyên trọng số.');
+                return;
+            }
 
-        // Tính trung bình các trường
-        let averages = { pain: 0, revenue: 0, urgency: 0, switching: 0 };
-        for (const deal of wonDeals) {
-            averages.pain += (deal.pain_score || 0);
-            averages.revenue += (deal.revenue_score || 0);
-            averages.urgency += (deal.urgency_score || 0);
-            averages.switching += (deal.switching_score || 0);
-        }
+            // Tính trung bình các trường
+            let averages = { pain: 0, revenue: 0, urgency: 0, switching: 0 };
+            for (const deal of wonDeals) {
+                averages.pain += (deal.pain_score || 0);
+                averages.revenue += (deal.revenue_score || 0);
+                averages.urgency += (deal.urgency_score || 0);
+                averages.switching += (deal.switching_score || 0);
+            }
 
-        const count = wonDeals.length;
-        averages.pain /= count;
-        averages.revenue /= count;
-        averages.urgency /= count;
-        averages.switching /= count;
+            const count = wonDeals.length;
+            averages.pain /= count;
+            averages.revenue /= count;
+            averages.urgency /= count;
+            averages.switching /= count;
 
-        // Tính tỷ lệ phần trăm phân bổ dựa vào trung bình (Softmax / Ratio bias)
-        // Những features có điểm TRUNG BÌNH CAO trong Won Deals chứng tỏ nó là yếu tố QUYẾT ĐỊNH
-        const totalAvg = averages.pain + averages.revenue + averages.urgency + averages.switching;
+            // Tính tỷ lệ phần trăm phân bổ dựa vào trung bình (Softmax / Ratio bias)
+            // Những features có điểm TRUNG BÌNH CAO trong Won Deals chứng tỏ nó là yếu tố QUYẾT ĐỊNH
+            const totalAvg = averages.pain + averages.revenue + averages.urgency + averages.switching;
 
-        let newWeights = {
-            pain: parseFloat((averages.pain / totalAvg).toFixed(2)),
-            revenue: parseFloat((averages.revenue / totalAvg).toFixed(2)),
-            urgency: parseFloat((averages.urgency / totalAvg).toFixed(2)),
-            switching: parseFloat((averages.switching / totalAvg).toFixed(2))
-        };
+            let newWeights = {
+                pain: parseFloat((averages.pain / totalAvg).toFixed(2)),
+                revenue: parseFloat((averages.revenue / totalAvg).toFixed(2)),
+                urgency: parseFloat((averages.urgency / totalAvg).toFixed(2)),
+                switching: parseFloat((averages.switching / totalAvg).toFixed(2))
+            };
 
-        // Tránh bị 0 hoàn toàn
-        for (let key in newWeights) {
-            if (newWeights[key] === 0) newWeights[key] = 0.05; // Base minimum
-        }
+            // Tránh bị 0 hoàn toàn
+            for (let key in newWeights) {
+                if (newWeights[key] === 0) newWeights[key] = 0.05; // Base minimum
+            }
 
-        // Chuẩn hóa lại cho tổng đúng 1.0 (100%)
-        let sum = Object.values(newWeights).reduce((a, b) => a + b, 0);
-        for (let key in newWeights) {
-            newWeights[key] = parseFloat((newWeights[key] / sum).toFixed(2));
-        }
+            // Chuẩn hóa lại cho tổng đúng 1.0 (100%)
+            let sum = Object.values(newWeights).reduce((a, b) => a + b, 0);
+            for (let key in newWeights) {
+                newWeights[key] = parseFloat((newWeights[key] / sum).toFixed(2));
+            }
 
-        console.log('[PredictiveScoring] Trọng số MỚI sau khi Train Model:', newWeights);
-        this.saveWeights(newWeights);
+            console.log('[PredictiveScoring] Trọng số MỚI sau khi Train Model:', newWeights);
+            this.saveWeights(newWeights);
 
-        // Nâng cấp: Cập nhật LẠI toàn bộ Priority Score của các Account CHƯA chốt
-        console.log('[PredictiveScoring] Đang re-calculate lại ưu tiên (Priority Score) cho toàn bộ giỏ Leads...');
-        const pendingAccounts = db.prepare(`
+            // Nâng cấp: Cập nhật LẠI toàn bộ Priority Score của các Account CHƯA chốt
+            console.log('[PredictiveScoring] Đang re-calculate lại ưu tiên (Priority Score) cho toàn bộ giỏ Leads...');
+            const pendingAccounts = db.prepare(`
             SELECT id, pain_score, revenue_score, urgency_score, switching_score 
             FROM accounts 
             WHERE status IN ('new', 'qualified', 'contacted', 'replied')
         `).all();
 
-        const updateStmt = db.prepare('UPDATE accounts SET priority_score = ? WHERE id = ?');
+            const updateStmt = db.prepare('UPDATE accounts SET priority_score = ? WHERE id = ?');
 
-        db.transaction(() => {
-            for (const acc of pendingAccounts) {
-                const newScore = this.calculatePriorityScore(acc);
-                updateStmt.run(newScore, acc.id);
-            }
-        })();
+            db.transaction(() => {
+                for (const acc of pendingAccounts) {
+                    const newScore = this.calculatePriorityScore(acc);
+                    updateStmt.run(newScore, acc.id);
+                }
+            })();
 
-        console.log(`[PredictiveScoring] Đã tái định tuyến ${pendingAccounts.length} Leads theo ma trận điểm mới!`);
+            console.log(`[PredictiveScoring] Đã tái định tuyến ${pendingAccounts.length} Leads theo ma trận điểm mới!`);
+        } catch (err) {
+            console.error('[PredictiveScoring] ❌ Error in ML Tuning (possibly missing legacy tables):', err.message);
+        }
     }
 }
 

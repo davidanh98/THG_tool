@@ -87,8 +87,8 @@ async function main() {
 
     // 2. Predictive Scoring (Tuning Loop): Chạy lúc 1:00 AM mỗi ngày để học máy từ các "Won Deals"
     cron.schedule('0 1 * * *', () => {
-        console.log(`[Cron] 🧠 Khởi động Vòng lặp Học Máy (Predictive Weights Tuning)...`);
-        predictiveScoring.runTuningLoop();
+        console.log(`[Cron] 🧠 Predictive Weights Tuning is currently disabled (legacy 'accounts' table removed).`);
+        // predictiveScoring.runTuningLoop();
     });
 
     // Enqueue initial scan on startup
