@@ -6,7 +6,7 @@ const groupDiscovery = require('../../ai/agents/groupDiscovery');
 router.get('/api/groups/debug_db', async (req, res) => {
     try {
         const db = groupDiscovery.getDb();
-        const raw = db.prepare('SELECT * FROM fb_groups ORDER BY id DESC LIMIT 10').all();
+        const raw = db.prepare('SELECT * FROM fb_groups ORDER BY discovered_at DESC LIMIT 10').all();
         res.json({ success: true, data: raw });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -48,8 +48,8 @@ router.post('/api/groups', async (req, res) => {
         if (!name || !url) return res.status(400).json({ success: false, error: 'Name and URL are required' });
 
         const newGroup = { name, url, category, notes, member_count: member_count || 0 };
-        groupDiscovery.upsertGroup(newGroup);
-        res.json({ success: true, data: newGroup });
+        const info = groupDiscovery.upsertGroup(newGroup);
+        res.json({ success: true, data: newGroup, sqlite_info: info });
     } catch (err) {
         console.error('[GroupRoutes] Error adding group:', err);
         res.status(500).json({ success: false, error: err.message });
