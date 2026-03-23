@@ -77,11 +77,7 @@ export default function SISDashboard() {
             </main>
 
             {closingSignal && (
-                <div className="closing-room-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'var(--bg-main)', zIndex: 9999, overflowY: 'auto', padding: 'var(--space-xl)' }}>
-                    <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-                        <ClosingRoom signal={closingSignal} onClose={() => setClosingSignal(null)} />
-                    </div>
-                </div>
+                <ClosingRoom signal={closingSignal} onClose={() => setClosingSignal(null)} />
             )}
         </div>
     )

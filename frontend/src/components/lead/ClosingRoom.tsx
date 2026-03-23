@@ -133,431 +133,433 @@ export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
     ]
 
     return (
-        <div>
-            {/* Top bar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: 'var(--space-xl)' }}>
-                <button className="btn btn-secondary btn-sm" onClick={onClose}>← Quay lại</button>
-                <span style={{ color: 'var(--text-muted)' }}>Leads</span>
-                <span style={{ color: 'var(--text-muted)' }}>›</span>
-                <span style={{ fontWeight: 600 }}>{signal.author_name}</span>
-                <span style={{ marginLeft: 'auto', fontWeight: 700, color: 'var(--accent)' }}>🎯 The Closing Room</span>
-            </div>
-
-            {/* Pipeline Stage Bar */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-lg)', padding: '8px 12px', background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                {PIPELINE_STAGES.map(s => (
-                    <button
-                        key={s.key}
-                        onClick={() => setPipelineStage(s.key)}
-                        style={{
-                            flex: 1,
-                            padding: '6px 4px',
-                            fontSize: 'var(--text-xs)',
-                            fontWeight: pipelineStage === s.key ? 700 : 400,
-                            color: pipelineStage === s.key ? '#fff' : 'var(--text-secondary)',
-                            background: pipelineStage === s.key ? s.color : 'transparent',
-                            border: `1px solid ${pipelineStage === s.key ? s.color : 'var(--border)'}`,
-                            borderRadius: 6,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                        }}
-                    >
-                        {s.label}
-                    </button>
-                ))}
-            </div>
-
-            <div className="closing-room-grid">
-                {/* LEFT: Lead info */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-                    {/* Author card */}
-                    <div className="card">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
-                            <div style={{ fontSize: '2rem' }}>👤</div>
-                            <div>
-                                <div style={{ fontWeight: 700 }}>
-                                    {signal.author_url ? (
-                                        <a href={signal.author_url} target="_blank" rel="noopener noreferrer">{signal.author_name}</a>
-                                    ) : signal.author_name}
-                                </div>
-                                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }}>
-                                    <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>📘 {signal.platform}</span>
-                                    <span>·</span>
-                                    <span>{timeAgo(postDate)}</span>
-                                </div>
-                            </div>
-                            {/* Quick profile/post links */}
-                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                                {signal.author_url && (
-                                    <button className="btn btn-secondary btn-sm" onClick={handleOpenProfile} title="Mở profile Facebook">
-                                        👤 Profile
-                                    </button>
-                                )}
-                                {signal.post_url && (
-                                    <button className="btn btn-secondary btn-sm" onClick={handleOpenPost} title="Mở bài post gốc">
-                                        📄 Post
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
-                            <span className="status-tag" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>{pipelineStage.toUpperCase()}</span>
-                            {/* Display Pain Tags */}
-                            {cls.pain_tags && Array.isArray(cls.pain_tags) ? cls.pain_tags.map((tag: string, i: number) => (
-                                <span key={i} className="status-tag" style={{ background: 'var(--bg-secondary)', color: 'var(--warning)', borderColor: 'var(--warning)' }}>
-                                    {tag}
-                                </span>
-                            )) : null}
-                        </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="card">
-                        <div className="card-title">📄 Nội dung gốc</div>
-                        <div style={{ whiteSpace: 'pre-wrap', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', maxHeight: 200, overflow: 'auto' }}>
-                            {rawContent.trim()}
-                        </div>
-                    </div>
-
-                    {/* AI Analysis */}
-                    {(cls.reason_summary || card.strategic_summary || card.suggested_opener) && (
-                        <div className="card" style={{ border: card.suggested_opener ? '1px solid var(--accent)' : undefined }}>
-                            <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>🧠 AI Analysis (SIS v2)</span>
-                                {card.suggested_opener && <span style={{ fontSize: '0.6rem', background: 'var(--accent)', color: '#fff', padding: '2px 6px', borderRadius: 4 }}>COPILOT READY</span>}
-                            </div>
-                            {card.suggested_opener && (
-                                <div style={{ marginBottom: 'var(--space-md)', background: 'rgba(99, 102, 241, 0.05)', padding: '10px', borderRadius: '8px', border: '1px dashed var(--accent)' }}>
-                                    <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--accent)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        🚀 BẢN NHÁP SALES (SUGGESTED OPENER)
-                                    </div>
-                                    <div style={{ fontSize: 'var(--text-sm)', whiteSpace: 'pre-wrap', color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                                        {card.suggested_opener}
-                                    </div>
-                                </div>
-                            )}
-                            {cls.reason_summary && (
-                                <div style={{ marginBottom: 'var(--space-md)' }}>
-                                    <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>💡 Tóm tắt Signal</div>
-                                    <div style={{ fontSize: 'var(--text-sm)' }}>{cls.reason_summary}</div>
-                                </div>
-                            )}
-                            {card.strategic_summary && (
-                                <div>
-                                    <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>🔍 Cơ hội cốt lõi & Hành động</div>
-                                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)' }}>
-                                        {card.strategic_summary}<br /><br />
-                                        <strong>Next action:</strong> {card.next_best_action}<br />
-                                        <strong>Objection prevention:</strong> {card.objection_prevention}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-
-
-                    {/* Tabs: Outreach / Response / Notes / Agent */}
-                    <div className="card">
-                        <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-lg)' }}>
-                            {(['outreach', 'response', 'notes', 'agent'] as const).map((tab) => (
-                                <button
-                                    key={tab}
-                                    className={`btn btn-sm ${activeTab === tab ? 'btn-primary' : 'btn-secondary'}`}
-                                    onClick={() => setActiveTab(tab)}
-                                >
-                                    {tab === 'outreach' ? '🤖 AI Outreach' : tab === 'response' ? '💬 Response' : tab === 'notes' ? '📝 Notes' : '🧠 Agent'}
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* ─── AI OUTREACH TAB ─── */}
-                        {activeTab === 'outreach' && (
-                            <div>
-                                {/* Controls row */}
-                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 'var(--space-md)', alignItems: 'center' }}>
-                                    {/* Staff select */}
-                                    <select
-                                        value={outreachStaff}
-                                        onChange={e => setOutreachStaff(e.target.value)}
-                                        style={{ height: 32, borderRadius: 6, border: '1px solid var(--border)', padding: '0 8px', fontSize: 'var(--text-xs)' }}
-                                    >
-                                        {STAFF.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-
-                                    {/* Type toggle */}
-                                    <div style={{ display: 'flex', gap: 2, background: 'var(--bg-secondary)', borderRadius: 6, padding: 2 }}>
-                                        <button
-                                            className={`btn btn-sm ${outreachType === 'dm' ? 'btn-primary' : ''}`}
-                                            onClick={() => setOutreachType('dm')}
-                                            style={{ fontSize: 'var(--text-xs)' }}
-                                        >
-                                            💬 DM
-                                        </button>
-                                        <button
-                                            className={`btn btn-sm ${outreachType === 'comment' ? 'btn-primary' : ''}`}
-                                            onClick={() => setOutreachType('comment')}
-                                            style={{ fontSize: 'var(--text-xs)' }}
-                                        >
-                                            💭 Comment
-                                        </button>
-                                    </div>
-
-                                    {/* Tone selector */}
-                                    <div style={{ display: 'flex', gap: 2, marginLeft: 'auto' }}>
-                                        {([
-                                            { key: 'friendly', icon: '🤝', label: 'Thân thiện' },
-                                            { key: 'professional', icon: '👔', label: 'Chuyên nghiệp' },
-                                            { key: 'urgent', icon: '⚡', label: 'Gấp' },
-                                        ] as const).map(t => (
-                                            <button
-                                                key={t.key}
-                                                className={`btn btn-sm ${outreachTone === t.key ? 'btn-primary' : 'btn-secondary'}`}
-                                                onClick={() => setOutreachTone(t.key)}
-                                                title={t.label}
-                                            >
-                                                {t.icon}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Generate button */}
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={handleGenerateOutreach}
-                                    disabled={outreachLoading}
-                                    style={{
-                                        width: '100%',
-                                        marginBottom: 'var(--space-md)',
-                                        padding: '10px',
-                                        fontSize: 'var(--text-sm)',
-                                        fontWeight: 700,
-                                        background: outreachLoading ? 'var(--text-muted)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                                    }}
-                                >
-                                    {outreachLoading ? '⏳ AI đang viết...' : `🤖 AI Viết ${outreachType === 'dm' ? 'tin nhắn DM' : 'comment reply'}`}
-                                </button>
-
-                                {/* Message preview */}
-                                {outreachMsg && (
-                                    <>
-                                        <textarea
-                                            rows={5}
-                                            value={outreachMsg}
-                                            onChange={e => setOutreachMsg(e.target.value)}
-                                            style={{
-                                                width: '100%',
-                                                marginBottom: 'var(--space-sm)',
-                                                border: '2px solid var(--accent)',
-                                                borderRadius: 8,
-                                                padding: 12,
-                                                fontSize: 'var(--text-sm)',
-                                            }}
-                                        />
-                                        {/* Action buttons */}
-                                        <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
-                                            <button
-                                                className="btn btn-primary btn-sm"
-                                                onClick={handleCopyOutreach}
-                                                style={{
-                                                    background: copySuccess ? 'var(--success)' : undefined,
-                                                    transition: 'background 0.3s',
-                                                }}
-                                            >
-                                                {copySuccess ? '✅ Đã copy!' : '📋 Copy tin nhắn'}
-                                            </button>
-                                            {signal.author_url && (
-                                                <button className="btn btn-secondary btn-sm" onClick={() => { handleCopyOutreach(); handleOpenProfile() }}>
-                                                    📤 Copy & Mở Profile
-                                                </button>
-                                            )}
-                                            {signal.post_url && outreachType === 'comment' && (
-                                                <button className="btn btn-secondary btn-sm" onClick={() => { handleCopyOutreach(); handleOpenPost() }}>
-                                                    💭 Copy & Mở Post
-                                                </button>
-                                            )}
-                                            <button
-                                                className="btn btn-sm"
-                                                onClick={handleMarkSent}
-                                                style={{ marginLeft: 'auto', background: 'var(--success)', color: '#fff', fontWeight: 600 }}
-                                            >
-                                                ✅ Đánh dấu đã gửi
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* Outreach History */}
-                                {outreachHistory.length > 0 && (
-                                    <div style={{ marginTop: 'var(--space-lg)', borderTop: '1px solid var(--border)', paddingTop: 'var(--space-md)' }}>
-                                        <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>
-                                            📋 Lịch sử outreach ({outreachHistory.length})
-                                        </div>
-                                        {outreachHistory.slice(0, 5).map((h: any) => (
-                                            <div key={h.id} style={{
-                                                fontSize: 'var(--text-xs)',
-                                                padding: '8px',
-                                                marginBottom: 4,
-                                                background: 'var(--bg-secondary)',
-                                                borderRadius: 6,
-                                                borderLeft: `3px solid ${h.status === 'sent' ? 'var(--success)' : h.status === 'replied' ? 'var(--accent)' : 'var(--text-muted)'}`,
-                                            }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                    <span style={{ fontWeight: 600 }}>{h.staff_name} · {h.channel}</span>
-                                                    <span style={{ color: 'var(--text-muted)' }}>{timeAgo(h.created_at)}</span>
-                                                </div>
-                                                <div style={{ color: 'var(--text-secondary)' }}>{h.message?.substring(0, 100)}...</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* ─── RESPONSE TAB (original) ─── */}
-                        {activeTab === 'response' && (
-                            <div>
-                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 'var(--space-sm)' }}>
-                                    <button className="btn btn-secondary btn-sm" onClick={() => fillTemplate('quote')}>📋 Báo giá</button>
-                                    <button className="btn btn-secondary btn-sm" onClick={() => fillTemplate('fulfill')}>🏭 Kho/FF</button>
-                                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                                        {(['friendly', 'professional', 'concise'] as const).map(t => (
-                                            <button
-                                                key={t}
-                                                className={`btn btn-sm ${tone === t ? 'btn-primary' : 'btn-secondary'}`}
-                                                onClick={() => setTone(t)}
-                                            >
-                                                {t === 'friendly' ? '🤝' : t === 'professional' ? '👔' : '⚡'}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <textarea
-                                    rows={4}
-                                    value={response}
-                                    onChange={(e) => setResponse(e.target.value)}
-                                    style={{ width: '100%', marginBottom: 'var(--space-sm)' }}
-                                />
-                                <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                                    <button className="btn btn-secondary btn-sm" onClick={() => navigator.clipboard.writeText(response)}>📋 Copy</button>
-                                    <button className="btn btn-secondary btn-sm" onClick={handleSaveResponse}>💾 Save</button>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* ─── NOTES TAB ─── */}
-                        {activeTab === 'notes' && (
-                            <div>
-                                <textarea
-                                    rows={4}
-                                    value={notes}
-                                    onChange={(e) => setNotes(e.target.value)}
-                                    placeholder="Ghi chú: giá đã báo, deal progress, follow-up date..."
-                                    style={{ width: '100%', marginBottom: 'var(--space-sm)' }}
-                                />
-                                <button className="btn btn-secondary btn-sm" onClick={handleSaveNotes}>💾 Lưu ghi chú</button>
-                            </div>
-                        )}
-
-                        {/* ─── AGENT TAB ─── */}
-                        {activeTab === 'agent' && (
-                            <div>
-                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 'var(--space-sm)' }}>
-                                    <button className="btn btn-secondary btn-sm" onClick={() => handleFeedback('correct', undefined, '✅ Đúng')}>✅ Đúng</button>
-                                    <button className="btn btn-secondary btn-sm" onClick={() => handleFeedback('wrong', 'provider', '❌ Sai → Provider')}>❌ Sai→Provider</button>
-                                </div>
-                                <textarea
-                                    rows={3}
-                                    value={feedbackText}
-                                    onChange={(e) => setFeedbackText(e.target.value)}
-                                    placeholder="Ghi chú thêm cho Agent..."
-                                    style={{ width: '100%', marginBottom: 'var(--space-sm)' }}
-                                />
-                                <button className="btn btn-primary btn-sm" onClick={() => handleFeedback('text_feedback')}>📤 Gửi feedback</button>
-                            </div>
-                        )}
-                    </div>
+        <div className="closing-room-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'var(--bg-main)', zIndex: 9999, overflowY: 'auto', padding: 'var(--space-xl)' }}>
+            <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+                {/* Top bar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: 'var(--space-xl)' }}>
+                    <button className="btn btn-secondary btn-sm" onClick={onClose}>← Quay lại</button>
+                    <span style={{ color: 'var(--text-muted)' }}>Leads</span>
+                    <span style={{ color: 'var(--text-muted)' }}>›</span>
+                    <span style={{ fontWeight: 600 }}>{signal.author_name || 'Khách hàng'}</span>
+                    <span style={{ marginLeft: 'auto', fontWeight: 700, color: 'var(--accent)' }}>🎯 The Closing Room</span>
                 </div>
 
-                {/* RIGHT: Action panel */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-                    {/* Score */}
-                    <div className="card" style={{ textAlign: 'center' }}>
-                        <ScoreBadge score={score} />
-                        <div style={{ marginTop: 'var(--space-sm)' }}>
-                            <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${score}%`, background: hotColor, borderRadius: 3, transition: 'width 0.3s' }} />
-                            </div>
-                            <div style={{ fontSize: 'var(--text-xs)', color: hotColor, marginTop: 4, fontWeight: 600 }}>Lead Score</div>
-                        </div>
-                        {cls.pain_score > 0 && <div style={{ fontSize: 'var(--text-xs)', marginTop: 8, color: 'var(--warning)' }}>⚡ Pain: {cls.pain_score}</div>}
-                    </div>
-
-                    {/* Quick Actions */}
-                    <div className="card">
-                        <div className="card-title">⚡ Quick Actions</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                            <button className={`btn btn-sm ${pipelineStage === 'contacted' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => handleStatus('contacted')}>📞 Contacted</button>
-                            <button className={`btn btn-sm ${pipelineStage === 'converted' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => handleStatus('won')}>✅ Converted</button>
-                            <button className={`btn btn-sm ${pipelineStage === 'ignored' ? 'btn-danger' : 'btn-secondary'}`} onClick={() => handleStatus('lost')}>⛔ Lost / Ignore</button>
-                            <button className="btn btn-sm btn-danger" onClick={handleDelete}>🗑️ Delete</button>
-                        </div>
-                    </div>
-
-                    {/* Deal */}
-                    <div className="card">
-                        <div className="card-title">🏆 Deal</div>
-                        <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => setShowDealModal(true)}>
-                            🏆 BÁO CÁO CHỐT ĐƠN
+                {/* Pipeline Stage Bar */}
+                <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-lg)', padding: '8px 12px', background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                    {PIPELINE_STAGES.map(s => (
+                        <button
+                            key={s.key}
+                            onClick={() => setPipelineStage(s.key)}
+                            style={{
+                                flex: 1,
+                                padding: '6px 4px',
+                                fontSize: 'var(--text-xs)',
+                                fontWeight: pipelineStage === s.key ? 700 : 400,
+                                color: pipelineStage === s.key ? '#fff' : 'var(--text-secondary)',
+                                background: pipelineStage === s.key ? s.color : 'transparent',
+                                border: `1px solid ${pipelineStage === s.key ? s.color : 'var(--border)'}`,
+                                borderRadius: 6,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                            }}
+                        >
+                            {s.label}
                         </button>
-                    </div>
+                    ))}
+                </div>
 
-                    {/* Staff */}
-                    <div className="card">
-                        <div className="card-title">👥 Phân công Sale</div>
-                        <div className="staff-pills">
-                            {STAFF.map((name) => {
-                                const isActive = claimedArr.includes(name)
-                                return (
-                                    <button
-                                        key={name}
-                                        className={`staff-pill ${isActive ? 'staff-pill--active' : ''}`}
-                                        onClick={() => handleClaim(name)}
-                                    >
-                                        {name}{isActive ? ' ✓' : ''}
-                                    </button>
-                                )
-                            })}
+                <div className="closing-room-grid">
+                    {/* LEFT: Lead info */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+                        {/* Author card */}
+                        <div className="card">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
+                                <div style={{ fontSize: '2rem' }}>👤</div>
+                                <div>
+                                    <div style={{ fontWeight: 700 }}>
+                                        {signal.author_url ? (
+                                            <a href={signal.author_url} target="_blank" rel="noopener noreferrer">{signal.author_name}</a>
+                                        ) : signal.author_name}
+                                    </div>
+                                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }}>
+                                        <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>📘 {signal.platform}</span>
+                                        <span>·</span>
+                                        <span>{timeAgo(postDate)}</span>
+                                    </div>
+                                </div>
+                                {/* Quick profile/post links */}
+                                <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                                    {signal.author_url && (
+                                        <button className="btn btn-secondary btn-sm" onClick={handleOpenProfile} title="Mở profile Facebook">
+                                            👤 Profile
+                                        </button>
+                                    )}
+                                    {signal.post_url && (
+                                        <button className="btn btn-secondary btn-sm" onClick={handleOpenPost} title="Mở bài post gốc">
+                                            📄 Post
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
+                                <span className="status-tag" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>{pipelineStage.toUpperCase()}</span>
+                                {/* Display Pain Tags */}
+                                {cls.pain_tags && Array.isArray(cls.pain_tags) ? cls.pain_tags.map((tag: string, i: number) => (
+                                    <span key={i} className="status-tag" style={{ background: 'var(--bg-secondary)', color: 'var(--warning)', borderColor: 'var(--warning)' }}>
+                                        {tag}
+                                    </span>
+                                )) : null}
+                            </div>
                         </div>
-                        {claimedArr.length > 0 && (
-                            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 8 }}>
-                                Đang xử lý: <strong>{claimedArr.join(', ')}</strong>
+
+                        {/* Content */}
+                        <div className="card">
+                            <div className="card-title">📄 Nội dung gốc</div>
+                            <div style={{ whiteSpace: 'pre-wrap', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', maxHeight: 200, overflow: 'auto' }}>
+                                {rawContent.trim()}
+                            </div>
+                        </div>
+
+                        {/* AI Analysis */}
+                        {(cls.reason_summary || card.strategic_summary || card.suggested_opener) && (
+                            <div className="card" style={{ border: card.suggested_opener ? '1px solid var(--accent)' : undefined }}>
+                                <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>🧠 AI Analysis (SIS v2)</span>
+                                    {card.suggested_opener && <span style={{ fontSize: '0.6rem', background: 'var(--accent)', color: '#fff', padding: '2px 6px', borderRadius: 4 }}>COPILOT READY</span>}
+                                </div>
+                                {card.suggested_opener && (
+                                    <div style={{ marginBottom: 'var(--space-md)', background: 'rgba(99, 102, 241, 0.05)', padding: '10px', borderRadius: '8px', border: '1px dashed var(--accent)' }}>
+                                        <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--accent)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                            🚀 BẢN NHÁP SALES (SUGGESTED OPENER)
+                                        </div>
+                                        <div style={{ fontSize: 'var(--text-sm)', whiteSpace: 'pre-wrap', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                                            {card.suggested_opener}
+                                        </div>
+                                    </div>
+                                )}
+                                {cls.reason_summary && (
+                                    <div style={{ marginBottom: 'var(--space-md)' }}>
+                                        <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>💡 Tóm tắt Signal</div>
+                                        <div style={{ fontSize: 'var(--text-sm)' }}>{cls.reason_summary}</div>
+                                    </div>
+                                )}
+                                {card.strategic_summary && (
+                                    <div>
+                                        <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>🔍 Cơ hội cốt lõi & Hành động</div>
+                                        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)' }}>
+                                            {card.strategic_summary}<br /><br />
+                                            <strong>Next action:</strong> {card.next_best_action}<br />
+                                            <strong>Objection prevention:</strong> {card.objection_prevention}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
+
+
+
+                        {/* Tabs: Outreach / Response / Notes / Agent */}
+                        <div className="card">
+                            <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-lg)' }}>
+                                {(['outreach', 'response', 'notes', 'agent'] as const).map((tab) => (
+                                    <button
+                                        key={tab}
+                                        className={`btn btn-sm ${activeTab === tab ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => setActiveTab(tab)}
+                                    >
+                                        {tab === 'outreach' ? '🤖 AI Outreach' : tab === 'response' ? '💬 Response' : tab === 'notes' ? '📝 Notes' : '🧠 Agent'}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* ─── AI OUTREACH TAB ─── */}
+                            {activeTab === 'outreach' && (
+                                <div>
+                                    {/* Controls row */}
+                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 'var(--space-md)', alignItems: 'center' }}>
+                                        {/* Staff select */}
+                                        <select
+                                            value={outreachStaff}
+                                            onChange={e => setOutreachStaff(e.target.value)}
+                                            style={{ height: 32, borderRadius: 6, border: '1px solid var(--border)', padding: '0 8px', fontSize: 'var(--text-xs)' }}
+                                        >
+                                            {STAFF.map(s => <option key={s} value={s}>{s}</option>)}
+                                        </select>
+
+                                        {/* Type toggle */}
+                                        <div style={{ display: 'flex', gap: 2, background: 'var(--bg-secondary)', borderRadius: 6, padding: 2 }}>
+                                            <button
+                                                className={`btn btn-sm ${outreachType === 'dm' ? 'btn-primary' : ''}`}
+                                                onClick={() => setOutreachType('dm')}
+                                                style={{ fontSize: 'var(--text-xs)' }}
+                                            >
+                                                💬 DM
+                                            </button>
+                                            <button
+                                                className={`btn btn-sm ${outreachType === 'comment' ? 'btn-primary' : ''}`}
+                                                onClick={() => setOutreachType('comment')}
+                                                style={{ fontSize: 'var(--text-xs)' }}
+                                            >
+                                                💭 Comment
+                                            </button>
+                                        </div>
+
+                                        {/* Tone selector */}
+                                        <div style={{ display: 'flex', gap: 2, marginLeft: 'auto' }}>
+                                            {([
+                                                { key: 'friendly', icon: '🤝', label: 'Thân thiện' },
+                                                { key: 'professional', icon: '👔', label: 'Chuyên nghiệp' },
+                                                { key: 'urgent', icon: '⚡', label: 'Gấp' },
+                                            ] as const).map(t => (
+                                                <button
+                                                    key={t.key}
+                                                    className={`btn btn-sm ${outreachTone === t.key ? 'btn-primary' : 'btn-secondary'}`}
+                                                    onClick={() => setOutreachTone(t.key)}
+                                                    title={t.label}
+                                                >
+                                                    {t.icon}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Generate button */}
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={handleGenerateOutreach}
+                                        disabled={outreachLoading}
+                                        style={{
+                                            width: '100%',
+                                            marginBottom: 'var(--space-md)',
+                                            padding: '10px',
+                                            fontSize: 'var(--text-sm)',
+                                            fontWeight: 700,
+                                            background: outreachLoading ? 'var(--text-muted)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                                        }}
+                                    >
+                                        {outreachLoading ? '⏳ AI đang viết...' : `🤖 AI Viết ${outreachType === 'dm' ? 'tin nhắn DM' : 'comment reply'}`}
+                                    </button>
+
+                                    {/* Message preview */}
+                                    {outreachMsg && (
+                                        <>
+                                            <textarea
+                                                rows={5}
+                                                value={outreachMsg}
+                                                onChange={e => setOutreachMsg(e.target.value)}
+                                                style={{
+                                                    width: '100%',
+                                                    marginBottom: 'var(--space-sm)',
+                                                    border: '2px solid var(--accent)',
+                                                    borderRadius: 8,
+                                                    padding: 12,
+                                                    fontSize: 'var(--text-sm)',
+                                                }}
+                                            />
+                                            {/* Action buttons */}
+                                            <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
+                                                <button
+                                                    className="btn btn-primary btn-sm"
+                                                    onClick={handleCopyOutreach}
+                                                    style={{
+                                                        background: copySuccess ? 'var(--success)' : undefined,
+                                                        transition: 'background 0.3s',
+                                                    }}
+                                                >
+                                                    {copySuccess ? '✅ Đã copy!' : '📋 Copy tin nhắn'}
+                                                </button>
+                                                {signal.author_url && (
+                                                    <button className="btn btn-secondary btn-sm" onClick={() => { handleCopyOutreach(); handleOpenProfile() }}>
+                                                        📤 Copy & Mở Profile
+                                                    </button>
+                                                )}
+                                                {signal.post_url && outreachType === 'comment' && (
+                                                    <button className="btn btn-secondary btn-sm" onClick={() => { handleCopyOutreach(); handleOpenPost() }}>
+                                                        💭 Copy & Mở Post
+                                                    </button>
+                                                )}
+                                                <button
+                                                    className="btn btn-sm"
+                                                    onClick={handleMarkSent}
+                                                    style={{ marginLeft: 'auto', background: 'var(--success)', color: '#fff', fontWeight: 600 }}
+                                                >
+                                                    ✅ Đánh dấu đã gửi
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* Outreach History */}
+                                    {outreachHistory.length > 0 && (
+                                        <div style={{ marginTop: 'var(--space-lg)', borderTop: '1px solid var(--border)', paddingTop: 'var(--space-md)' }}>
+                                            <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>
+                                                📋 Lịch sử outreach ({outreachHistory.length})
+                                            </div>
+                                            {outreachHistory.slice(0, 5).map((h: any) => (
+                                                <div key={h.id} style={{
+                                                    fontSize: 'var(--text-xs)',
+                                                    padding: '8px',
+                                                    marginBottom: 4,
+                                                    background: 'var(--bg-secondary)',
+                                                    borderRadius: 6,
+                                                    borderLeft: `3px solid ${h.status === 'sent' ? 'var(--success)' : h.status === 'replied' ? 'var(--accent)' : 'var(--text-muted)'}`,
+                                                }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                                        <span style={{ fontWeight: 600 }}>{h.staff_name} · {h.channel}</span>
+                                                        <span style={{ color: 'var(--text-muted)' }}>{timeAgo(h.created_at)}</span>
+                                                    </div>
+                                                    <div style={{ color: 'var(--text-secondary)' }}>{h.message?.substring(0, 100)}...</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ─── RESPONSE TAB (original) ─── */}
+                            {activeTab === 'response' && (
+                                <div>
+                                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 'var(--space-sm)' }}>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => fillTemplate('quote')}>📋 Báo giá</button>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => fillTemplate('fulfill')}>🏭 Kho/FF</button>
+                                        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                                            {(['friendly', 'professional', 'concise'] as const).map(t => (
+                                                <button
+                                                    key={t}
+                                                    className={`btn btn-sm ${tone === t ? 'btn-primary' : 'btn-secondary'}`}
+                                                    onClick={() => setTone(t)}
+                                                >
+                                                    {t === 'friendly' ? '🤝' : t === 'professional' ? '👔' : '⚡'}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <textarea
+                                        rows={4}
+                                        value={response}
+                                        onChange={(e) => setResponse(e.target.value)}
+                                        style={{ width: '100%', marginBottom: 'var(--space-sm)' }}
+                                    />
+                                    <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => navigator.clipboard.writeText(response)}>📋 Copy</button>
+                                        <button className="btn btn-secondary btn-sm" onClick={handleSaveResponse}>💾 Save</button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ─── NOTES TAB ─── */}
+                            {activeTab === 'notes' && (
+                                <div>
+                                    <textarea
+                                        rows={4}
+                                        value={notes}
+                                        onChange={(e) => setNotes(e.target.value)}
+                                        placeholder="Ghi chú: giá đã báo, deal progress, follow-up date..."
+                                        style={{ width: '100%', marginBottom: 'var(--space-sm)' }}
+                                    />
+                                    <button className="btn btn-secondary btn-sm" onClick={handleSaveNotes}>💾 Lưu ghi chú</button>
+                                </div>
+                            )}
+
+                            {/* ─── AGENT TAB ─── */}
+                            {activeTab === 'agent' && (
+                                <div>
+                                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 'var(--space-sm)' }}>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => handleFeedback('correct', undefined, '✅ Đúng')}>✅ Đúng</button>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => handleFeedback('wrong', 'provider', '❌ Sai → Provider')}>❌ Sai→Provider</button>
+                                    </div>
+                                    <textarea
+                                        rows={3}
+                                        value={feedbackText}
+                                        onChange={(e) => setFeedbackText(e.target.value)}
+                                        placeholder="Ghi chú thêm cho Agent..."
+                                        style={{ width: '100%', marginBottom: 'var(--space-sm)' }}
+                                    />
+                                    <button className="btn btn-primary btn-sm" onClick={() => handleFeedback('text_feedback')}>📤 Gửi feedback</button>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    {/* Lead Info */}
-                    <div className="card">
-                        <div className="card-title">📋 Signal Info (SIS)</div>
-                        <div style={{ fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>ID</span><span>#{signal.id}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Platform</span><span>{signal.platform}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Urgency</span><span>{cls.contactability_score > 70 ? 'High' : 'Normal'}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Time</span><span>{timeAgo(postDate)}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Pipeline</span><span style={{ fontWeight: 600 }}>{pipelineStage.toUpperCase()}</span></div>
+                    {/* RIGHT: Action panel */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+                        {/* Score */}
+                        <div className="card" style={{ textAlign: 'center' }}>
+                            <ScoreBadge score={score} />
+                            <div style={{ marginTop: 'var(--space-sm)' }}>
+                                <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: `${score}%`, background: hotColor, borderRadius: 3, transition: 'width 0.3s' }} />
+                                </div>
+                                <div style={{ fontSize: 'var(--text-xs)', color: hotColor, marginTop: 4, fontWeight: 600 }}>Lead Score</div>
+                            </div>
+                            {cls.pain_score > 0 && <div style={{ fontSize: 'var(--text-xs)', marginTop: 8, color: 'var(--warning)' }}>⚡ Pain: {cls.pain_score}</div>}
+                        </div>
+
+                        {/* Quick Actions */}
+                        <div className="card">
+                            <div className="card-title">⚡ Quick Actions</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                                <button className={`btn btn-sm ${pipelineStage === 'contacted' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => handleStatus('contacted')}>📞 Contacted</button>
+                                <button className={`btn btn-sm ${pipelineStage === 'converted' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => handleStatus('won')}>✅ Converted</button>
+                                <button className={`btn btn-sm ${pipelineStage === 'ignored' ? 'btn-danger' : 'btn-secondary'}`} onClick={() => handleStatus('lost')}>⛔ Lost / Ignore</button>
+                                <button className="btn btn-sm btn-danger" onClick={handleDelete}>🗑️ Delete</button>
+                            </div>
+                        </div>
+
+                        {/* Deal */}
+                        <div className="card">
+                            <div className="card-title">🏆 Deal</div>
+                            <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => setShowDealModal(true)}>
+                                🏆 BÁO CÁO CHỐT ĐƠN
+                            </button>
+                        </div>
+
+                        {/* Staff */}
+                        <div className="card">
+                            <div className="card-title">👥 Phân công Sale</div>
+                            <div className="staff-pills">
+                                {STAFF.map((name) => {
+                                    const isActive = claimedArr.includes(name)
+                                    return (
+                                        <button
+                                            key={name}
+                                            className={`staff-pill ${isActive ? 'staff-pill--active' : ''}`}
+                                            onClick={() => handleClaim(name)}
+                                        >
+                                            {name}{isActive ? ' ✓' : ''}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                            {claimedArr.length > 0 && (
+                                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 8 }}>
+                                    Đang xử lý: <strong>{claimedArr.join(', ')}</strong>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Lead Info */}
+                        <div className="card">
+                            <div className="card-title">📋 Signal Info (SIS)</div>
+                            <div style={{ fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>ID</span><span>#{signal.id}</span></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Platform</span><span>{signal.platform}</span></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Urgency</span><span>{cls.contactability_score > 70 ? 'High' : 'Normal'}</span></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Time</span><span>{timeAgo(postDate)}</span></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Pipeline</span><span style={{ fontWeight: 600 }}>{pipelineStage.toUpperCase()}</span></div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Deal Modal */}
-            {showDealModal && (
-                <DealModal leadId={signal.id} onClose={() => setShowDealModal(false)} onDone={() => {
-                    handleStatus('won')
-                    setShowDealModal(false)
-                }} />
-            )}
+                {/* Deal Modal */}
+                {showDealModal && (
+                    <DealModal leadId={signal.id} onClose={() => setShowDealModal(false)} onDone={() => {
+                        handleStatus('won')
+                        setShowDealModal(false)
+                    }} />
+                )}
+            </div>
         </div>
     )
 }
