@@ -158,12 +158,16 @@ function deleteGroupsByCategory(category) {
 }
 
 function getStats() {
-    const db = getDb();
-    const total = db.prepare('SELECT COUNT(*) as c FROM fb_groups').get().c;
-    const active = db.prepare("SELECT COUNT(*) as c FROM fb_groups WHERE status = 'active'").get().c;
-    const byCategory = db.prepare('SELECT category, COUNT(*) as c FROM fb_groups GROUP BY category ORDER BY c DESC').all();
-    const highScore = db.prepare('SELECT COUNT(*) as c FROM fb_groups WHERE relevance_score >= 70').get().c;
-    return { total, active, highScore, byCategory };
+    const total = getDb().prepare('SELECT COUNT(*) as c FROM fb_groups').get().c;
+    const active = getDb().prepare("SELECT COUNT(*) as c FROM fb_groups WHERE status = 'active'").get().c;
+    const paused = getDb().prepare("SELECT COUNT(*) as c FROM fb_groups WHERE status = 'paused'").get().c;
+    const dead = getDb().prepare("SELECT COUNT(*) as c FROM fb_groups WHERE status = 'dead'").get().c;
+
+    const catRows = getDb().prepare('SELECT category, COUNT(*) as c FROM fb_groups GROUP BY category').all();
+    const by_category = {};
+    catRows.forEach(r => { by_category[r.category] = r.c; });
+
+    return { total, active, paused, dead, by_category };
 }
 
 function getAllGroups(filters = {}) {

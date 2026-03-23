@@ -7,7 +7,11 @@ interface Group {
 }
 interface GroupStats { total: number; active: number; paused: number; by_category: Record<string, number> }
 
-const CAT_ICONS: Record<string, string> = { fulfillment: '🏭', express: '✈️', warehouse: '🏢', mixed: '🔀' }
+const CAT_ICONS: Record<string, string> = {
+    fulfillment: '🏭', shipping: '✈️', express: '✈️', warehouse: '🏢', mixed: '🔀',
+    dropship: '💧', pod: '👕', sourcing: '🇨🇳', ecommerce: '🛒',
+    tiktok_shop: '🎵', shopify: '🛍️', etsy: '🎨', unknown: '❓'
+}
 
 function formatMembers(n: number) {
     if (!n) return '—'
@@ -159,9 +163,14 @@ export default function GroupsPage() {
                         <input placeholder="Group URL" value={newGroup.url} onChange={(e) => setNewGroup({ ...newGroup, url: e.target.value })} />
                         <select value={newGroup.category} onChange={(e) => setNewGroup({ ...newGroup, category: e.target.value })}>
                             <option value="fulfillment">🏭 Fulfillment</option>
-                            <option value="express">✈️ Express</option>
-                            <option value="warehouse">🏢 Warehouse</option>
-                            <option value="mixed">🔀 Mixed</option>
+                            <option value="dropship">💧 Dropshipping</option>
+                            <option value="pod">👕 Print on Demand</option>
+                            <option value="shipping">✈️ Shipping/Logistics</option>
+                            <option value="sourcing">🇨🇳 China Sourcing</option>
+                            <option value="ecommerce">🛒 E-commerce (All)</option>
+                            <option value="tiktok_shop">🎵 TikTok Shop</option>
+                            <option value="shopify">🛍️ Shopify</option>
+                            <option value="etsy">🎨 Etsy</option>
                         </select>
                         <input placeholder="Notes" value={newGroup.notes} onChange={(e) => setNewGroup({ ...newGroup, notes: e.target.value })} />
                     </div>
@@ -176,9 +185,14 @@ export default function GroupsPage() {
                 <select className="filter-select" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
                     <option value="">All Categories</option>
                     <option value="fulfillment">🏭 Fulfillment</option>
-                    <option value="express">✈️ Express</option>
-                    <option value="warehouse">🏢 Warehouse</option>
-                    <option value="mixed">🔀 Mixed</option>
+                    <option value="dropship">💧 Dropshipping</option>
+                    <option value="pod">👕 Print on Demand</option>
+                    <option value="shipping">✈️ Shipping/Logistics</option>
+                    <option value="sourcing">🇨🇳 China Sourcing</option>
+                    <option value="ecommerce">🛒 E-commerce (All)</option>
+                    <option value="tiktok_shop">🎵 TikTok Shop</option>
+                    <option value="shopify">🛍️ Shopify</option>
+                    <option value="etsy">🎨 Etsy</option>
                 </select>
                 <select className="filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                     <option value="">All Status</option>
