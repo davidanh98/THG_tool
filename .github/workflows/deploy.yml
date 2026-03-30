@@ -67,6 +67,8 @@ jobs:
           echo "✅ Backend dependencies installed"
 
       - name: Build React Frontend
+        env:
+          VITE_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           cd /root/THG_tool/frontend
           npm install 2>&1 | tail -3
