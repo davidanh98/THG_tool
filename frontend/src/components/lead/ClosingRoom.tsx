@@ -80,7 +80,7 @@ export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
     useEffect(() => {
         apiGet<SalesAction[]>(`/api/sis/signals/${signal.id}/actions`)
             .then(res => setActionHistory(res || []))
-            .catch(() => {})
+            .catch(() => { })
     }, [signal.id])
     const postDate = signal.created_at || new Date().toISOString()
     const score = card.sales_priority_score || cls.seller_likelihood || 0
@@ -678,7 +678,7 @@ export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
                                         setPipelineStage('won');
                                         await postAction('stage_change', { stage: 'won' }, outreachStaff || undefined);
                                         if (outreachStaff) {
-                                            const result = await apiPost<{ok: boolean; data: {points: number; flagged: boolean; status: string; reason: string}}>(`/api/sis/signals/${signal.id}/kpi`, {
+                                            const result = await apiPost<{ ok: boolean; data: { points: number; flagged: boolean; status: string; reason: string } }>(`/api/sis/signals/${signal.id}/kpi`, {
                                                 action_type: 'deal_closed',
                                                 staff_name: outreachStaff,
                                                 deal_value: parseFloat(dealValue),
@@ -723,7 +723,7 @@ export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
     )
 }
 
-function DealModal({ leadId, onClose, onDone }: { leadId: number; onClose: () => void; onDone: (staff: string, value: number) => Promise<void> }) {
+function DealModal({ leadId: _leadId, onClose, onDone }: { leadId: number; onClose: () => void; onDone: (staff: string, value: number) => Promise<void> }) {
     const [staff, setStaff] = useState('')
     const [value, setValue] = useState(0)
     const [submitting, setSubmitting] = useState(false)
@@ -747,8 +747,8 @@ function DealModal({ leadId, onClose, onDone }: { leadId: number; onClose: () =>
                 <div style={{ display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
                     <button className="btn btn-secondary" onClick={onClose}>Hủy</button>
                     <button className="btn btn-primary" onClick={handleSubmit} disabled={!staff || submitting}>
-                    {submitting ? '⏳ Đang lưu...' : '🏆 Chốt!'}
-                </button>
+                        {submitting ? '⏳ Đang lưu...' : '🏆 Chốt!'}
+                    </button>
                 </div>
             </div>
         </div>
