@@ -131,7 +131,7 @@ function LeadPayloadCard({ lead }: { lead: DiscoveryLead }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
                         <strong style={{ fontSize: '0.95rem' }}>{lead.name}</strong>
                         {lead.source && (
-                            <a href={lead.source} target="_blank" rel="noreferrer" style={{ fontSize: '0.7rem', color: 'var(--primary-color)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+                            <a href={lead.source.startsWith('http') ? lead.source : `https://${lead.source}`} target="_blank" rel="noreferrer" style={{ fontSize: '0.7rem', color: 'var(--primary-color)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                                 🔗 {lead.source.replace(/^https?:\/\//, '')}
                             </a>
                         )}
@@ -362,7 +362,7 @@ export default function DiscoveryPage() {
                                 <tr key={row.id} style={{ borderBottom: '1px solid var(--border)' }}>
                                     <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600 }}>
                                         {row.post_url
-                                            ? <a href={row.post_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)' }}>{row.author_name}</a>
+                                            ? <a href={row.post_url.startsWith('http') ? row.post_url : `https://${row.post_url}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)' }}>{row.author_name}</a>
                                             : row.author_name}
                                     </td>
                                     <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
