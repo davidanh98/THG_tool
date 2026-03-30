@@ -208,8 +208,8 @@ export default function DiscoveryPage() {
 
     const loadHistory = () => {
         setHistoryLoading(true)
-        apiGet<HistoryRow[]>('/api/sis/discovery/history')
-            .then(res => setHistory(res || []))
+        apiGet<any>('/api/sis/discovery/history')
+            .then(res => setHistory(res?.data || []))
             .catch(console.error)
             .finally(() => setHistoryLoading(false))
     }

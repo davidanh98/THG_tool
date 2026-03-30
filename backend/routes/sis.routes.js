@@ -212,7 +212,7 @@ router.delete('/api/sis/signals/:id', (req, res) => {
 });
 
 // ── POST /api/sis/discovery — AI-powered multi-platform lead discovery ────────
-router.post('/discovery', async (req, res) => {
+router.post('/api/sis/discovery', async (req, res) => {
     try {
         const { query, maxLeads } = req.body;
         if (!query || !query.trim()) {
@@ -230,7 +230,7 @@ router.post('/discovery', async (req, res) => {
 });
 
 // ── GET /api/sis/discovery/history — Recent discovery runs ───────────────────
-router.get('/discovery/history', (req, res) => {
+router.get('/api/sis/discovery/history', (req, res) => {
     try {
         const rows = database._db.prepare(`
             SELECT rp.id, rp.author_name, rp.post_url, rp.group_name, rp.scraped_at,
@@ -249,7 +249,7 @@ router.get('/discovery/history', (req, res) => {
 
 // ─── Meta Inbox Integration Route Stubs ───────────────────────────────────
 
-router.get('/meta/conversations', (req, res) => {
+router.get('/api/sis/meta/conversations', (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 50;
         const convos = database.getMetaConversations(limit);
@@ -260,7 +260,7 @@ router.get('/meta/conversations', (req, res) => {
     }
 });
 
-router.post('/meta/assign/:id', (req, res) => {
+router.post('/api/sis/meta/assign/:id', (req, res) => {
     try {
         const convId = parseInt(req.params.id);
         const { staff_name } = req.body;
@@ -278,7 +278,7 @@ router.post('/meta/assign/:id', (req, res) => {
 });
 
 // ── POST /api/sis/meta/claim/:id — Staff claims a conversation ─────────────────
-router.post('/meta/claim/:id', (req, res) => {
+router.post('/api/sis/meta/claim/:id', (req, res) => {
     try {
         const convId = parseInt(req.params.id);
         const { staff_name } = req.body;
@@ -291,7 +291,7 @@ router.post('/meta/claim/:id', (req, res) => {
 });
 
 // ── POST /api/sis/meta/auto-release — Release stale claims + log KPI penalty ──
-router.post('/meta/auto-release', (req, res) => {
+router.post('/api/sis/meta/auto-release', (req, res) => {
     try {
         const timeoutMinutes = parseInt(req.body.timeoutMinutes) || 60;
         const expired = database.getExpiredMetaClaims(timeoutMinutes);
@@ -305,7 +305,7 @@ router.post('/meta/auto-release', (req, res) => {
     }
 });
 
-router.get('/meta/conversations/:id/messages', (req, res) => {
+router.get('/api/sis/meta/conversations/:id/messages', (req, res) => {
     try {
         const msgs = database.getMetaMessages(req.params.id);
         res.json(msgs);
@@ -326,7 +326,7 @@ function calcSimilarity(a, b) {
     return intersection / Math.max(A.size, B.size);
 }
 
-router.post('/meta/send/:id', async (req, res) => {
+router.post('/api/sis/meta/send/:id', async (req, res) => {
     try {
         const { messageText, staff_name } = req.body;
         const recipientId = req.params.id; // FB Page Scoped ID (PSID)
@@ -388,7 +388,7 @@ router.post('/meta/send/:id', async (req, res) => {
                     // Log KPI: reply_received (+8) + first contact (+3) if first message
                     try {
                         database.recordMetaFirstReply(partRow.conversation_id, staff_name);
-                    } catch(e) { console.error('[KPI] recordMetaFirstReply error:', e.message); }
+                    } catch (e) { console.error('[KPI] recordMetaFirstReply error:', e.message); }
 
                     // Determine which service this conversation relates to
                     let serviceType = 'unknown';
@@ -401,7 +401,7 @@ router.post('/meta/send/:id', async (req, res) => {
                             ORDER BY pc.created_at DESC LIMIT 1
                         `).get(staff_name);
                         if (leadRow) serviceType = leadRow.thg_service_needed || 'unknown';
-                    } catch(e) {}
+                    } catch (e) { }
 
                     // Capture ALL sent messages as style training data
                     database.updateStaffServiceSample(staff_name, serviceType, messageText.substring(0, 600));
@@ -410,7 +410,7 @@ router.post('/meta/send/:id', async (req, res) => {
                     const lastDraft = database.getLastAiDraft(partRow.conversation_id);
                     if (lastDraft) {
                         const similarity = calcSimilarity(lastDraft.message_text, messageText);
-                        console.log(`[StyleCapture] ${staff_name} sent (similarity vs AI draft: ${Math.round(similarity*100)}%) → sample saved to [${serviceType}]`);
+                        console.log(`[StyleCapture] ${staff_name} sent (similarity vs AI draft: ${Math.round(similarity * 100)}%) → sample saved to [${serviceType}]`);
                     } else {
                         console.log(`[StyleCapture] ${staff_name} sent message → sample saved to [${serviceType}]`);
                     }
@@ -429,7 +429,7 @@ router.post('/meta/send/:id', async (req, res) => {
 });
 
 // ── POST /api/sis/webform/submit ──────────────────────────────────────────────
-router.post('/webform/submit', async (req, res) => {
+router.post('/api/sis/webform/submit', async (req, res) => {
     try {
         const { name, channel, origin, destination, needs, contact } = req.body;
 
@@ -487,7 +487,7 @@ router.post('/webform/submit', async (req, res) => {
 });
 
 // ── GET /api/sis/settings ──────────────────────────────────────────────
-router.get('/settings', (req, res) => {
+router.get('/api/sis/settings', (req, res) => {
     try {
         const nightShift = database.getSetting('NIGHT_SHIFT_MODE', 'false');
         const aiKb = database.getSetting('AI_KNOWLEDGE_BASE', '');
@@ -499,7 +499,7 @@ router.get('/settings', (req, res) => {
 });
 
 // ── POST /api/sis/settings ─────────────────────────────────────────────
-router.post('/settings', (req, res) => {
+router.post('/api/sis/settings', (req, res) => {
     try {
         const { NIGHT_SHIFT_MODE, AI_KNOWLEDGE_BASE, SERVICE_STAFF_MAP } = req.body;
         if (NIGHT_SHIFT_MODE !== undefined) {
