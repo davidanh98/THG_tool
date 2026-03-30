@@ -1,7 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { SISSignal } from '../../types/sis'
 import { useSISStore } from '../../store/sisStore'
+import { apiGet, apiPost } from '../../api/client'
 import ScoreBadge from '../ui/ScoreBadge'
+
+interface SalesAction {
+    id: number;
+    raw_post_id: number;
+    action_type: string;
+    action_data: string;
+    staff_name: string | null;
+    created_at: string;
+}
 
 interface ClosingRoomProps {
     signal: SISSignal
@@ -21,7 +31,7 @@ const TEMPLATES: Record<string, Record<string, string>> = {
     },
 }
 
-const STAFF = ["Đức Anh's Agent", 'Trang', 'Lê Huyền', 'Ngọc Huyền', 'Hạnh', 'Min', 'Moon']
+const STAFF = ['Hạnh', 'Lê Huyền', 'Moon', 'Thư', 'Trang', 'Ngọc Huyền', 'Min', "Đức Anh's Agent"]
 
 function timeAgo(dateStr: string): string {
     if (!dateStr) return ''
@@ -44,10 +54,15 @@ export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
     const card = signal.leadCard || {} as any
 
     const [response, setResponse] = useState(card.suggested_opener || '')
-    const [notes, setNotes] = useState('')
+    const [notes, setNotes] = useState(signal.sales_notes ?? '')
+    const [notesSaving, setNotesSaving] = useState(false)
     const [feedbackText, setFeedbackText] = useState('')
     const [tone, setTone] = useState<'friendly' | 'professional' | 'concise'>('friendly')
     const [showDealModal, setShowDealModal] = useState(false)
+    const [dealModal, setDealModal] = useState(false)
+    const [dealValue, setDealValue] = useState('')
+    const [actionHistory, setActionHistory] = useState<SalesAction[]>([])
+    const [savingStage, setSavingStage] = useState(false)
 
     // ── Outreach state ──
     const [outreachMsg, setOutreachMsg] = useState(card.suggested_opener || '')
@@ -55,29 +70,63 @@ export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
     const [outreachType, setOutreachType] = useState<'dm' | 'comment'>('dm')
     const [outreachStaff, setOutreachStaff] = useState(STAFF[0])
     const [outreachLoading] = useState(false)
-    const [outreachHistory] = useState<any[]>([])
     const [copySuccess, setCopySuccess] = useState(false)
-    const [pipelineStage, setPipelineStage] = useState('new')
+    const [pipelineStage, setPipelineStage] = useState(signal.pipeline_stage || 'new')
+    const [assignedTo, setAssignedTo] = useState(signal.assigned_to || '')
 
-    const claimedArr: string[] = [] // Stubbed for now
+    const claimedArr: string[] = assignedTo ? [assignedTo] : []
+
+    // Load action history on mount
+    useEffect(() => {
+        apiGet<SalesAction[]>(`/api/sis/signals/${signal.id}/actions`)
+            .then(res => setActionHistory(res || []))
+            .catch(() => {})
+    }, [signal.id])
     const postDate = signal.created_at || new Date().toISOString()
     const score = card.sales_priority_score || cls.seller_likelihood || 0
     const hotColor = score >= 80 ? 'var(--hot)' : score >= 60 ? 'var(--warm)' : 'var(--cold)'
 
-    // ── Outreach handlers (Stubbed for v2) ──
+    const postAction = async (action_type: string, action_data: object, staff?: string) => {
+        try {
+            await apiPost(`/api/sis/signals/${signal.id}/action`, { action_type, action_data, staff_name: staff || null })
+            const updated = await apiGet<SalesAction[]>(`/api/sis/signals/${signal.id}/actions`)
+            setActionHistory(updated || [])
+        } catch (e) {
+            console.error('Action failed:', e)
+        }
+    }
+
+    const postKpi = async (actionType: string, staff: string, dealValue?: number, note?: string) => {
+        try {
+            await apiPost(`/api/sis/signals/${signal.id}/kpi`, {
+                action_type: actionType,
+                staff_name: staff,
+                deal_value: dealValue || 0,
+                note: note || ''
+            });
+        } catch (e) {
+            console.error('KPI log failed:', e);
+        }
+    };
+
     const handleGenerateOutreach = async () => {
-        alert('Tính năng Outreach tự động qua API cũ tạm tắt trong bản cập nhật SIS v2. Vui lòng dùng tin nhắn Copilot Draft.')
+        alert('Tính năng Outreach tự động đang phát triển. Vui lòng dùng Copilot Draft bên dưới.')
     }
 
     const handleCopyOutreach = () => {
         navigator.clipboard.writeText(outreachMsg || '')
         setCopySuccess(true)
         setTimeout(() => setCopySuccess(false), 2000)
+        // Auto-log KPI: opener copied (1 pt, instant)
+        if (outreachStaff) postKpi('opener_copied', outreachStaff, 0, 'Copied AI opener');
     }
 
     const handleMarkSent = async () => {
+        setSavingStage(true)
         setPipelineStage('contacted')
-        alert('Đã ghi nhận Pipeline: Contacted (Chạy offline mode)')
+        await postAction('stage_change', { stage: 'contacted' }, outreachStaff)
+        if (outreachStaff) await postKpi('contacted', outreachStaff, 0, `Contacted via ${outreachType}`);
+        setSavingStage(false)
     }
 
     const handleOpenProfile = () => {
@@ -88,12 +137,23 @@ export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
         if (signal.post_url) window.open(signal.post_url, '_blank')
     }
 
-    const handleClaim = async (_name: string) => {
-        alert('Claim account tạm tắt cho v2. Đang chờ Data Model mới.')
+    const handleClaim = async (name: string) => {
+        setAssignedTo(name)
+        await postAction('assign', { assigned_to: name }, name)
     }
 
     const handleStatus = async (status: string) => {
+        if (status === 'won') {
+            setDealModal(true);
+            return; // Don't process yet, wait for modal
+        }
+        setSavingStage(true)
         setPipelineStage(status)
+        await postAction('stage_change', { stage: status }, outreachStaff || undefined)
+        if (status === 'interested' && outreachStaff) {
+            await postKpi('interested', outreachStaff, 0, 'Marked as interested');
+        }
+        setSavingStage(false)
     }
 
     const handleDelete = async () => {
@@ -108,9 +168,28 @@ export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
         if (tmpl?.[tone]) setResponse(tmpl[tone])
     }
 
-    const handleSaveResponse = async () => { }
-    const handleSaveNotes = async () => { }
-    const handleFeedback = async (_type: string, _correctRole?: string, _note?: string) => { }
+    const handleSaveResponse = async () => {
+        await postAction('note', { notes: response, note_type: 'response_draft' }, outreachStaff || undefined)
+    }
+
+    const handleSaveNotes = async () => {
+        setNotesSaving(true)
+        await postAction('note', { notes, note_type: 'sales_note' }, outreachStaff || undefined)
+        setNotesSaving(false)
+    }
+
+    const handleFeedback = async (type: string, correctRole?: string, note?: string) => {
+        const text = note || feedbackText
+        await apiPost('/api/sis/feedback', {
+            raw_post_id: signal.id,
+            is_correct: type === 'correct' ? 1 : 0,
+            corrected_lane: correctRole || null,
+            feedback_text: text
+        })
+        await postAction('feedback', { type, corrected_lane: correctRole, note: text })
+        setFeedbackText('')
+        alert('Feedback đã được ghi nhận. Cảm ơn!')
+    }
 
     // Clean content for display
     let rawContent = signal.content || '—'
@@ -145,7 +224,7 @@ export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
                 </div>
 
                 {/* Pipeline Stage Bar */}
-                <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-lg)', padding: '8px 12px', background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-lg)', padding: '8px 12px', background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', opacity: savingStage ? 0.6 : 1, pointerEvents: savingStage ? 'none' : 'auto' }}>
                     {PIPELINE_STAGES.map(s => (
                         <button
                             key={s.key}
@@ -389,28 +468,21 @@ export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
                                         </>
                                     )}
 
-                                    {/* Outreach History */}
-                                    {outreachHistory.length > 0 && (
+                                    {/* Outreach History từ actionHistory */}
+                                    {actionHistory.filter(a => a.action_type === 'stage_change').length > 0 && (
                                         <div style={{ marginTop: 'var(--space-lg)', borderTop: '1px solid var(--border)', paddingTop: 'var(--space-md)' }}>
                                             <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>
-                                                📋 Lịch sử outreach ({outreachHistory.length})
+                                                📋 Lịch sử pipeline
                                             </div>
-                                            {outreachHistory.slice(0, 5).map((h: any) => (
-                                                <div key={h.id} style={{
-                                                    fontSize: 'var(--text-xs)',
-                                                    padding: '8px',
-                                                    marginBottom: 4,
-                                                    background: 'var(--bg-secondary)',
-                                                    borderRadius: 6,
-                                                    borderLeft: `3px solid ${h.status === 'sent' ? 'var(--success)' : h.status === 'replied' ? 'var(--accent)' : 'var(--text-muted)'}`,
-                                                }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                        <span style={{ fontWeight: 600 }}>{h.staff_name} · {h.channel}</span>
+                                            {actionHistory.filter(a => a.action_type === 'stage_change').map(h => {
+                                                const data = (() => { try { return JSON.parse(h.action_data) } catch { return {} } })()
+                                                return (
+                                                    <div key={h.id} style={{ fontSize: 'var(--text-xs)', padding: '6px 8px', marginBottom: 4, background: 'var(--bg-secondary)', borderRadius: 6, display: 'flex', justifyContent: 'space-between' }}>
+                                                        <span>🔄 Stage → <strong>{data.stage || '?'}</strong>{h.staff_name ? ` · ${h.staff_name}` : ''}</span>
                                                         <span style={{ color: 'var(--text-muted)' }}>{timeAgo(h.created_at)}</span>
                                                     </div>
-                                                    <div style={{ color: 'var(--text-secondary)' }}>{h.message?.substring(0, 100)}...</div>
-                                                </div>
-                                            ))}
+                                                )
+                                            })}
                                         </div>
                                     )}
                                 </div>
@@ -451,13 +523,41 @@ export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
                             {activeTab === 'notes' && (
                                 <div>
                                     <textarea
-                                        rows={4}
+                                        rows={5}
                                         value={notes}
                                         onChange={(e) => setNotes(e.target.value)}
                                         placeholder="Ghi chú: giá đã báo, deal progress, follow-up date..."
                                         style={{ width: '100%', marginBottom: 'var(--space-sm)' }}
                                     />
-                                    <button className="btn btn-secondary btn-sm" onClick={handleSaveNotes}>💾 Lưu ghi chú</button>
+                                    <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center', marginBottom: 'var(--space-lg)' }}>
+                                        <button className="btn btn-primary btn-sm" onClick={handleSaveNotes} disabled={notesSaving}>
+                                            {notesSaving ? '⏳ Đang lưu...' : '💾 Lưu ghi chú'}
+                                        </button>
+                                    </div>
+                                    {/* Action Timeline */}
+                                    {actionHistory.length > 0 && (
+                                        <div>
+                                            <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>
+                                                📋 Lịch sử hành động ({actionHistory.length})
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                {actionHistory.slice().reverse().map(a => {
+                                                    const data = (() => { try { return JSON.parse(a.action_data) } catch { return {} } })()
+                                                    const iconMap: Record<string, string> = { stage_change: '🔄', note: '📝', assign: '👤', deal_closed: '🏆', feedback: '💬', follow_up: '⏰' }
+                                                    const icon = iconMap[a.action_type] || '•'
+                                                    const labelMap: Record<string, string> = { stage_change: `Stage → ${data.stage || '?'}`, note: `Note saved`, assign: `Assigned to ${data.assigned_to || '?'}`, deal_closed: `Deal closed $${data.value || '?'}`, feedback: `Feedback: ${data.type || '?'}`, follow_up: 'Follow-up set' }
+                                                    return (
+                                                        <div key={a.id} style={{ display: 'flex', gap: 8, fontSize: 'var(--text-xs)', padding: '6px 8px', background: 'var(--bg-secondary)', borderRadius: 6 }}>
+                                                            <span>{icon}</span>
+                                                            <span style={{ flex: 1 }}>{labelMap[a.action_type] || a.action_type}</span>
+                                                            {a.staff_name && <span style={{ color: 'var(--accent)' }}>{a.staff_name}</span>}
+                                                            <span style={{ color: 'var(--text-muted)' }}>{timeAgo(a.created_at)}</span>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -552,26 +652,87 @@ export default function ClosingRoom({ signal, onClose }: ClosingRoomProps) {
                     </div>
                 </div>
 
+                {/* KPI Deal Close Modal */}
+                {dealModal && (
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div className="card" style={{ width: 400, padding: '2rem' }}>
+                            <h3 style={{ margin: '0 0 1rem 0' }}>🏆 Xác nhận chốt deal</h3>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                                Nhập giá trị deal (USD). Deal sẽ được chờ duyệt trong 24h trước khi tính điểm.
+                            </p>
+                            <input
+                                type="number"
+                                value={dealValue}
+                                onChange={e => setDealValue(e.target.value)}
+                                placeholder="VD: 500"
+                                style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '6px', marginBottom: '1rem', fontSize: '1rem' }}
+                            />
+                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                <button className="btn btn-secondary" onClick={() => setDealModal(false)}>Hủy</button>
+                                <button
+                                    className="btn btn-primary"
+                                    disabled={!dealValue || parseFloat(dealValue) <= 0}
+                                    onClick={async () => {
+                                        setDealModal(false);
+                                        setSavingStage(true);
+                                        setPipelineStage('won');
+                                        await postAction('stage_change', { stage: 'won' }, outreachStaff || undefined);
+                                        if (outreachStaff) {
+                                            const result = await apiPost<{ok: boolean; data: {points: number; flagged: boolean; status: string; reason: string}}>(`/api/sis/signals/${signal.id}/kpi`, {
+                                                action_type: 'deal_closed',
+                                                staff_name: outreachStaff,
+                                                deal_value: parseFloat(dealValue),
+                                                note: `Deal $${dealValue} - ${signal.author_name}`
+                                            });
+                                            if (result?.ok && result.data) {
+                                                const r = result.data;
+                                                if (r.flagged) {
+                                                    alert(`⚠️ Deal đã được ghi nhận nhưng BỊ GẮN CỜ để admin xét duyệt.\nLý do: ${r.reason || 'Suspicious activity'}`);
+                                                } else if (r.status === 'pending') {
+                                                    alert(`✅ Deal $${dealValue} ghi nhận thành công!\n⏳ Đang chờ admin duyệt (+${r.points} pts pending)`);
+                                                } else {
+                                                    alert(`🏆 Deal đã chốt! +${r.points} điểm`);
+                                                }
+                                            }
+                                        }
+                                        setDealValue('');
+                                        setSavingStage(false);
+                                    }}
+                                >
+                                    ✅ Xác nhận chốt deal
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Deal Modal */}
                 {showDealModal && (
-                    <DealModal leadId={signal.id} onClose={() => setShowDealModal(false)} onDone={() => {
-                        handleStatus('won')
-                        setShowDealModal(false)
-                    }} />
+                    <DealModal
+                        leadId={signal.id}
+                        onClose={() => setShowDealModal(false)}
+                        onDone={async (staff, value) => {
+                            await postAction('deal_closed', { value, staff_name: staff }, staff)
+                            handleStatus('won')
+                            setShowDealModal(false)
+                        }}
+                    />
                 )}
             </div>
         </div>
     )
 }
 
-function DealModal({ leadId, onClose, onDone }: { leadId: number; onClose: () => void; onDone: (staff: string, value: number) => void }) {
+function DealModal({ leadId, onClose, onDone }: { leadId: number; onClose: () => void; onDone: (staff: string, value: number) => Promise<void> }) {
     const [staff, setStaff] = useState('')
     const [value, setValue] = useState(0)
+    const [submitting, setSubmitting] = useState(false)
 
     const handleSubmit = async () => {
         if (!staff) return
-        alert(`Tính năng report Deal lên cloud đang chờ Backend v2 Update. ID: ${leadId}`)
-        onDone(staff, value)
+        setSubmitting(true)
+        await onDone(staff, value)
+        setSubmitting(false)
     }
 
     return (
@@ -585,7 +746,9 @@ function DealModal({ leadId, onClose, onDone }: { leadId: number; onClose: () =>
                 <input type="number" placeholder="Giá trị deal ($)" value={value || ''} onChange={e => setValue(Number(e.target.value))} style={{ width: '100%', marginBottom: 'var(--space-lg)', height: 40 }} />
                 <div style={{ display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
                     <button className="btn btn-secondary" onClick={onClose}>Hủy</button>
-                    <button className="btn btn-primary" onClick={handleSubmit} disabled={!staff}>🏆 Chốt!</button>
+                    <button className="btn btn-primary" onClick={handleSubmit} disabled={!staff || submitting}>
+                    {submitting ? '⏳ Đang lưu...' : '🏆 Chốt!'}
+                </button>
                 </div>
             </div>
         </div>

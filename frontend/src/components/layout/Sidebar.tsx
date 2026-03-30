@@ -11,6 +11,7 @@ const NAV_ITEMS: NavItem[] = [
     { to: '/analytics', icon: '📊', label: 'Analytics' },
     { section: 'Channels' },
     { to: '/inbox', icon: '💬', label: 'Inbox' },
+    { to: '/discovery', icon: '🌐', label: 'AI Discovery', badge: 'NEW' },
     { to: '/groups', icon: '👥', label: 'Groups' },
     { section: 'Team' },
     { to: '/agents', icon: '🧠', label: 'AI Agents' },

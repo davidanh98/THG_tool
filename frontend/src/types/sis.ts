@@ -19,6 +19,7 @@ export interface SISClassification {
     reason_summary: string;
     confidence: "low" | "medium" | "high";
     created_at: string;
+    thg_service_needed?: string;
 }
 
 export interface SISLeadCard {
@@ -58,6 +59,10 @@ export interface SISSignal {
     strategic_summary?: string;
     suggested_opener?: string;
     sales_priority_score?: number;
+    pipeline_stage?: string;
+    assigned_to?: string;
+    sales_notes?: string;
+    thg_service_needed?: string;
 }
 
 export interface SISSummary {
