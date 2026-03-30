@@ -4,6 +4,12 @@ import type { SISSignal } from '../types/sis'
 import ClosingRoom from '../components/lead/ClosingRoom'
 import '../premium-row.css'
 
+const ensureHttp = (url?: string) => {
+    if (!url) return '';
+    if (url.includes(' ')) return `https://www.google.com/search?q=${encodeURIComponent(url)}`;
+    return url.startsWith('http') ? url : `https://${url}`;
+}
+
 const SERVICE_FILTERS = [
     { id: 'all', label: 'Tất cả', icon: '📋' },
     { id: 'warehouse', label: 'Warehouse', icon: '🏭', staff: 'Hạnh' },
@@ -189,7 +195,7 @@ function SignalRow({ signal, onOpenClosingRoom }: { signal: SISSignal, onOpenClo
             <div className="row-actions">
                 <button onClick={handleDelete} className="action-btn-danger" title="Xóa tín hiệu bị sai">🗑️ Xóa</button>
                 {signal.post_url && (
-                    <a href={signal.post_url.startsWith('http') ? signal.post_url : `https://${signal.post_url}`} target="_blank" rel="noreferrer" className="action-btn" title="Xem bài post gốc">
+                    <a href={ensureHttp(signal.post_url)} target="_blank" rel="noreferrer" className="action-btn" title="Xem bài post gốc">
                         📄 Post
                     </a>
                 )}

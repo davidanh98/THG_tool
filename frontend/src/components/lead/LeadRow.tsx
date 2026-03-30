@@ -44,6 +44,7 @@ function getSmartSummary(lead: Lead): string {
 
 const ensureHttp = (url?: string) => {
     if (!url) return '';
+    if (url.includes(' ')) return `https://www.google.com/search?q=${encodeURIComponent(url)}`;
     return url.startsWith('http') ? url : `https://${url}`;
 }
 
