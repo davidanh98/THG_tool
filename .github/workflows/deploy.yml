@@ -42,6 +42,16 @@ jobs:
               echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> /root/THG_tool/.env
             fi
           fi
+          
+          # Update Gemini API key in .env
+          if [ ! -z "${{ secrets.GEMINI_API_KEY }}" ]; then
+            if grep -q 'GEMINI_API_KEY=' /root/THG_tool/.env; then
+              sed -i "s|GEMINI_API_KEY=.*|GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}|" /root/THG_tool/.env
+            else
+              echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> /root/THG_tool/.env
+            fi
+          fi
+          
           echo "🔑 API keys updated in .env"
 
           # Update NGINX config
