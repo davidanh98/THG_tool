@@ -1,11 +1,41 @@
 import { useEffect, useState } from 'react'
-import { apiGet } from '../api/client'
+import { apiGet, apiPost } from '../api/client'
 
-interface Ranking { name: string; total_points: number; contacted: number; converted: number; deals_closed: number; total_deal_value: number }
-interface LogEntry { id: number; staff_name: string; action_type: string; points: number; note: string; created_at: string }
+interface Ranking {
+    name: string;
+    total_points: number;
+    pending_points: number;
+    contacted: number;
+    reply_received: number;
+    converted: number;
+    deals_closed: number;
+    total_deal_value: number
+}
+interface LogEntry {
+    id: number;
+    staff_name: string;
+    action_type: string;
+    points: number;
+    deal_value: number;
+    note: string;
+    suspicious: number;
+    status: string;
+    created_at: string
+}
 
-const STAFF_EMOJI: Record<string, string> = { "Đức Anh's Agent": '🤖', Trang: '💗', 'Lê Huyền': '🧡', 'Ngọc Huyền': '💚', Hạnh: '💛', Min: '💜', Moon: '🩵' }
+const STAFF_EMOJI: Record<string, string> = {
+    "Đức Anh's Agent": '🤖', Trang: '💗', 'Lê Huyền': '🧡',
+    'Ngọc Huyền': '💚', Hạnh: '💛', Min: '💜', Moon: '🩵', Thư: '🌸'
+}
 const MEDALS = ['🥇', '🥈', '🥉']
+
+const ACTION_ICONS: Record<string, string> = {
+    opener_copied: '📋 +1 Copy opener',
+    contacted: '📞 +3 Contacted',
+    reply_received: '↩️ +8 Customer replied',
+    interested: '🔥 +10 Interested',
+    deal_closed: '🏆 Deal closed',
+}
 
 function relativeTime(ts: string) {
     const ms = Date.now() - new Date(ts).getTime()
@@ -19,13 +49,16 @@ function relativeTime(ts: string) {
 export default function LeaderboardPage() {
     const [rankings, setRankings] = useState<Ranking[]>([])
     const [log, setLog] = useState<LogEntry[]>([])
+    const [flagged, setFlagged] = useState<LogEntry[]>([])
     const [loading, setLoading] = useState(true)
+    const [isAdmin, setIsAdmin] = useState(false)
 
     useEffect(() => {
-        apiGet<{ data: { rankings: Ranking[]; log: LogEntry[] } }>('/api/leaderboard')
+        apiGet<{ data: { rankings: Ranking[]; log: LogEntry[]; flagged: LogEntry[] } }>('/api/leaderboard')
             .then((res) => {
                 setRankings(res.data?.rankings || [])
                 setLog(res.data?.log || [])
+                setFlagged(res.data?.flagged || [])
             })
             .catch(() => { })
             .finally(() => setLoading(false))
@@ -63,17 +96,18 @@ export default function LeaderboardPage() {
                 <div className="card-title">📊 Full Rankings</div>
                 <div style={{ overflow: 'auto' }}>
                     <table className="group-table">
-                        <thead><tr><th>#</th><th>Staff</th><th>Points</th><th>Contacted</th><th>Converted</th><th>Deals</th><th>Revenue</th></tr></thead>
+                        <thead><tr><th>#</th><th>Staff</th><th>Points</th><th>Pending</th><th>Contacted</th><th>Replied</th><th>Deals</th><th>Revenue</th></tr></thead>
                         <tbody>
                             {sorted.map((r, i) => (
                                 <tr key={r.name}>
                                     <td style={{ fontWeight: 700 }}>{i < 3 ? MEDALS[i] : `#${i + 1}`}</td>
                                     <td><span style={{ marginRight: 4 }}>{STAFF_EMOJI[r.name] || '🤖'}</span>{r.name}</td>
                                     <td style={{ fontWeight: 700, color: 'var(--accent)' }}>{r.total_points}</td>
+                                    <td style={{ color: '#f59e0b', fontSize: '0.8rem' }}>{r.pending_points > 0 ? `⏳ +${r.pending_points}` : '—'}</td>
                                     <td>{r.contacted || 0}</td>
-                                    <td>{r.converted || 0}</td>
+                                    <td style={{ color: '#10b981' }}>{r.reply_received || 0} ↩️</td>
                                     <td>{r.deals_closed || 0}</td>
-                                    <td style={{ color: 'var(--success)', fontWeight: 600 }}>${r.total_deal_value || 0}</td>
+                                    <td style={{ color: 'var(--success)', fontWeight: 600 }}>${r.total_deal_value?.toLocaleString() || 0}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -82,7 +116,7 @@ export default function LeaderboardPage() {
             </div>
 
             {/* Activity feed */}
-            <div className="card">
+            <div className="card" style={{ marginBottom: 'var(--space-xl)' }}>
                 <div className="card-title">🔔 Recent Activity</div>
                 {log.length === 0 ? (
                     <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>No activity yet</div>
@@ -92,15 +126,64 @@ export default function LeaderboardPage() {
                             <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 'var(--text-sm)' }}>
                                 <span>{STAFF_EMOJI[e.staff_name] || '🤖'}</span>
                                 <span style={{ fontWeight: 600 }}>{e.staff_name}</span>
-                                <span style={{ color: 'var(--text-muted)' }}>{e.action_type}</span>
+                                <span style={{ color: 'var(--text-muted)' }}>{ACTION_ICONS[e.action_type] || e.action_type}</span>
                                 <span style={{ fontWeight: 700, color: 'var(--success)' }}>+{e.points}</span>
                                 {e.note && <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>— {e.note}</span>}
+                                {e.suspicious ? <span style={{ background: '#ef4444', color: 'white', fontSize: '0.65rem', padding: '1px 4px', borderRadius: 3 }}>⚠️ FLAGGED</span> : null}
+                                {e.status === 'pending' ? <span style={{ background: '#f59e0b', color: 'white', fontSize: '0.65rem', padding: '1px 4px', borderRadius: 3 }}>⏳ PENDING</span> : null}
                                 <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>{relativeTime(e.created_at)}</span>
                             </div>
                         ))}
                     </div>
                 )}
             </div>
+
+            {/* Admin toggle */}
+            <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <label style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                    <input type="checkbox" checked={isAdmin} onChange={e => setIsAdmin(e.target.checked)} style={{ marginRight: '0.5rem' }} />
+                    Chế độ Admin (Giám sát)
+                </label>
+            </div>
+
+            {isAdmin && (
+                <div className="card" style={{ marginTop: '1rem', border: '1px solid #ef4444' }}>
+                    <div className="card-title" style={{ color: '#ef4444' }}>⚠️ Admin Monitor — Hoạt động đáng ngờ</div>
+                    {flagged.length === 0 ? (
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>✅ Không có hoạt động đáng ngờ</div>
+                    ) : (
+                        flagged.map(f => (
+                            <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: '0.875rem' }}>
+                                <span>⚠️</span>
+                                <span style={{ fontWeight: 600 }}>{f.staff_name}</span>
+                                <span style={{ color: 'var(--text-muted)' }}>{f.action_type}</span>
+                                <span style={{ color: '#f59e0b' }}>+{f.points} pts</span>
+                                {f.deal_value > 0 && <span style={{ color: '#10b981' }}>${f.deal_value}</span>}
+                                {f.note && <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>— {f.note}</span>}
+                                <span style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+                                    <button
+                                        className="btn btn-sm"
+                                        style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: '0.75rem' }}
+                                        onClick={async () => {
+                                            await apiPost(`/api/leaderboard/approve/${f.id}`, {});
+                                            setFlagged(prev => prev.filter(x => x.id !== f.id));
+                                        }}
+                                    >✅ Duyệt</button>
+                                    <button
+                                        className="btn btn-sm"
+                                        style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: '0.75rem' }}
+                                        onClick={async () => {
+                                            const reason = prompt('Lý do từ chối:') || 'Admin rejected';
+                                            await apiPost(`/api/leaderboard/reject/${f.id}`, { reason });
+                                            setFlagged(prev => prev.filter(x => x.id !== f.id));
+                                        }}
+                                    >❌ Từ chối</button>
+                                </span>
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
         </div>
     )
 }

@@ -4,9 +4,19 @@ import type { SISSignal } from '../types/sis'
 import ClosingRoom from '../components/lead/ClosingRoom'
 import '../premium-row.css'
 
+const SERVICE_FILTERS = [
+    { id: 'all', label: 'Tất cả', icon: '📋' },
+    { id: 'warehouse', label: 'Warehouse', icon: '🏭', staff: 'Hạnh' },
+    { id: 'express', label: 'Express', icon: '⚡', staff: 'Lê Huyền' },
+    { id: 'pod', label: 'POD', icon: '🖨️', staff: 'Moon' },
+    { id: 'quote_needed', label: 'Báo giá', icon: '💰', staff: 'Thư' },
+    { id: 'unknown', label: 'Chưa xác định', icon: '❓' },
+]
+
 export default function SISDashboard() {
     const { lanes, summary, activeTab, setActiveTab, loadLanes, loadSummary } = useSISStore()
     const [closingSignal, setClosingSignal] = useState<SISSignal | null>(null)
+    const [serviceFilter, setServiceFilter] = useState<string>('all')
 
     useEffect(() => {
         loadLanes()
@@ -16,6 +26,9 @@ export default function SISDashboard() {
     }, [])
 
     const activeSignals = lanes[activeTab] || []
+    const filteredSignals = serviceFilter === 'all'
+        ? activeSignals
+        : activeSignals.filter(s => (s as any).thg_service_needed === serviceFilter)
 
     return (
         <div className="sis-dashboard">
@@ -55,15 +68,38 @@ export default function SISDashboard() {
                 </div>
             </header>
 
+            <div style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem 1rem', flexWrap: 'wrap', borderBottom: '1px solid var(--border)' }}>
+                {SERVICE_FILTERS.map(f => (
+                    <button
+                        key={f.id}
+                        onClick={() => setServiceFilter(f.id)}
+                        style={{
+                            padding: '4px 12px',
+                            borderRadius: '20px',
+                            border: '1px solid var(--border)',
+                            background: serviceFilter === f.id ? 'var(--primary-color)' : 'var(--bg-elevated)',
+                            color: serviceFilter === f.id ? 'white' : 'var(--text)',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                        }}
+                    >
+                        {f.icon} {f.label} {'staff' in f ? <span style={{opacity:0.7, fontSize:'0.7rem'}}>({f.staff})</span> : ''}
+                    </button>
+                ))}
+            </div>
+
             <main className={`sis-content-view tab-${activeTab}-view`}>
                 <div className="signal-list-container">
-                    {activeSignals.length === 0 ? (
+                    {filteredSignals.length === 0 ? (
                         <div className="empty-state">
                             <span className="empty-state-icon">🔎</span>
                             <div className="empty-state-text">Chưa có tín hiệu trong danh mục này</div>
                         </div>
                     ) : (
-                        activeSignals.map(s => <SignalRow key={s.id} signal={s} onOpenClosingRoom={() => setClosingSignal(s)} />)
+                        filteredSignals.map(s => <SignalRow key={s.id} signal={s} onOpenClosingRoom={() => setClosingSignal(s)} />)
                     )}
                 </div>
             </main>
@@ -101,13 +137,18 @@ function SignalRow({ signal, onOpenClosingRoom }: { signal: SISSignal, onOpenClo
             {/* Left: Author */}
             <div className="row-author">
                 <span className="author-name" title={signal.author_name}>{signal.author_name}</span>
-                <div style={{ display: 'flex', gap: '4px' }}>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                     <span className="platform-badge">{signal.platform}</span>
                     {signal.language === 'foreign' ? (
                         <span className="platform-badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: 'var(--info)' }}>FOREIGN</span>
                     ) : signal.language === 'vietnamese' || signal.language === 'vi' ? (
                         <span className="platform-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success)' }}>VN</span>
                     ) : null}
+                    {signal.thg_service_needed && signal.thg_service_needed !== 'unknown' && (
+                        <span className="platform-badge" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#8b5cf6', fontSize: '0.7rem' }}>
+                            {signal.thg_service_needed === 'warehouse' ? '🏭' : signal.thg_service_needed === 'express' ? '⚡' : signal.thg_service_needed === 'pod' ? '🖨️' : '💰'} {signal.thg_service_needed}
+                        </span>
+                    )}
                 </div>
             </div>
 

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"require\\(''''./ai/prompts/leadQualifier.js''''\\); console.log\\(''''leadQualifier OK''''\\)\")",
+      "Bash(node -e \"require\\(''''./ai/agents/promptBuilder.js''''\\); console.log\\(''''promptBuilder OK''''\\)\")",
+      "Bash(node -e \"require\\(''''./backend/core/data_store/database.js''''\\); console.log\\(''''database OK''''\\)\")",
+      "Bash(node -e \"require\\(''''./backend/routes/sis.routes.js''''\\); console.log\\(''''sis.routes OK''''\\)\")",
+      "Bash(node:*)",
+      "Bash(npx tsc:*)",
+      "Bash(ls:*)",
+      "Bash(node -e \":*)"
+    ]
+  }
+}

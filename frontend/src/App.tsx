@@ -11,7 +11,8 @@ import StrategiesPage from './pages/StrategiesPage'
 import LeaderboardPage from './pages/LeaderboardPage'
 import SystemPage from './pages/SystemPage'
 import SISDashboard from './pages/SISDashboard'
-import PlaceholderPage from './pages/PlaceholderPage'
+import SettingsPage from './pages/SettingsPage'
+import DiscoveryPage from './pages/DiscoveryPage'
 import { useAuthStore } from './store/authStore'
 import { useEffect } from 'react'
 
@@ -48,7 +49,8 @@ function App() {
           <Route path="/strategies" element={<StrategiesPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/system" element={<SystemPage />} />
-          <Route path="/settings" element={<PlaceholderPage title="Settings" icon="⚙️" />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/discovery" element={<DiscoveryPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
