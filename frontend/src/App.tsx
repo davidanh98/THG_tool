@@ -13,6 +13,7 @@ import SystemPage from './pages/SystemPage'
 import SISDashboard from './pages/SISDashboard'
 import SettingsPage from './pages/SettingsPage'
 import DiscoveryPage from './pages/DiscoveryPage'
+import SourcingPage from './pages/SourcingPage'
 import { useAuthStore } from './store/authStore'
 import { useEffect } from 'react'
 
@@ -51,6 +52,7 @@ function App() {
           <Route path="/system" element={<SystemPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/discovery" element={<DiscoveryPage />} />
+          <Route path="/sourcing" element={<SourcingPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
