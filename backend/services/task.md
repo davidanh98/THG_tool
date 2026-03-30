@@ -200,8 +200,8 @@ const App = () => {
             { inlineData: { mimeType: mimeType, data: base64Data } }
           ]
         }],
-        // Bỏ tools google_search vì một số model/region bị lỗi 400 khi kết hợp google_search + hình ảnh + JSON
-        generationConfig: { responseMimeType: "application/json" }
+        tools: [{ google_search: {} }],
+        generationConfig: { temperature: 0.1 }
       };
 
       const response = await fetchWithRetry(apiUrl, {
