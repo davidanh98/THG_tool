@@ -191,14 +191,16 @@ const App = () => {
         }
       `;
 
+      const mimeType = sourcingImage.substring(sourcingImage.indexOf(":") + 1, sourcingImage.indexOf(";"));
+      const base64Data = sourcingImage.split(',')[1];
       const payload = {
         contents: [{
           parts: [
             { text: prompt },
-            { inlineData: { mimeType: "image/png", data: sourcingImage.split(',')[1] } }
+            { inlineData: { mimeType: mimeType, data: base64Data } }
           ]
         }],
-        tools: [{ "google_search": {} }],
+        // Bỏ tools google_search vì một số model/region bị lỗi 400 khi kết hợp google_search + hình ảnh + JSON
         generationConfig: { responseMimeType: "application/json" }
       };
 
