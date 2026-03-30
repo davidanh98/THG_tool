@@ -42,7 +42,10 @@ function getSmartSummary(lead: Lead): string {
 }
 
 
-
+const ensureHttp = (url?: string) => {
+    if (!url) return '';
+    return url.startsWith('http') ? url : `https://${url}`;
+}
 
 export default function LeadRow({ lead, onSelect }: LeadRowProps) {
     const toggleLanguage = useLeadStore((s) => s.toggleLanguage)
@@ -74,7 +77,7 @@ export default function LeadRow({ lead, onSelect }: LeadRowProps) {
 
             <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                 {lead.post_url ? (
-                    <a href={lead.post_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                    <a href={ensureHttp(lead.post_url)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
                         <PlatformIcon platform={lead.platform} isComment={lead.item_type === 'comment'} />
                     </a>
                 ) : (
@@ -96,7 +99,7 @@ export default function LeadRow({ lead, onSelect }: LeadRowProps) {
                     </button>
                     {lead.author_url ? (
                         <a
-                            href={lead.author_url}
+                            href={ensureHttp(lead.author_url)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="truncate"
@@ -171,13 +174,13 @@ export default function LeadRow({ lead, onSelect }: LeadRowProps) {
                         💬
                     </button>
                     {lead.author_url && (
-                        <a href={lead.author_url} target="_blank" rel="noopener noreferrer"
+                        <a href={ensureHttp(lead.author_url)} target="_blank" rel="noopener noreferrer"
                             className="qa-btn qa-btn--fb" title="Open Facebook Profile">
                             👤
                         </a>
                     )}
                     {lead.post_url && (
-                        <a href={lead.post_url} target="_blank" rel="noopener noreferrer"
+                        <a href={ensureHttp(lead.post_url)} target="_blank" rel="noopener noreferrer"
                             className="qa-btn qa-btn--fb" title="Open Facebook Post">
                             🔗
                         </a>

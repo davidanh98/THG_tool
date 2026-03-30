@@ -86,7 +86,7 @@ export default function SISDashboard() {
                             gap: '4px'
                         }}
                     >
-                        {f.icon} {f.label} {'staff' in f ? <span style={{opacity:0.7, fontSize:'0.7rem'}}>({f.staff})</span> : ''}
+                        {f.icon} {f.label} {'staff' in f ? <span style={{ opacity: 0.7, fontSize: '0.7rem' }}>({f.staff})</span> : ''}
                     </button>
                 ))}
             </div>
@@ -189,7 +189,7 @@ function SignalRow({ signal, onOpenClosingRoom }: { signal: SISSignal, onOpenClo
             <div className="row-actions">
                 <button onClick={handleDelete} className="action-btn-danger" title="Xóa tín hiệu bị sai">🗑️ Xóa</button>
                 {signal.post_url && (
-                    <a href={signal.post_url} target="_blank" rel="noreferrer" className="action-btn" title="Xem bài post gốc">
+                    <a href={signal.post_url.startsWith('http') ? signal.post_url : `https://${signal.post_url}`} target="_blank" rel="noreferrer" className="action-btn" title="Xem bài post gốc">
                         📄 Post
                     </a>
                 )}
