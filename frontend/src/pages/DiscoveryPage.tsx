@@ -435,7 +435,7 @@ export default function DiscoveryPage() {
 
             {/* Info badges */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
-                {mode === 'facebook' ? [
+                {(mode === 'facebook' ? [
                     { icon: '👥', title: '19 FB Groups', desc: 'Targeting đúng nhóm VN seller + Việt kiều Mỹ' },
                     { icon: '📋', title: 'Script sẵn sàng', desc: 'Inbox + Comment tối ưu cho từng nhóm cụ thể' },
                     { icon: '🚫', title: 'Không checkpoint', desc: 'Staff dùng tay — không automation, không bị khóa acc' },
@@ -443,7 +443,7 @@ export default function DiscoveryPage() {
                     { icon: '🛡️', title: 'Anti-Checkpoint', desc: 'Google public data, không cần FB account' },
                     { icon: '🤖', title: 'Auto Payload', desc: 'DM + Comment + LinkedIn sẵn sàng copy-paste' },
                     { icon: '📊', title: 'AI Score 1-100', desc: 'Ưu tiên leads chất lượng, lọc nhà cung cấp' },
-                ].map(item => (
+                ]).map(item => (
                     <div key={item.title} className="card" style={{ padding: '0.875rem' }}>
                         <div style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>{item.icon}</div>
                         <div style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: '0.2rem' }}>{item.title}</div>
