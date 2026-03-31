@@ -8,7 +8,10 @@
       "Bash(node:*)",
       "Bash(npx tsc:*)",
       "Bash(ls:*)",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "Bash(grep -r \"sourcing\\\\|1688\\\\|supplier\\\\|factory\" D:THGToolAIthg-lead-gen/backend/routes --include=*.js)",
+      "Bash(xargs grep:*)",
+      "Bash(find D:THGToolAIthg-lead-gen -type f -name *sourcing* -o -name *1688* -o -name *supplier*)"
     ]
   }
 }

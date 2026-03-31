@@ -214,11 +214,15 @@ router.delete('/api/sis/signals/:id', (req, res) => {
 // ── POST /api/sis/discovery — AI-powered multi-platform lead discovery ────────
 router.post('/api/sis/discovery', async (req, res) => {
     try {
-        const { query, maxLeads } = req.body;
+        const { query, maxLeads, mode } = req.body;
         if (!query || !query.trim()) {
             return res.status(400).json({ ok: false, error: 'query is required' });
         }
-        const result = await runDiscovery(query.trim(), { maxLeads: Math.min(parseInt(maxLeads) || 5, 10) });
+        const validMode = ['web', 'facebook'].includes(mode) ? mode : 'web';
+        const result = await runDiscovery(query.trim(), {
+            maxLeads: Math.min(parseInt(maxLeads) || 5, 10),
+            mode: validMode
+        });
         res.json({ ok: true, data: result });
     } catch (err) {
         console.error('[Discovery API] Error:', err.message);

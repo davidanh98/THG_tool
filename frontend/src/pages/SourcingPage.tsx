@@ -1,289 +1,501 @@
 import { useState } from 'react';
-import { Camera, ArrowRightLeft, Box, Factory, Hash, Award, Sparkles, ExternalLink, Copy, Scale, ShieldAlert } from 'lucide-react';
+import {
+    Camera, ArrowRightLeft, Box, Factory, Hash, Award, Sparkles,
+    ExternalLink, Copy, Scale, ShieldAlert, CheckCircle2, Search, Layers
+} from 'lucide-react';
+
+interface SourcingResult {
+    product_name: string;
+    verified_match: {
+        offer_id: string;
+        factory_name_cn: string;
+        factory_name_vn: string;
+        direct_url: string;
+        trust_score: number;
+        match_reason: string;
+    };
+    logistics: {
+        weight: string;
+        min_order: string;
+        price_range?: string;
+    };
+    negotiation_script: {
+        cn: string;
+        vn: string;
+    };
+    qc_checklist: string[];
+}
+
+type Step = 'idle' | 'analyzing' | 'searching' | 'done' | 'error';
 
 export default function SourcingPage() {
     const [sourcingImage, setSourcingImage] = useState<string | null>(null);
-    const [sourcingResult, setSourcingResult] = useState<any>(null);
-    const [isSourcing, setIsSourcing] = useState(false);
+    const [sourcingResult, setSourcingResult] = useState<SourcingResult | null>(null);
+    const [step, setStep] = useState<Step>('idle');
+    const [stepLabel, setStepLabel] = useState('');
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [copied, setCopied] = useState<string | null>(null);
 
-    const fetchWithRetry = async (url: string, options: any, maxRetries = 3) => {
-        let lastError;
+    const isSourcing = step === 'analyzing' || step === 'searching';
+
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+    const VISION_MODEL = 'gemini-2.5-flash';
+    const SEARCH_MODEL = 'gemini-2.5-flash';
+
+    const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 3): Promise<Response> => {
+        let lastError: unknown;
         for (let i = 0; i < maxRetries; i++) {
             try {
                 const response = await fetch(url, options);
                 if (response.ok) return response;
-                if (response.status === 401 || response.status === 429 || response.status >= 500) {
-                    const delay = Math.pow(2, i) * 1000;
-                    await new Promise(r => setTimeout(r, delay));
+                if (response.status === 429 || response.status >= 500) {
+                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1500));
                     continue;
                 }
                 return response;
             } catch (err) {
                 lastError = err;
-                const delay = Math.pow(2, i) * 1000;
-                await new Promise(r => setTimeout(r, delay));
+                await new Promise(r => setTimeout(r, Math.pow(2, i) * 1500));
             }
         }
-        throw lastError || new Error("Kết nối API thất bại.");
+        throw lastError || new Error('Kết nối API thất bại sau 3 lần thử.');
     };
 
-    const copyToClipboard = (text: string) => {
-        if (!text || typeof text !== 'string') return;
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-9999px";
-        textArea.style.top = "0";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-    };
-
-    const handleImageUpload = (e: any) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => setSourcingImage(reader.result as string);
-            reader.readAsDataURL(file);
+    const callGemini = async (model: string, payload: object): Promise<string> => {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const response = await fetchWithRetry(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+            const errText = await response.text().catch(() => '');
+            throw new Error(`Gemini API lỗi ${response.status}: ${errText.slice(0, 200)}`);
         }
+        const data = await response.json();
+        const parts = data?.candidates?.[0]?.content?.parts;
+        if (!parts) throw new Error('Gemini không trả về kết quả. Hãy thử lại.');
+        return parts.map((p: any) => p.text || '').join('');
+    };
+
+    const extractJson = (text: string): SourcingResult => {
+        // Thử parse trực tiếp
+        const stripped = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        // Tìm block JSON đầu tiên
+        const match = stripped.match(/\{[\s\S]*\}/);
+        if (!match) throw new Error('AI không trả về JSON hợp lệ. Vui lòng thử ảnh khác.');
+        return JSON.parse(match[0]);
+    };
+
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onloadend = () => setSourcingImage(reader.result as string);
+        reader.readAsDataURL(file);
+    };
+
+    const copyToClipboard = (text: string, key: string) => {
+        if (!text) return;
+        navigator.clipboard.writeText(text).catch(() => {
+            const el = document.createElement('textarea');
+            el.value = text;
+            el.style.position = 'fixed';
+            el.style.left = '-9999px';
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+        });
+        setCopied(key);
+        setTimeout(() => setCopied(null), 2000);
+    };
+
+    /**
+     * Bước 1: Gemini Vision — phân tích ảnh → trích xuất keyword sản phẩm
+     * KHÔNG dùng google_search để tránh conflict với inlineData
+     */
+    const step1_analyzeImage = async (mimeType: string, base64Data: string): Promise<string> => {
+        const prompt = `Phân tích ảnh sản phẩm này và trả về JSON:
+{
+  "product_name_vn": "Tên sản phẩm tiếng Việt ngắn gọn",
+  "product_name_cn": "Tên sản phẩm tiếng Trung ngắn gọn (5-10 chữ Hán)",
+  "search_keywords_cn": "keyword tìm kiếm 1688 bằng tiếng Trung (3-6 từ, phân cách dấu phẩy)",
+  "key_features": "2-3 đặc điểm nhận dạng nổi bật (màu sắc, chất liệu, kiểu dáng)",
+  "category": "danh mục sản phẩm"
+}
+Chỉ trả JSON, không giải thích thêm.`;
+
+        const payload = {
+            contents: [{
+                parts: [
+                    { text: prompt },
+                    { inlineData: { mimeType, data: base64Data } }
+                ]
+            }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 512 }
+        };
+
+        const text = await callGemini(VISION_MODEL, payload);
+        return text;
+    };
+
+    /**
+     * Bước 2: Gemini + google_search — tìm Offer ID chính xác trên 1688
+     * KHÔNG dùng inlineData để tránh conflict với google_search
+     */
+    const step2_searchSupplier = async (productInfo: string): Promise<SourcingResult> => {
+        const prompt = `Bạn là chuyên gia sourcing 1688.com.
+
+Thông tin sản phẩm cần tìm:
+${productInfo}
+
+NHIỆM VỤ:
+1. Dùng Google Search tìm sản phẩm này trên 1688.com với từ khóa tiếng Trung từ thông tin trên.
+2. Tìm đúng trang detail.1688.com/offer/[ID].html của sản phẩm phù hợp nhất.
+3. TRÍCH XUẤT chính xác Offer ID (số nguyên 10-15 chữ số) từ URL thực tế.
+4. Lấy tên công ty xưởng chính xác bằng tiếng Trung.
+
+QUAN TRỌNG:
+- Offer ID PHẢI là số thực trích xuất từ URL tìm thấy, không được tự tạo.
+- Nếu không tìm thấy ID chính xác, để offer_id = "" và trust_score = 0.
+- direct_url PHẢI có dạng: https://detail.1688.com/offer/[OFFER_ID].html
+
+Trả về JSON duy nhất:
+{
+  "product_name": "Tên sản phẩm đầy đủ",
+  "verified_match": {
+    "offer_id": "Số ID 10-15 chữ số hoặc rỗng",
+    "factory_name_cn": "Tên công ty tiếng Trung",
+    "factory_name_vn": "Dịch nghĩa tên công ty",
+    "direct_url": "https://detail.1688.com/offer/[ID].html",
+    "trust_score": 85,
+    "match_reason": "Giải thích ngắn vì sao đây là kết quả phù hợp"
+  },
+  "logistics": {
+    "weight": "0.xx kg",
+    "min_order": "x pcs",
+    "price_range": "¥xx - ¥xx"
+  },
+  "negotiation_script": {
+    "cn": "您好，我想询问这款产品的价格和最小起订量，能否给我优惠价？",
+    "vn": "Xin chào, tôi muốn hỏi giá và số lượng đặt hàng tối thiểu, có thể cho tôi giá tốt không?"
+  },
+  "qc_checklist": ["Kiểm tra 1", "Kiểm tra 2", "Kiểm tra 3"]
+}`;
+
+        const payload = {
+            contents: [{ parts: [{ text: prompt }] }],
+            tools: [{ google_search: {} }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
+        };
+
+        const text = await callGemini(SEARCH_MODEL, payload);
+        const result = extractJson(text);
+
+        // Làm sạch và chuẩn hóa Offer ID
+        if (result.verified_match?.offer_id) {
+            const idMatch = String(result.verified_match.offer_id).match(/\d{8,15}/);
+            if (idMatch) {
+                result.verified_match.offer_id = idMatch[0];
+                result.verified_match.direct_url = `https://detail.1688.com/offer/${idMatch[0]}.html`;
+            } else {
+                result.verified_match.offer_id = '';
+                result.verified_match.trust_score = 0;
+            }
+        }
+
+        return result;
     };
 
     const processSourcing = async () => {
-        if (!sourcingImage) return;
-        setIsSourcing(true);
+        if (!sourcingImage || !apiKey) {
+            setErrorMessage(apiKey ? 'Chưa chọn ảnh.' : 'Thiếu VITE_GEMINI_API_KEY trong .env');
+            return;
+        }
+
+        setIsSourcing_state();
         setSourcingResult(null);
         setErrorMessage(null);
+
         try {
-            const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
-
-            const prompt = `
-        Đóng vai Chuyên gia Sourcing tại Trung Quốc. 
-        MỤC TIÊU: Tìm chính xác mã số Offer ID (10-12 chữ số) và Tên Nhà Xưởng của sản phẩm trong ảnh.
-        
-        NHIỆM VỤ CHI TIẾT:
-        1. Sử dụng Google Search Grounding để quét các trang "detail.1688.com" liên quan đến sản phẩm này.
-        2. TRÍCH XUẤT chính xác mã Offer ID từ URL (ví dụ offer/824317120300.html thì ID là 824317120300).
-        3. Tìm chính xác Tên Xưởng bằng Tiếng Trung (ví dụ: 义乌市某某电子商务有限公司). 
-        
-        TRẢ VỀ JSON:
-        {
-          "product_name": "Tên sản phẩm",
-          "verified_match": { 
-            "offer_id": "Mã số ID", 
-            "factory_name_cn": "Tên xưởng TIẾNG TRUNG", 
-            "factory_name_vn": "Dịch tên xưởng",
-            "direct_url": "URL Dạng detail.1688.com/offer/[ID].html", 
-            "trust_score": 95,
-            "match_reason": "Lý do"
-          },
-          "logistics": { "weight": "0.xx kg", "min_order": "x pcs" },
-          "negotiation_script": { "cn": "text", "vn": "text" },
-          "qc_checklist": ["point"]
-        }
-      `;
-
-            const mimeType = sourcingImage.substring(sourcingImage.indexOf(":") + 1, sourcingImage.indexOf(";"));
+            const mimeType = sourcingImage.substring(sourcingImage.indexOf(':') + 1, sourcingImage.indexOf(';'));
             const base64Data = sourcingImage.split(',')[1];
 
-            const payload = {
-                contents: [{
-                    parts: [
-                        { text: prompt },
-                        { inlineData: { mimeType: mimeType, data: base64Data } }
-                    ]
-                }],
-                tools: [{ google_search: {} }],
-                generationConfig: { temperature: 0.1 }
-            };
+            // Bước 1: Phân tích ảnh
+            setStep('analyzing');
+            setStepLabel('Bước 1/2: AI đang nhận diện sản phẩm...');
+            const productInfoText = await step1_analyzeImage(mimeType, base64Data);
 
-            const response = await fetchWithRetry(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+            // Bước 2: Tìm trên 1688
+            setStep('searching');
+            setStepLabel('Bước 2/2: Tìm kiếm xưởng trên 1688...');
+            const result = await step2_searchSupplier(productInfoText);
 
-            if (!response.ok) throw new Error(`API Error ${response.status}`);
-
-            const data = await response.json();
-            if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-                let text = data.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim();
-                const result = JSON.parse(text);
-
-                // Chuẩn hóa link để tránh redirect 404
-                if (result.verified_match && result.verified_match.offer_id) {
-                    const matchID = String(result.verified_match.offer_id).match(/\d+/);
-                    const cleanID = matchID ? matchID[0] : result.verified_match.offer_id;
-                    result.verified_match.offer_id = cleanID;
-                    result.verified_match.direct_url = `https://detail.1688.com/offer/${cleanID}.html`;
-                }
-
-                setSourcingResult(result);
-            }
+            setSourcingResult(result);
+            setStep('done');
         } catch (error: any) {
-            console.error("Mapping Error:", error);
-            setErrorMessage(`Lỗi xác thực: ${error.message}`);
-        } finally {
-            setIsSourcing(false);
+            console.error('Sourcing Error:', error);
+            setErrorMessage(error.message || 'Lỗi không xác định. Vui lòng thử lại.');
+            setStep('error');
         }
     };
 
+    // Helper để set isSourcing state
+    const setIsSourcing_state = () => setStep('analyzing');
+
+    const reset = () => {
+        setSourcingImage(null);
+        setSourcingResult(null);
+        setStep('idle');
+        setErrorMessage(null);
+    };
+
     return (
-        <div style={{ padding: '0 0.5rem', maxWidth: 920 }}>
+        <div style={{ padding: '0 0.5rem', maxWidth: 960 }}>
             <div className="page-header" style={{ marginBottom: '1.5rem' }}>
                 <h2 className="page-title">📸 AI Visual Sourcing</h2>
                 <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                    Định danh xưởng sản xuất 1688 tự động bằng công nghệ Image Grounding Flash 2.5. Trích xuất chính xác tên công ty Trung Quốc và URL đặt hàng trực tiếp.
+                    Nhận diện sản phẩm từ ảnh → Tìm xưởng gốc 1688 bằng 2 bước AI chính xác.
                 </p>
             </div>
 
-            <div className="space-y-6 animate-in fade-in duration-500">
-                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1.5rem', padding: '2rem', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1.5rem', padding: '2rem', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
 
-                    <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
-                        {/* Upload UI */}
-                        <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={{
-                                border: '2px dashed var(--border)', borderRadius: '1.5rem', padding: '1rem', aspectRatio: '1/1',
-                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative',
-                                overflow: 'hidden', background: 'var(--bg-elevated)', transition: 'all 0.2s', cursor: 'pointer'
-                            }}>
-                                {sourcingImage ? (
-                                    <img src={sourcingImage} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', borderRadius: '1rem' }} alt="Sourcing" />
-                                ) : (
-                                    <div style={{ textAlign: 'center', padding: '1.5rem' }}>
-                                        <Camera size={48} style={{ color: 'var(--text-muted)', margin: '0 auto 1rem' }} />
-                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Tải ảnh sản phẩm</p>
-                                    </div>
-                                )}
-                                <input type="file" onChange={handleImageUpload} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} accept="image/*" />
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <button
-                                    onClick={processSourcing}
-                                    disabled={!sourcingImage || isSourcing}
-                                    className="btn btn-primary"
-                                    style={{ width: '100%', padding: '1rem', fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', borderRadius: '1rem' }}
-                                >
-                                    {isSourcing ? <div className="spinner" style={{ width: 18, height: 18, marginRight: 8 }}></div> : <ArrowRightLeft size={18} style={{ marginRight: 8 }} />}
-                                    {isSourcing ? 'AI đang truy xuất ID...' : 'Định danh xưởng gốc'}
-                                </button>
-                                {sourcingImage && (
-                                    <button onClick={() => { setSourcingImage(null); setSourcingResult(null); }} style={{ width: '100%', color: 'var(--text-muted)', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', padding: '0.5rem', background: 'none', border: 'none', cursor: 'pointer' }}>Hủy mẫu ảnh</button>
-                                )}
-                            </div>
-
-                            {errorMessage && (
-                                <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '1rem', borderRadius: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#ef4444' }}>
-                                    <ShieldAlert size={18} style={{ flexShrink: 0 }} />
-                                    <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>{String(errorMessage)}</p>
-                                    <button onClick={() => setErrorMessage(null)} style={{ marginLeft: 'auto', fontSize: '0.75rem', textDecoration: 'underline', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>Ẩn</button>
+                    {/* Cột trái: Upload */}
+                    <div style={{ flex: '1 1 280px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {/* Image Drop Zone */}
+                        <div style={{
+                            border: '2px dashed var(--border)', borderRadius: '1.5rem', padding: '1rem',
+                            aspectRatio: '1/1', display: 'flex', flexDirection: 'column',
+                            alignItems: 'center', justifyContent: 'center', position: 'relative',
+                            overflow: 'hidden', background: 'var(--bg-elevated)',
+                            transition: 'border-color 0.2s', cursor: 'pointer',
+                            ...(sourcingImage ? {} : { ':hover': { borderColor: 'var(--accent)' } })
+                        }}>
+                            {sourcingImage ? (
+                                <img src={sourcingImage} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', borderRadius: '1rem' }} alt="Product" />
+                            ) : (
+                                <div style={{ textAlign: 'center', padding: '1.5rem' }}>
+                                    <Camera size={48} style={{ color: 'var(--text-muted)', margin: '0 auto 1rem' }} />
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Tải ảnh sản phẩm</p>
+                                    <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', opacity: 0.6, marginTop: '0.25rem' }}>JPG, PNG, WEBP</p>
                                 </div>
+                            )}
+                            <input type="file" onChange={handleImageUpload} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} accept="image/*" />
+                        </div>
+
+                        {/* Progress indicator */}
+                        {isSourcing && (
+                            <div style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '1rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <div className="spinner" style={{ width: 16, height: 16, flexShrink: 0 }}></div>
+                                <div>
+                                    <p style={{ fontSize: '0.7rem', fontWeight: 800, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>{stepLabel}</p>
+                                    <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
+                                        <div style={{ height: 3, flex: 1, borderRadius: 99, background: step === 'analyzing' || step === 'searching' ? '#818cf8' : 'var(--border)', transition: 'background 0.4s' }}></div>
+                                        <div style={{ height: 3, flex: 1, borderRadius: 99, background: step === 'searching' ? '#818cf8' : 'var(--border)', transition: 'background 0.4s' }}></div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Action buttons */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <button
+                                onClick={processSourcing}
+                                disabled={!sourcingImage || isSourcing}
+                                className="btn btn-primary"
+                                style={{ width: '100%', padding: '1rem', fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                            >
+                                {isSourcing
+                                    ? <><div className="spinner" style={{ width: 16, height: 16 }}></div> Đang xử lý...</>
+                                    : <><ArrowRightLeft size={16} /> Định danh xưởng gốc</>
+                                }
+                            </button>
+                            {sourcingImage && (
+                                <button onClick={reset} style={{ width: '100%', color: 'var(--text-muted)', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', padding: '0.5rem', background: 'none', border: 'none', cursor: 'pointer' }}>
+                                    Hủy & làm mới
+                                </button>
                             )}
                         </div>
 
-                        {/* RESULTS */}
-                        <div style={{ flex: '2 1 400px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            {!sourcingResult ? (
-                                <div style={{ height: '100%', minHeight: '400px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', border: '1px dashed var(--border)', borderRadius: '1.5rem', background: 'rgba(0,0,0,0.2)', padding: '2.5rem' }}>
-                                    <Box size={56} style={{ marginBottom: '1.5rem', opacity: 0.2 }} />
-                                    <div style={{ textAlign: 'center' }}>
-                                        <p style={{ fontSize: '0.875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.5 }}>Hệ thống sẵn sàng trích xuất ID sản phẩm</p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                                    {/* Master Source Display */}
-                                    <div style={{ background: 'linear-gradient(to bottom right, var(--bg-elevated), var(--bg-primary))', border: '1px solid rgba(99, 102, 241, 0.3)', padding: '2rem', borderRadius: '2.5rem', position: 'relative', overflow: 'hidden' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                                            <div style={{ flex: 1, minWidth: 'min-content' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-                                                    <span style={{ background: '#10b981', color: 'white', fontSize: '0.6rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>Verified Detail Match</span>
-                                                    <span style={{ color: '#818cf8', fontFamily: 'monospace', fontSize: '0.65rem', fontWeight: 700, background: 'rgba(99, 102, 241, 0.1)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(99, 102, 241, 0.2)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <Hash size={10} /> ID: {String(sourcingResult?.verified_match?.offer_id || 'N/A')}
-                                                    </span>
-                                                </div>
-                                                <h3 style={{ fontSize: '1.875rem', fontWeight: 900, color: 'white', display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '0.5rem 0', lineHeight: 1.2 }}>
-                                                    <Factory style={{ color: '#818cf8', flexShrink: 0 }} size={28} /> {String(sourcingResult?.verified_match?.factory_name_cn || 'Verified Factory')}
-                                                </h3>
-                                                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontStyle: 'italic', lineHeight: 1.4 }}>{String(sourcingResult?.verified_match?.factory_name_vn || '')}</p>
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#34d399', background: 'rgba(52, 211, 153, 0.1)', padding: '0.5rem 1rem', borderRadius: '1rem', border: '1px solid rgba(52, 211, 153, 0.2)', fontSize: '0.75rem', fontWeight: 900 }}>
-                                                    <Award size={18} /> {Number(sourcingResult?.verified_match?.trust_score || 0)}% ACCURATE
-                                                </div>
-                                            </div>
-                                        </div>
+                        {/* Error box */}
+                        {errorMessage && (
+                            <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', padding: '1rem', borderRadius: '1rem', display: 'flex', alignItems: 'flex-start', gap: '0.75rem', color: '#ef4444' }}>
+                                <ShieldAlert size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+                                <p style={{ fontSize: '0.8rem', fontWeight: 500, margin: 0, lineHeight: 1.5 }}>{errorMessage}</p>
+                                <button onClick={() => setErrorMessage(null)} style={{ marginLeft: 'auto', fontSize: '0.7rem', textDecoration: 'underline', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', flexShrink: 0 }}>Ẩn</button>
+                            </div>
+                        )}
 
-                                        <div style={{ background: 'rgba(0,0,0,0.3)', padding: '1.25rem', borderRadius: '1rem', border: '1px solid var(--border)', marginBottom: '2rem' }}>
-                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: 1.6, display: 'flex', alignItems: 'flex-start', gap: '0.75rem', margin: 0 }}>
-                                                <Sparkles size={16} style={{ color: '#818cf8', marginTop: '2px', flexShrink: 0 }} />
-                                                {String(sourcingResult?.verified_match?.match_reason || 'Link chính xác dựa trên ID sản phẩm thực tế.')}
+                        {/* How it works */}
+                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <p style={{ fontSize: '0.6rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>Cách hoạt động</p>
+                            {[
+                                { icon: Camera, text: 'AI nhận diện sản phẩm từ ảnh' },
+                                { icon: Search, text: 'Search 1688 lấy Offer ID thực' },
+                                { icon: Factory, text: 'Trả về xưởng + link đặt hàng' },
+                            ].map(({ icon: Icon, text }, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <Icon size={10} style={{ color: '#818cf8' }} />
+                                    </div>
+                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0 }}>{text}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Cột phải: Results */}
+                    <div style={{ flex: '2 1 400px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        {!sourcingResult ? (
+                            <div style={{ height: '100%', minHeight: 420, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', border: '1px dashed var(--border)', borderRadius: '1.5rem', background: 'rgba(0,0,0,0.15)', padding: '2.5rem' }}>
+                                <Box size={48} style={{ marginBottom: '1.25rem', opacity: 0.15 }} />
+                                <p style={{ fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.4, textAlign: 'center' }}>
+                                    Tải ảnh sản phẩm để tìm xưởng gốc
+                                </p>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.3, marginTop: '0.5rem', textAlign: 'center' }}>
+                                    AI sẽ tự động tìm Offer ID và tên nhà xưởng trên 1688.com
+                                </p>
+                            </div>
+                        ) : (
+                            <>
+                                {/* ─── Card xưởng chính ─── */}
+                                <div style={{ background: 'linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-primary) 100%)', border: '1px solid rgba(99,102,241,0.3)', padding: '1.75rem', borderRadius: '2rem', position: 'relative', overflow: 'hidden' }}>
+                                    {/* Header */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                                                <span style={{ background: '#10b981', color: 'white', fontSize: '0.6rem', fontWeight: 900, padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Verified Match</span>
+                                                {sourcingResult.verified_match?.offer_id ? (
+                                                    <span style={{ color: '#818cf8', fontFamily: 'monospace', fontSize: '0.65rem', fontWeight: 700, background: 'rgba(99,102,241,0.1)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <Hash size={10} /> {sourcingResult.verified_match.offer_id}
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ color: '#f59e0b', fontSize: '0.6rem', fontWeight: 700, background: 'rgba(245,158,11,0.1)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(245,158,11,0.2)' }}>
+                                                        ID chưa xác minh
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <h3 style={{ fontSize: '1.5rem', fontWeight: 900, color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.25rem 0', lineHeight: 1.2, flexWrap: 'wrap' }}>
+                                                <Factory style={{ color: '#818cf8', flexShrink: 0 }} size={24} />
+                                                <span style={{ wordBreak: 'break-all' }}>{sourcingResult.verified_match?.factory_name_cn || 'Chưa xác định'}</span>
+                                            </h3>
+                                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, fontStyle: 'italic', margin: '0.25rem 0 0', lineHeight: 1.4 }}>
+                                                {sourcingResult.verified_match?.factory_name_vn}
+                                            </p>
+                                            {sourcingResult.product_name && (
+                                                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0.5rem 0 0' }}>
+                                                    Sản phẩm: <strong>{sourcingResult.product_name}</strong>
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: (sourcingResult.verified_match?.trust_score || 0) >= 70 ? '#34d399' : '#f59e0b', background: (sourcingResult.verified_match?.trust_score || 0) >= 70 ? 'rgba(52,211,153,0.08)' : 'rgba(245,158,11,0.08)', padding: '0.5rem 1rem', borderRadius: '1rem', border: `1px solid ${(sourcingResult.verified_match?.trust_score || 0) >= 70 ? 'rgba(52,211,153,0.2)' : 'rgba(245,158,11,0.2)'}`, fontSize: '0.75rem', fontWeight: 900, whiteSpace: 'nowrap' }}>
+                                            <Award size={16} /> {sourcingResult.verified_match?.trust_score || 0}%
+                                        </div>
+                                    </div>
+
+                                    {/* Match reason */}
+                                    {sourcingResult.verified_match?.match_reason && (
+                                        <div style={{ background: 'rgba(0,0,0,0.25)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--border)', marginBottom: '1.25rem' }}>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: 1.6, display: 'flex', alignItems: 'flex-start', gap: '0.5rem', margin: 0 }}>
+                                                <Sparkles size={14} style={{ color: '#818cf8', marginTop: 2, flexShrink: 0 }} />
+                                                {sourcingResult.verified_match.match_reason}
                                             </p>
                                         </div>
+                                    )}
 
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                                    {/* CTA buttons */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+                                        {sourcingResult.verified_match?.offer_id ? (
                                             <a
-                                                href={String(sourcingResult?.verified_match?.direct_url || '#')}
+                                                href={sourcingResult.verified_match.direct_url}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="btn btn-primary"
-                                                style={{ padding: '1.25rem', borderRadius: '1.5rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', border: '2px solid white', textDecoration: 'none' }}
+                                                style={{ padding: '1rem', borderRadius: '1.25rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', textDecoration: 'none' }}
                                             >
-                                                MỞ TRANG ĐẶT HÀNG <ExternalLink size={20} />
+                                                Mở trang đặt hàng <ExternalLink size={16} />
                                             </a>
-                                            <button
-                                                onClick={() => copyToClipboard(String(sourcingResult?.verified_match?.factory_name_cn || ''))}
-                                                className="btn btn-secondary"
-                                                style={{ padding: '1.25rem', borderRadius: '1.5rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}
-                                            >
-                                                SAO CHÉP TÊN XƯỞNG <Copy size={20} />
-                                            </button>
+                                        ) : (
+                                            <div style={{ padding: '1rem', borderRadius: '1.25rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                                <Layers size={14} /> Không tìm được link trực tiếp
+                                            </div>
+                                        )}
+                                        <button
+                                            onClick={() => copyToClipboard(sourcingResult.verified_match?.factory_name_cn || '', 'factory')}
+                                            className="btn btn-secondary"
+                                            style={{ padding: '1rem', borderRadius: '1.25rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                                        >
+                                            {copied === 'factory' ? <><CheckCircle2 size={16} style={{ color: '#10b981' }} /> Đã sao chép</> : <><Copy size={16} /> Sao chép tên xưởng</>}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* ─── Logistics + Negotiation ─── */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+                                    {/* Logistics */}
+                                    <div style={{ background: 'var(--bg-elevated)', padding: '1.5rem', borderRadius: '1.5rem', border: '1px solid var(--border)' }}>
+                                        <h4 style={{ margin: '0 0 1rem', fontSize: '0.65rem', fontWeight: 900, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.2em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <Scale size={13} /> Logistics Spec
+                                        </h4>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+                                            {[
+                                                { label: 'Cân nặng', value: sourcingResult.logistics?.weight, color: 'white' },
+                                                { label: 'Giá tham khảo', value: sourcingResult.logistics?.price_range, color: '#fbbf24' },
+                                                { label: 'MOQ tối thiểu', value: sourcingResult.logistics?.min_order, color: '#f59e0b' },
+                                            ].map(({ label, value, color }) => value ? (
+                                                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--border)', paddingBottom: '0.625rem' }}>
+                                                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{label}</span>
+                                                    <span style={{ fontSize: '1rem', fontWeight: 900, color }}>{value}</span>
+                                                </div>
+                                            ) : null)}
                                         </div>
                                     </div>
 
-                                    {/* Logistics & Negotiation */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
-                                        <div style={{ background: 'var(--bg-elevated)', padding: '1.5rem', borderRadius: '1.5rem', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                            <h4 style={{ fontSize: '0.65rem', fontWeight: 900, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0 0 1rem 0' }}><Scale size={14} /> Logistics Spec (Sourcing)</h4>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
-                                                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Cân nặng tịnh</span>
-                                                    <span style={{ fontSize: '1.25rem', fontWeight: 900, color: 'white' }}>{String(sourcingResult?.logistics?.weight || '---')}</span>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
-                                                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Sẵn hàng (Stock)</span>
-                                                    <span style={{ fontSize: '0.875rem', fontWeight: 900, color: '#10b981' }}>YES</span>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                                                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>MOQ / Giao hàng</span>
-                                                    <span style={{ fontSize: '0.875rem', fontWeight: 900, color: '#f59e0b' }}>{String(sourcingResult?.logistics?.min_order || '---')}</span>
-                                                </div>
-                                            </div>
+                                    {/* Negotiation */}
+                                    <div style={{ background: 'var(--bg-elevated)', padding: '1.5rem', borderRadius: '1.5rem', border: '1px solid var(--border)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                            <h4 style={{ margin: 0, fontSize: '0.65rem', fontWeight: 900, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Kịch bản chat chốt đơn</h4>
+                                            <button
+                                                onClick={() => copyToClipboard(sourcingResult.negotiation_script?.cn || '', 'script')}
+                                                style={{ fontSize: '0.6rem', fontWeight: 900, color: copied === 'script' ? '#10b981' : '#818cf8', textTransform: 'uppercase', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                            >
+                                                {copied === 'script' ? <><CheckCircle2 size={11} /> Copied</> : 'Copy CN'}
+                                            </button>
                                         </div>
-
-                                        <div style={{ background: 'var(--bg-elevated)', padding: '1.5rem', borderRadius: '1.5rem', border: '1px solid var(--border)' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                                <h4 style={{ margin: 0, fontSize: '0.65rem', fontWeight: 900, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Kịch bản chat chốt đơn</h4>
-                                                <button onClick={() => copyToClipboard(String(sourcingResult?.negotiation_script?.cn || ''))} style={{ fontSize: '0.6rem', fontWeight: 900, color: '#818cf8', textTransform: 'uppercase', background: 'none', border: 'none', cursor: 'pointer' }}>Copy CN</button>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '0.875rem', borderRadius: '0.875rem', border: '1px solid var(--border)', borderLeft: '3px solid #10b981' }}>
+                                                <p style={{ fontSize: '0.875rem', fontFamily: 'monospace', color: '#d1fae5', fontStyle: 'italic', lineHeight: 1.6, margin: 0, userSelect: 'all' }}>
+                                                    {sourcingResult.negotiation_script?.cn}
+                                                </p>
                                             </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                                <div style={{ background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--border)', borderLeft: '4px solid #10b981' }}>
-                                                    <p style={{ fontSize: '0.875rem', fontFamily: 'monospace', color: '#d1fae5', fontStyle: 'italic', lineHeight: 1.6, margin: 0, userSelect: 'all' }}>
-                                                        {String(sourcingResult?.negotiation_script?.cn || '')}
-                                                    </p>
-                                                </div>
-                                                <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '0 0.5rem', margin: 0 }}>Dịch: {String(sourcingResult?.negotiation_script?.vn || '')}</p>
-                                            </div>
+                                            <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '0 0.25rem', margin: 0, lineHeight: 1.5 }}>
+                                                {sourcingResult.negotiation_script?.vn}
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
-                            )}
-                        </div>
+
+                                {/* ─── QC Checklist ─── */}
+                                {sourcingResult.qc_checklist?.length > 0 && (
+                                    <div style={{ background: 'var(--bg-elevated)', padding: '1.5rem', borderRadius: '1.5rem', border: '1px solid var(--border)' }}>
+                                        <h4 style={{ margin: '0 0 1rem', fontSize: '0.65rem', fontWeight: 900, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.2em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <CheckCircle2 size={13} /> QC Checklist — Kiểm hàng trước khi nhận
+                                        </h4>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.5rem' }}>
+                                            {sourcingResult.qc_checklist.map((item, i) => (
+                                                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                                    <CheckCircle2 size={14} style={{ color: '#10b981', flexShrink: 0, marginTop: 2 }} />
+                                                    <span>{item}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                 </div>
             </div>

@@ -10,10 +10,11 @@ interface AutomationPayload {
     ai_score?: number;
 }
 
-interface DiscoveryLead {
+interface WebLead {
     rawPostId: number;
     name: string;
     source?: string;
+    platform_found?: string;
     lane: string;
     service: string;
     ai_score: number;
@@ -21,13 +22,30 @@ interface DiscoveryLead {
     automation_payload: AutomationPayload | null;
 }
 
+interface FbHintTactic {
+    rawPostId: number;
+    tactic_type: string;
+    target_group: string;
+    group_id: string;
+    group_url: string;
+    content: string;
+    use_case: string;
+    expected_signal: string;
+    priority: 'high' | 'medium' | 'low';
+    opener_script: { inbox?: string; comment?: string };
+    pain_addressed: string;
+}
+
 interface DiscoveryResult {
+    mode: 'web' | 'facebook';
     query: string;
     total_found: number;
     after_filter: number;
     saved: number;
     skipped: number;
-    leads: DiscoveryLead[];
+    leads?: WebLead[];
+    tactics?: FbHintTactic[];
+    discovery_run_id: number;
 }
 
 interface HistoryRow {
@@ -52,25 +70,38 @@ const LANE_COLORS: Record<string, string> = {
     resolved_lead: '#10b981',
     partial_lead: '#f59e0b',
     anonymous_signal: '#6366f1',
+    fb_hint: '#3b82f6',
 }
 const SERVICE_COLORS: Record<string, string> = {
-    warehouse: '#3b82f6',
-    express: '#f59e0b',
-    pod: '#10b981',
-    quote_needed: '#8b5cf6',
-    unknown: '#6b7280',
+    warehouse: '#3b82f6', express: '#f59e0b', pod: '#10b981', quote_needed: '#8b5cf6', unknown: '#6b7280',
 }
 const SERVICE_ICONS: Record<string, string> = {
     warehouse: '🏭', express: '⚡', pod: '🖨️', quote_needed: '💰', unknown: '❓'
 }
+const PLATFORM_ICONS: Record<string, string> = {
+    reddit: '🟠', etsy: '🟠', linkedin: '💼', forum: '💬', facebook_page: '🔵', shopify: '🟢', other: '🌐'
+}
+const PRIORITY_COLORS: Record<string, string> = {
+    high: '#10b981', medium: '#f59e0b', low: '#6b7280'
+}
 
-const QUERY_TEMPLATES = [
+// ─── Query templates per mode ─────────────────────────────────────────────────
+const WEB_QUERY_TEMPLATES = [
     { label: '🏭 Warehouse FBA', query: 'Amazon FBA sellers Vietnam needing US warehouse 3PL prep center' },
     { label: '⚡ Express VN→US', query: 'Vietnam Shopify sellers needing fast express shipping to United States' },
     { label: '🖨️ POD Etsy', query: 'Etsy print on demand sellers Vietnam looking for fulfillment partner US' },
     { label: '📦 Dropship TQ', query: 'Dropship sellers sourcing from China 1688 Taobao shipping to US EU customers' },
     { label: '🛒 TikTok Shop', query: 'TikTok Shop US sellers Vietnam needing express logistics line' },
-    { label: '🌏 Shopify Scale', query: 'Shopify store owners Vietnam scaling to US market needing fulfillment center' },
+    { label: '🌏 Reddit Seller', query: 'r/ecommerce r/dropship Vietnam seller cần fulfillment kho US giá rẻ' },
+]
+
+const FB_QUERY_TEMPLATES = [
+    { label: '📦 Đặt hàng TQ', query: 'Tệp seller đặt hàng Trung Quốc cần ship đi Mỹ trong group VN' },
+    { label: '🖨️ POD Seller VN', query: 'Người bán POD Etsy/Amazon cần tìm xưởng fulfill giá rẻ hơn Printful' },
+    { label: '🇺🇸 Việt kiều Mỹ', query: 'Việt kiều tại Mỹ cần mua hàng VN ship về hoặc cần gửi hàng sang Mỹ' },
+    { label: '⚡ Cần forwarder', query: 'Seller đang tìm forwarder ship hàng VN/TQ đi Mỹ giá tốt' },
+    { label: '🏭 Kho US', query: 'Seller FBA Amazon cần kho lưu trữ và fulfillment tại Mỹ giá tốt' },
+    { label: '😤 Phàn nàn ship', query: 'Khách phàn nàn ship chậm, mất hàng, phí cao, muốn đổi đơn vị vận chuyển' },
 ]
 
 function ScoreBar({ score }: { score: number }) {
@@ -87,26 +118,21 @@ function ScoreBar({ score }: { score: number }) {
 
 function CopyButton({ text, label }: { text: string; label: string }) {
     const [copied, setCopied] = useState(false)
-    const handleCopy = () => {
-        navigator.clipboard.writeText(text).then(() => {
-            setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
-        })
-    }
     return (
         <button
-            onClick={handleCopy}
+            onClick={() => {
+                navigator.clipboard.writeText(text).then(() => {
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 2000)
+                })
+            }}
             style={{
-                padding: '4px 10px',
-                borderRadius: 6,
+                padding: '4px 10px', borderRadius: 6,
                 border: `1px solid ${copied ? '#10b981' : 'var(--border)'}`,
                 background: copied ? 'rgba(16,185,129,0.1)' : 'var(--bg-elevated)',
                 color: copied ? '#10b981' : 'var(--text-muted)',
-                fontSize: '0.72rem',
-                cursor: 'pointer',
-                fontWeight: 600,
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap'
+                fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600,
+                transition: 'all 0.2s', whiteSpace: 'nowrap'
             }}
         >
             {copied ? '✅ Copied!' : `📋 ${label}`}
@@ -114,7 +140,8 @@ function CopyButton({ text, label }: { text: string; label: string }) {
     )
 }
 
-function LeadPayloadCard({ lead }: { lead: DiscoveryLead }) {
+// ─── Web Lead Card ────────────────────────────────────────────────────────────
+function WebLeadCard({ lead }: { lead: WebLead }) {
     const [expanded, setExpanded] = useState(false)
     const p = lead.automation_payload
 
@@ -122,44 +149,42 @@ function LeadPayloadCard({ lead }: { lead: DiscoveryLead }) {
         <div style={{
             border: `1px solid var(--border)`,
             borderLeft: `4px solid ${SERVICE_COLORS[lead.service] || '#6b7280'}`,
-            borderRadius: 10,
-            marginBottom: '0.75rem',
-            overflow: 'hidden',
-            background: 'var(--bg)'
+            borderRadius: 10, marginBottom: '0.75rem', overflow: 'hidden', background: 'var(--bg)'
         }}>
-            {/* Header */}
-            <div
-                style={{ padding: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}
-                onClick={() => setExpanded(!expanded)}
-            >
-                <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>{SERVICE_ICONS[lead.service] || '📋'}</span>
+            <div style={{ padding: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }} onClick={() => setExpanded(!expanded)}>
+                <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>
+                    {PLATFORM_ICONS[lead.platform_found || 'other'] || '🌐'}
+                </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
                         <strong style={{ fontSize: '0.95rem' }}>{lead.name}</strong>
                         {lead.source && (
-                            <a href={ensureHttp(lead.source)} target="_blank" rel="noreferrer" style={{ fontSize: '0.7rem', color: 'var(--primary-color)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+                            <a href={ensureHttp(lead.source)} target="_blank" rel="noreferrer" style={{ fontSize: '0.7rem', color: 'var(--primary-color)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                                 🔗 {lead.source.replace(/^https?:\/\//, '')}
                             </a>
+                        )}
+                        {lead.platform_found && (
+                            <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: 8, background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                                {lead.platform_found}
+                            </span>
                         )}
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>{lead.pain_signal}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                         <ScoreBar score={lead.ai_score} />
                         <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 10, background: `${SERVICE_COLORS[lead.service]}20`, color: SERVICE_COLORS[lead.service], fontWeight: 700 }}>
-                            {lead.service}
+                            {SERVICE_ICONS[lead.service]} {lead.service}
                         </span>
                         <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 10, background: `${LANE_COLORS[lead.lane] || '#6b7280'}20`, color: LANE_COLORS[lead.lane] || '#6b7280', fontWeight: 700 }}>
                             {lead.lane?.replace(/_/g, ' ')}
                         </span>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>#{lead.rawPostId}</span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--primary-color)', fontWeight: 600 }}>
-                            {expanded ? '▲ Ẩn payload' : '▼ Xem payload'}
+                        <span style={{ fontSize: '0.75rem', color: 'var(--primary-color)', fontWeight: 600, marginLeft: 'auto' }}>
+                            {expanded ? '▲ Ẩn' : '▼ Payload'}
                         </span>
                     </div>
                 </div>
             </div>
 
-            {/* Automation Payload */}
             {expanded && p && (
                 <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
                     {p.dm && (
@@ -168,42 +193,121 @@ function LeadPayloadCard({ lead }: { lead: DiscoveryLead }) {
                                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#3b82f6' }}>💬 DM / Inbox</span>
                                 <CopyButton text={p.dm} label="Copy DM" />
                             </div>
-                            <p style={{ fontSize: '0.85rem', lineHeight: 1.6, margin: 0, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{p.dm}</p>
+                            <p style={{ fontSize: '0.85rem', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{p.dm}</p>
                         </div>
                     )}
                     {p.comment && (
                         <div style={{ padding: '0.875rem 1rem', borderBottom: '1px solid var(--border)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981' }}>💬 Comment (Group/Forum)</span>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981' }}>💬 Comment</span>
                                 <CopyButton text={p.comment} label="Copy Comment" />
                             </div>
-                            <p style={{ fontSize: '0.85rem', lineHeight: 1.6, margin: 0, color: 'var(--text)' }}>{p.comment}</p>
+                            <p style={{ fontSize: '0.85rem', lineHeight: 1.6, margin: 0 }}>{p.comment}</p>
                         </div>
                     )}
                     {p.linkedin && (
                         <div style={{ padding: '0.875rem 1rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0ea5e9' }}>🔗 LinkedIn Message (EN)</span>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0ea5e9' }}>🔗 LinkedIn (EN)</span>
                                 <CopyButton text={p.linkedin} label="Copy LinkedIn" />
                             </div>
-                            <p style={{ fontSize: '0.85rem', lineHeight: 1.6, margin: 0, color: 'var(--text)' }}>{p.linkedin}</p>
+                            <p style={{ fontSize: '0.85rem', lineHeight: 1.6, margin: 0 }}>{p.linkedin}</p>
                         </div>
                     )}
-                </div>
-            )}
-
-            {expanded && !p && (
-                <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', background: 'var(--bg-elevated)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    Không có automation payload. Lead này cần được tạo opener thủ công.
                 </div>
             )}
         </div>
     )
 }
 
+// ─── Facebook Hint Card ───────────────────────────────────────────────────────
+function FbHintCard({ tactic }: { tactic: FbHintTactic }) {
+    const [expanded, setExpanded] = useState(false)
+    const priorityColor = PRIORITY_COLORS[tactic.priority] || '#6b7280'
+
+    return (
+        <div style={{
+            border: `1px solid var(--border)`,
+            borderLeft: `4px solid ${priorityColor}`,
+            borderRadius: 10, marginBottom: '0.75rem', overflow: 'hidden', background: 'var(--bg)'
+        }}>
+            <div style={{ padding: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }} onClick={() => setExpanded(!expanded)}>
+                <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>
+                    {tactic.tactic_type === 'search_keyword' ? '🔍' :
+                     tactic.tactic_type === 'post_template' ? '📝' :
+                     tactic.tactic_type === 'comment_template' ? '💬' :
+                     tactic.tactic_type === 'dm_template' ? '📩' : '🎯'}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                        <strong style={{ fontSize: '0.9rem' }}>{tactic.target_group}</strong>
+                        <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: 8, background: `${priorityColor}20`, color: priorityColor, fontWeight: 700, border: `1px solid ${priorityColor}40` }}>
+                            {tactic.priority?.toUpperCase()}
+                        </span>
+                        <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: 8, background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                            {tactic.tactic_type?.replace(/_/g, ' ')}
+                        </span>
+                    </div>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 0.5rem', lineHeight: 1.4 }}>{tactic.use_case}</p>
+
+                    {/* Content to copy */}
+                    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.5rem 0.75rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text)', fontFamily: 'monospace', flex: 1, lineHeight: 1.5 }}>{tactic.content}</span>
+                        <CopyButton text={tactic.content} label="Copy" />
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        {tactic.group_url && (
+                            <a href={tactic.group_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.7rem', color: '#3b82f6', fontWeight: 600 }} onClick={e => e.stopPropagation()}>
+                                👥 Mở Group FB
+                            </a>
+                        )}
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', flex: 1 }}>
+                            Dấu hiệu: <em>{tactic.expected_signal}</em>
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--primary-color)', fontWeight: 600 }}>
+                            {expanded ? '▲ Ẩn script' : '▼ Xem script inbox'}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {expanded && tactic.opener_script && (
+                <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
+                    {tactic.opener_script.inbox && (
+                        <div style={{ padding: '0.875rem 1rem', borderBottom: '1px solid var(--border)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#3b82f6' }}>📩 Script Inbox Facebook</span>
+                                <CopyButton text={tactic.opener_script.inbox} label="Copy Inbox" />
+                            </div>
+                            <p style={{ fontSize: '0.85rem', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{tactic.opener_script.inbox}</p>
+                        </div>
+                    )}
+                    {tactic.opener_script.comment && (
+                        <div style={{ padding: '0.875rem 1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981' }}>💬 Script Comment dưới post</span>
+                                <CopyButton text={tactic.opener_script.comment} label="Copy Comment" />
+                            </div>
+                            <p style={{ fontSize: '0.85rem', lineHeight: 1.6, margin: 0 }}>{tactic.opener_script.comment}</p>
+                        </div>
+                    )}
+                    {tactic.pain_addressed && (
+                        <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            💊 Pain được giải quyết: {tactic.pain_addressed}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DiscoveryPage() {
     const [query, setQuery] = useState('')
     const [maxLeads, setMaxLeads] = useState(5)
+    const [mode, setMode] = useState<'web' | 'facebook'>('facebook')
     const [searching, setSearching] = useState(false)
     const [result, setResult] = useState<DiscoveryResult | null>(null)
     const [error, setError] = useState<string | null>(null)
@@ -228,7 +332,7 @@ export default function DiscoveryPage() {
         try {
             const res = await apiPost<{ ok: boolean; data: DiscoveryResult; error?: string }>(
                 '/api/sis/discovery',
-                { query: query.trim(), maxLeads }
+                { query: query.trim(), maxLeads, mode }
             )
             if (!res.ok) throw new Error(res.error || 'Discovery failed')
             setResult(res.data)
@@ -239,15 +343,49 @@ export default function DiscoveryPage() {
         setSearching(false)
     }
 
+    const templates = mode === 'facebook' ? FB_QUERY_TEMPLATES : WEB_QUERY_TEMPLATES
+
     return (
-        <div style={{ padding: '0 0.5rem', maxWidth: 920 }}>
+        <div style={{ padding: '0 0.5rem', maxWidth: 960 }}>
             <div className="page-header" style={{ marginBottom: '1.5rem' }}>
                 <h2 className="page-title">🌐 AI Discovery</h2>
                 <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                    Tìm seller tiềm năng từ Google, LinkedIn, Shopify — không cần Facebook, không checkpoint.
-                    AI tự generate <strong>DM · Comment · LinkedIn</strong> sẵn sàng copy-paste.
+                    Tìm tệp seller tiềm năng. <strong>Mode Facebook</strong>: generate keyword + script thực chiến cho staff dùng tay trong group.
+                    <strong> Mode Web</strong>: tìm seller qua Google (Reddit, diễn đàn, LinkedIn).
                 </p>
             </div>
+
+            {/* Mode Switch */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                {([
+                    { key: 'facebook', label: '👥 Facebook Groups', desc: 'Keyword + Script cho staff', badge: 'Chính' },
+                    { key: 'web', label: '🌐 Web Discovery', desc: 'Google Search Grounding', badge: '' },
+                ] as const).map(m => (
+                    <button
+                        key={m.key}
+                        onClick={() => { setMode(m.key); setResult(null); setQuery(''); }}
+                        style={{
+                            flex: 1, padding: '0.875rem 1rem', borderRadius: 10, cursor: 'pointer',
+                            border: `2px solid ${mode === m.key ? 'var(--primary-color)' : 'var(--border)'}`,
+                            background: mode === m.key ? 'rgba(99,102,241,0.08)' : 'var(--bg-elevated)',
+                            textAlign: 'left', transition: 'all 0.2s'
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.9rem', color: mode === m.key ? 'var(--primary-color)' : 'var(--text)' }}>{m.label}</span>
+                            {m.badge && <span style={{ fontSize: '0.6rem', padding: '1px 6px', borderRadius: 8, background: '#10b981', color: 'white', fontWeight: 700 }}>{m.badge}</span>}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{m.desc}</div>
+                    </button>
+                ))}
+            </div>
+
+            {/* Mode explanation */}
+            {mode === 'facebook' && (
+                <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                    💡 <strong>Vì sao không cào trực tiếp Facebook?</strong> Google Search Grounding không thể truy cập vào Facebook Group private. Mode này thay vào đó generate <strong>keyword tìm kiếm + script inbox/comment</strong> được tối ưu cho từng group trong danh sách 19 groups của THG — để staff copy-paste và thực chiến thủ công.
+                </div>
+            )}
 
             {/* Search Box */}
             <div className="card" style={{ padding: '1.5rem', marginBottom: '1.25rem' }}>
@@ -257,7 +395,10 @@ export default function DiscoveryPage() {
                         value={query}
                         onChange={e => setQuery(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && !searching && handleSearch()}
-                        placeholder="Ví dụ: POD sellers Vietnam Etsy looking for US fulfillment..."
+                        placeholder={mode === 'facebook'
+                            ? 'Ví dụ: Seller đặt hàng TQ cần ship đi Mỹ...'
+                            : 'Ví dụ: Vietnam POD Etsy sellers looking for US fulfillment...'
+                        }
                         style={{
                             flex: 1, background: 'var(--bg-elevated)', border: '1px solid var(--border)',
                             color: 'var(--text)', borderRadius: 8, padding: '0.75rem 1rem', fontSize: '0.95rem',
@@ -268,7 +409,7 @@ export default function DiscoveryPage() {
                         onChange={e => setMaxLeads(parseInt(e.target.value))}
                         style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, padding: '0 0.75rem', fontSize: '0.875rem' }}
                     >
-                        {[3, 5, 8, 10].map(n => <option key={n} value={n}>{n} leads</option>)}
+                        {[3, 5, 8, 10].map(n => <option key={n} value={n}>{n} {mode === 'facebook' ? 'tactics' : 'leads'}</option>)}
                     </select>
                     <button
                         className="btn btn-primary"
@@ -276,12 +417,12 @@ export default function DiscoveryPage() {
                         disabled={searching || !query.trim()}
                         style={{ minWidth: 150, display: 'flex', alignItems: 'center', gap: 8 }}
                     >
-                        {searching ? <span className="spinner" style={{ width: 16, height: 16 }} /> : '⚡'}
-                        {searching ? 'Đang quét...' : 'Bắt đầu quét'}
+                        {searching ? <span className="spinner" style={{ width: 16, height: 16 }} /> : (mode === 'facebook' ? '🎯' : '⚡')}
+                        {searching ? 'Đang xử lý...' : (mode === 'facebook' ? 'Tạo tactics FB' : 'Bắt đầu quét')}
                     </button>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {QUERY_TEMPLATES.map(t => (
+                    {templates.map(t => (
                         <button key={t.label} onClick={() => setQuery(t.query)} style={{
                             padding: '4px 10px', borderRadius: 20, border: '1px solid var(--border)',
                             background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontSize: '0.75rem', cursor: 'pointer',
@@ -292,9 +433,13 @@ export default function DiscoveryPage() {
                 </div>
             </div>
 
-            {/* Badges */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
-                {[
+            {/* Info badges */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                {mode === 'facebook' ? [
+                    { icon: '👥', title: '19 FB Groups', desc: 'Targeting đúng nhóm VN seller + Việt kiều Mỹ' },
+                    { icon: '📋', title: 'Script sẵn sàng', desc: 'Inbox + Comment tối ưu cho từng nhóm cụ thể' },
+                    { icon: '🚫', title: 'Không checkpoint', desc: 'Staff dùng tay — không automation, không bị khóa acc' },
+                ] : [
                     { icon: '🛡️', title: 'Anti-Checkpoint', desc: 'Google public data, không cần FB account' },
                     { icon: '🤖', title: 'Auto Payload', desc: 'DM + Comment + LinkedIn sẵn sàng copy-paste' },
                     { icon: '📊', title: 'AI Score 1-100', desc: 'Ưu tiên leads chất lượng, lọc nhà cung cấp' },
@@ -320,21 +465,47 @@ export default function DiscoveryPage() {
                 <div style={{ marginBottom: '1.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
                         <h3 style={{ margin: 0, fontSize: '0.95rem' }}>
-                            Kết quả: <span style={{ color: 'var(--primary-color)' }}>"{result.query}"</span>
+                            {result.mode === 'facebook' ? '🎯 Facebook Tactics: ' : '🌐 Web Leads: '}
+                            <span style={{ color: 'var(--primary-color)' }}>"{result.query}"</span>
                         </h3>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem' }}>
-                            <span>Tìm được: <strong>{result.total_found}</strong></span>
-                            <span>Sau lọc: <strong>{result.after_filter}</strong></span>
+                            <span>Tạo được: <strong>{result.total_found}</strong></span>
                             <span style={{ color: '#10b981' }}>Saved: <strong>{result.saved}</strong></span>
-                            {result.skipped > 0 && <span>Trùng: {result.skipped}</span>}
                         </div>
                     </div>
-                    {result.leads.sort((a, b) => b.ai_score - a.ai_score).map(lead => (
-                        <LeadPayloadCard key={lead.rawPostId} lead={lead} />
-                    ))}
-                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
-                        ✅ Leads đã vào SIS pipeline. Xem tại <a href="/" style={{ color: 'var(--primary-color)' }}>Dashboard → Tiềm năng</a>
-                    </p>
+
+                    {result.mode === 'facebook' && result.tactics && (
+                        <>
+                            {['high', 'medium', 'low'].map(p => {
+                                const group = result.tactics!.filter(t => t.priority === p)
+                                if (!group.length) return null
+                                return (
+                                    <div key={p}>
+                                        <div style={{ fontSize: '0.7rem', fontWeight: 700, color: PRIORITY_COLORS[p], textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <div style={{ height: 1, flex: 1, background: `${PRIORITY_COLORS[p]}30` }}></div>
+                                            {p === 'high' ? '🔥 Ưu tiên cao' : p === 'medium' ? '⚡ Ưu tiên trung bình' : '📋 Bổ sung'}
+                                            <div style={{ height: 1, flex: 1, background: `${PRIORITY_COLORS[p]}30` }}></div>
+                                        </div>
+                                        {group.map((t, i) => <FbHintCard key={i} tactic={t} />)}
+                                    </div>
+                                )
+                            })}
+                            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
+                                ✅ Tactics đã lưu vào SIS. Dùng script trên để tìm và inbox thủ công trong các group Facebook.
+                            </p>
+                        </>
+                    )}
+
+                    {result.mode === 'web' && result.leads && (
+                        <>
+                            {result.leads.sort((a, b) => b.ai_score - a.ai_score).map(lead => (
+                                <WebLeadCard key={lead.rawPostId} lead={lead} />
+                            ))}
+                            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
+                                ✅ Leads đã vào SIS pipeline. Xem tại <a href="/" style={{ color: 'var(--primary-color)' }}>Dashboard → Tiềm năng</a>
+                            </p>
+                        </>
+                    )}
                 </div>
             )}
 
@@ -342,7 +513,7 @@ export default function DiscoveryPage() {
             <div className="card" style={{ padding: '1.25rem' }}>
                 <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.95rem' }}>
                     Lịch sử Discovery
-                    <span style={{ marginLeft: 8, fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>({history.length} leads)</span>
+                    <span style={{ marginLeft: 8, fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>({history.length} entries)</span>
                 </h3>
                 {historyLoading ? (
                     <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}><div className="spinner" /></div>
@@ -355,9 +526,9 @@ export default function DiscoveryPage() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
-                                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left' }}>Seller / Brand</th>
-                                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left' }}>Query nguồn</th>
-                                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left' }}>Dịch vụ</th>
+                                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left' }}>Seller / Tactic</th>
+                                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left' }}>Query / Group</th>
+                                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left' }}>Type</th>
                                 <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left' }}>Lane</th>
                                 <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left' }}>Staff</th>
                                 <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left' }}>Thời gian</th>

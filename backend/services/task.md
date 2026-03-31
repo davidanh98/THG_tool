@@ -543,4 +543,6 @@ const App = () => {
 
 export default App;
 
-Đây là Sourcing(AI buy) => site agent => rule chỉ số => Sup(1) nó còn 1 vài bug chưa route được chính xác xưởng detail kiểm tra và khắc phục giúp tôi 
+Đây là Sourcing(AI buy) => site agent => rule chỉ số => Sup(1) nó còn 1 vài bug chưa route được chính xác xưởng detail supplier kiểm tra và khắc phục giúp tôi. 
+
+AI discovery tôi thấy chưa hiệu quả lắm ví dụ nó quét mấy post không đúng trọng tâm tệp seller của chúng tôi, phần lớn data khách hàng tệp có nhu cầu chủ yếu ở facebook nhưng AI discovery chưa giải quyết dược bài toán đó
