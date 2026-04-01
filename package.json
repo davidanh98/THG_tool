@@ -23,6 +23,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@google/genai": "^1.47.0",
     "@google/generative-ai": "^0.24.1",
     "apify-client": "^2.11.0",
     "axios": "^1.13.6",
