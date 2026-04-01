@@ -184,9 +184,10 @@ NHIỆM VỤ — thực hiện theo thứ tự:
 5. Lấy thông tin logistics từ trang sản phẩm: cân nặng, giá, MOQ.
 
 QUAN TRỌNG:
-- offer_id PHẢI là số thực từ URL tìm thấy — KHÔNG tự tạo.
-- Nếu không tìm được, để offer_id = "" và trust_score = 0.
+- offer_id PHẢI là số thực từ URL tìm thấy — KHÔNG tự tạo số.
+- Nếu không tìm được sản phẩm, để offer_id = "" và trust_score = 0 — vẫn phải trả JSON.
 - platform: "1688" nếu link 1688.com, "taobao" nếu link taobao.com
+- LUÔN LUÔN trả về JSON, dù không tìm được kết quả — KHÔNG trả text thường.
 
 Trả về JSON duy nhất (không giải thích thêm):
 {
@@ -219,11 +220,34 @@ Trả về JSON duy nhất (không giải thích thêm):
         };
 
         const text = await callGemini(SEARCH_MODEL, payload);
-        const result = extractJson(text);
 
-        // Build search fallback URL từ Chinese keywords (luôn hợp lệ)
+        // Build search fallback URL trước — dùng ngay cả khi JSON parse fail
         const kw = encodeURIComponent(product.search_keywords_cn || product.product_name_cn || product.product_name_vn);
-        result.verified_match.search_url = `https://s.1688.com/selloffer/offerlist.htm?keywords=${kw}`;
+        const fallbackSearchUrl = `https://s.1688.com/selloffer/offerlist.htm?keywords=${kw}`;
+
+        let result: SourcingResult;
+        try {
+            result = extractJson(text);
+        } catch {
+            // Gemini trả về text thường thay vì JSON (thường xảy ra khi không tìm được sản phẩm)
+            return {
+                product_name: product.product_name_vn || 'Sản phẩm',
+                verified_match: {
+                    offer_id: '',
+                    factory_name_cn: '',
+                    factory_name_vn: 'Không tìm được xưởng phù hợp — thử tìm thủ công',
+                    direct_url: '',
+                    search_url: fallbackSearchUrl,
+                    platform: '1688',
+                    trust_score: 0,
+                    match_reason: 'AI không tìm được sản phẩm tương tự trên 1688/Taobao. Có thể đây là hàng custom hoặc POD.',
+                },
+                logistics: { weight: '', min_order: '', price_range: '' },
+                negotiation_script: { cn: '', vn: '' },
+                qc_checklist: [],
+            };
+        }
+        result.verified_match.search_url = fallbackSearchUrl;
 
         // Validate và chuẩn hóa Offer ID — reject ID giả (số tròn/lặp)
         const isFakeId = (id: string) =>
