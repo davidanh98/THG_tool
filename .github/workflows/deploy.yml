@@ -51,8 +51,18 @@ jobs:
               echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> /root/THG_tool/.env
             fi
           fi
+
+          # Update SerpAPI key in .env
+          if [ ! -z "${{ secrets.SERPAPI_KEY }}" ]; then
+            if grep -q 'SERPAPI_KEY=' /root/THG_tool/.env; then
+              sed -i "s|SERPAPI_KEY=.*|SERPAPI_KEY=${{ secrets.SERPAPI_KEY }}|" /root/THG_tool/.env
+            else
+              echo "SERPAPI_KEY=${{ secrets.SERPAPI_KEY }}" >> /root/THG_tool/.env
+            fi
+          fi
           
           echo "🔑 API keys updated in .env"
+
 
           # Update NGINX config
           echo "🌐 Reloading NGINX configuration..."

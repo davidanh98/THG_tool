@@ -1,17 +1,18 @@
 /**
- * THG Sourcing Service — Full Automation Pipeline v2.1
+ * THG Sourcing Service — Full Automation Pipeline v2.2
  *
  * Architecture:
  *   Step 1: Gemini Vision/Text → product identification + keywords
- *   Step 2: Gemini + Google Search Grounding → find real 1688/Alibaba supplier URLs
- *   Step 3: Gemini enrich + format → multi-supplier JSON with specs
+ *   Step 2: SerpAPI → search site:detail.1688.com + alibaba.com → real product URLs
+ *   Step 3: Gemini → enrich supplier data + specs estimation + format JSON
  *
- * Key Change v2.1: Replaced Playwright scrapers (unreliable on VPS) with
- * Gemini Google Search grounding for real supplier URL discovery.
+ * SerpAPI: https://serpapi.com — free tier 100 req/month
+ * Uses SERPAPI_KEY env var. Falls back to Gemini grounding if key not set.
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { GoogleGenAI } = require('@google/genai');
+const axios = require('axios');
 
 let _genAI = null;
 let _genAINew = null;
@@ -20,7 +21,6 @@ function getGenAI() {
     if (!_genAI) _genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
     return _genAI;
 }
-
 function getGenAINew() {
     if (!_genAINew) _genAINew = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
     return _genAINew;
@@ -43,20 +43,19 @@ function parseJson(text) {
 async function analyzeImage(imageBase64, mimeType) {
     const model = getGenAI().getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    const prompt = `Analyze this product image carefully. If there are custom logos, brand names, or team numbers on the product, IGNORE them — identify only the BASE PRODUCT TYPE.
+    const prompt = `Analyze this product image. IGNORE logos/brands. Identify only the BASE PRODUCT TYPE.
 
-Return JSON:
+Return JSON only:
 {
-  "product_name_vn": "tên loại sản phẩm gốc tiếng Việt",
+  "product_name_vn": "tên loại sản phẩm tiếng Việt",
   "product_name_cn": "tên tiếng Trung (5-8 chữ Hán)",
-  "product_name_en": "product type in English (short, for Alibaba search)",
-  "search_keywords_cn": "keyword tìm xưởng 1688 (3-5 từ Trung, cách nhau dấu phẩy)",
-  "search_keywords_en": "english keywords for Alibaba.com search (3-5 words)",
-  "key_features": "material, color, style (no brand names)",
+  "product_name_en": "English product type (short)",
+  "search_keywords_cn": "keyword 1688 (3-5 từ Trung)",
+  "search_keywords_en": "Alibaba keywords (3-5 words)",
+  "key_features": "material, style (no brand names)",
   "category": "product category",
-  "estimated_weight_kg": "ước tính cân nặng 1 đơn vị (kg) — dựa trên loại sản phẩm"
-}
-Return JSON only.`;
+  "estimated_weight_kg": "estimated weight per unit (kg)"
+}`;
 
     const result = await model.generateContent([
         { text: prompt },
@@ -71,40 +70,101 @@ async function analyzeText(productName) {
 
     const prompt = `Bạn là chuyên gia sourcing hàng Trung Quốc. Phân tích sản phẩm: "${productName}"
 
-Return JSON:
+Return JSON only:
 {
   "product_name_vn": "tên tiếng Việt chuẩn",
   "product_name_cn": "tên tiếng Trung (5-8 chữ Hán, phù hợp search 1688)",
   "product_name_en": "English name (short, for Alibaba search)",
-  "search_keywords_cn": "keyword tìm xưởng 1688 (3-5 từ Trung, cách nhau dấu phẩy)",
-  "search_keywords_en": "english keywords for Alibaba.com search (3-5 words)",
-  "key_features": "material, typical features (no brand names)",
+  "search_keywords_cn": "keyword tìm xưởng 1688 (3-5 từ Trung)",
+  "search_keywords_en": "Alibaba keywords (3-5 words)",
+  "key_features": "material, typical features",
   "category": "product category",
   "estimated_weight_kg": "ước tính cân nặng 1 đơn vị (kg)"
-}
-Return JSON only.`;
+}`;
 
     const result = await model.generateContent([{ text: prompt }]);
     return parseJson(result.response.text());
 }
 
-// ─── Step 2: Gemini + Google Search Grounding → find REAL suppliers ───────────
-async function searchSuppliersWithGrounding(product) {
-    const ai = getGenAINew();
+// ─── Step 2a: SerpAPI search ──────────────────────────────────────────────────
+async function serpSearch(query, num = 5) {
+    const key = process.env.SERPAPI_KEY;
+    if (!key) throw new Error('SERPAPI_KEY not configured');
 
+    const params = {
+        engine: 'google',
+        q: query,
+        num,
+        api_key: key,
+        hl: 'zh-CN',
+        gl: 'cn',
+    };
+
+    const res = await axios.get('https://serpapi.com/search', { params, timeout: 15000 });
+    return res.data?.organic_results || [];
+}
+
+// ─── Step 2b: Find real supplier URLs via SerpAPI ─────────────────────────────
+async function findSupplierUrls(product) {
+    const kwCn = product.search_keywords_cn || product.product_name_cn || '';
+    const kwEn = product.search_keywords_en || product.product_name_en || '';
+
+    const realUrls = [];
+
+    // Search 1: 1688 detail pages (Chinese keywords)
+    // Search 2: Alibaba product pages (English keywords)
+    const searches = [
+        { query: `site:detail.1688.com ${kwCn}`, platform: '1688' },
+        { query: `site:www.alibaba.com "${kwEn}" product-detail`, platform: 'alibaba' },
+    ];
+
+    await Promise.allSettled(searches.map(async ({ query, platform }) => {
+        try {
+            console.log(`[Sourcing] 🔍 SerpAPI: "${query}"`);
+            const results = await serpSearch(query, 5);
+
+            for (const r of results) {
+                const url = r.link || '';
+                const title = r.title || '';
+                const snippet = r.snippet || '';
+
+                const is1688 = url.includes('detail.1688.com') || (url.includes('1688.com') && url.includes('offer'));
+                const isAlibaba = url.includes('alibaba.com/product-detail') || url.includes('alibaba.com/p-detail');
+
+                if ((platform === '1688' && is1688) || (platform === 'alibaba' && isAlibaba)) {
+                    if (!realUrls.find(u => u.url === url)) {
+                        const offerId = url.match(/offer\/(\d+)\.html/)?.[1]
+                            || url.match(/\/(\d{10,})/)?.[1] || '';
+
+                        realUrls.push({
+                            url,
+                            title: title.replace(/ - 1688\.com$/, '').replace(/ \| Alibaba\.com$/, ''),
+                            snippet,
+                            platform,
+                            offer_id: offerId,
+                        });
+                    }
+                }
+            }
+
+            console.log(`[Sourcing] ✅ SerpAPI [${platform}]: ${realUrls.filter(u => u.platform === platform).length} URLs`);
+        } catch (err) {
+            console.error(`[Sourcing] ⚠️ SerpAPI [${platform}] error: ${err.message}`);
+        }
+    }));
+
+    return realUrls;
+}
+
+// ─── Step 2 fallback: Gemini Google Search Grounding ─────────────────────────
+async function findSupplierUrlsViaGrounding(product) {
+    const ai = getGenAINew();
     const kwCn = product.search_keywords_cn || product.product_name_cn || '';
     const kwEn = product.search_keywords_en || product.product_name_en || '';
 
     const prompt = `Tìm xưởng sản xuất sỉ cho: "${product.product_name_cn}" (${product.product_name_en}).
 Keywords 1688: ${kwCn} | Keywords Alibaba: ${kwEn}
-
-Search 1688.com và alibaba.com. Với mỗi supplier tìm được, trích xuất:
-- factory_name_cn: tên xưởng
-- direct_url: URL trang sản phẩm CỤ THỂ (dạng detail.1688.com/offer/xxx.html hoặc alibaba.com/product-detail/xxx.html)
-- platform: "1688" hoặc "alibaba"
-- price, moq, weight, material, lead_time, supplier_years
-
-Trả về JSON array (tối đa 5), CHỈ JSON.`;
+Search 1688.com và alibaba.com, trả về JSON array với direct_url, platform, price, moq, weight, material.`;
 
     try {
         const response = await ai.models.generateContent({
@@ -113,157 +173,100 @@ Trả về JSON array (tối đa 5), CHỈ JSON.`;
             config: { tools: [{ googleSearch: {} }] },
         });
 
-        // ─── PRIORITY: Extract REAL verified URLs from groundingChunks ───────
         const groundingMeta = response.candidates?.[0]?.groundingMetadata;
         const realUrls = [];
 
         if (groundingMeta?.groundingChunks?.length) {
-            console.log(`[Sourcing] ✅ Grounding chunks: ${groundingMeta.groundingChunks.length}`);
             for (const chunk of groundingMeta.groundingChunks) {
                 const url = chunk.web?.uri || '';
                 const title = chunk.web?.title || '';
                 const is1688 = url.includes('detail.1688.com') || (url.includes('1688.com') && url.includes('offer'));
-                const isAlibaba = url.includes('alibaba.com/product-detail') || url.includes('alibaba.com/p-detail');
+                const isAlibaba = url.includes('alibaba.com/product-detail');
                 if (is1688 || isAlibaba) {
-                    // Avoid duplicate URLs
                     if (!realUrls.find(r => r.url === url)) {
                         realUrls.push({
-                            url,
-                            title,
+                            url, title,
                             platform: is1688 ? '1688' : 'alibaba',
-                            offer_id: url.match(/offer\/(\d+)\.html/)?.[1] || url.match(/\/(\d{10,})/)?.[1] || '',
+                            offer_id: url.match(/offer\/(\d+)\.html/)?.[1] || '',
                         });
                     }
                 }
             }
-            console.log(`[Sourcing] ✅ Real product URLs from grounding: ${realUrls.length}`);
-            realUrls.forEach(r => console.log(`  [${r.platform}] ${r.url}`));
         }
 
-        // ─── Parse Gemini text for supplier names/specs ──────────────────────
-        const text = response.text || '';
-        let aiSuppliers = [];
-        try {
-            const parsed = parseJson(text);
-            aiSuppliers = Array.isArray(parsed) ? parsed : [parsed];
-        } catch (e) {
-            console.log(`[Sourcing] ⚠️ Gemini text JSON parse failed`);
-        }
-
-        // ─── Merge: real URLs (primary) + AI text for specs ─────────────────
-        if (realUrls.length > 0) {
-            const merged = realUrls.map((realUrl, i) => {
-                // Try to find AI supplier matching same platform, use by index fallback
-                const aiMatch = aiSuppliers.find((s, si) =>
-                    s.platform === realUrl.platform && si === i
-                ) || aiSuppliers.find(s => s.platform === realUrl.platform)
-                    || aiSuppliers[i] || {};
-
-                return {
-                    factory_name_cn: aiMatch.factory_name_cn || realUrl.title || '',
-                    factory_name_vn: aiMatch.factory_name_vn || '',
-                    direct_url: realUrl.url,   // ← ALWAYS use the real grounding URL
-                    platform: realUrl.platform,
-                    offer_id: realUrl.offer_id,
-                    price: aiMatch.price || '',
-                    moq: aiMatch.moq || '',
-                    weight: aiMatch.weight || '',
-                    material: aiMatch.material || '',
-                    dimensions: aiMatch.dimensions || '',
-                    lead_time: aiMatch.lead_time || '',
-                    supplier_years: aiMatch.supplier_years || '',
-                    certifications: aiMatch.certifications || '',
-                };
-            });
-
-            console.log(`[Sourcing] ✅ ${merged.length} suppliers with verified URLs`);
-            return merged.slice(0, 5);
-        }
-
-        // Fallback: use AI text suppliers if no grounding URLs
-        if (aiSuppliers.length > 0) {
-            console.log(`[Sourcing] ⚠️ No grounding URLs found, using AI estimate (${aiSuppliers.length} suppliers)`);
-            return aiSuppliers.slice(0, 5);
-        }
-
-        return [];
+        return realUrls;
     } catch (err) {
-        console.error(`[Sourcing] ⚠️ Google Search grounding failed: ${err.message}`);
+        console.error(`[Sourcing] ⚠️ Grounding fallback failed: ${err.message}`);
         return [];
     }
 }
 
-// ─── Step 3: Enrich + Format multi-supplier JSON ──────────────────────────────
-async function buildFinalResult(product, groundedSuppliers) {
+// ─── Step 3: Gemini enrich → full supplier profiles ──────────────────────────
+async function buildFinalResult(product, realUrls) {
     const model = getGenAI().getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const kw1688 = encodeURIComponent(product.search_keywords_cn || product.product_name_cn || '');
     const kwAlibaba = encodeURIComponent(product.search_keywords_en || product.product_name_en || '');
     const searchUrl1688 = `https://s.1688.com/selloffer/offerlist.htm?keywords=${kw1688}`;
-    const searchUrlAlibaba = `https://www.alibaba.com/trade/search?SearchText=${kwAlibaba}`;
 
-    const suppliersData = groundedSuppliers.length > 0
-        ? groundedSuppliers.map((s, i) => `
-Supplier ${i + 1} [${s.platform || 'unknown'}]:
-  - Xưởng: ${s.factory_name_cn || 'N/A'}
-  - URL: ${s.direct_url || 'N/A'}
-  - Offer ID: ${s.offer_id || 'N/A'}
-  - Giá: ${s.price || 'N/A'}
-  - MOQ: ${s.moq || 'N/A'}
-  - Cân nặng: ${s.weight || 'chưa tìm được'}
-  - Chất liệu: ${s.material || 'N/A'}
-  - Kích thước: ${s.dimensions || 'N/A'}
-  - Lead time: ${s.lead_time || 'N/A'}
-  - Kinh nghiệm: ${s.supplier_years || 'N/A'}
-  - Chứng nhận: ${s.certifications || 'N/A'}
-`).join('\n')
-        : 'Không tìm được supplier cụ thể — dùng kiến thức chuyên ngành để tạo profile ước tính.';
+    // Build supplier context from real URLs
+    const suppliersContext = realUrls.length > 0
+        ? realUrls.map((s, i) => `
+Supplier ${i + 1} [${s.platform}]:
+  URL (THẬT): ${s.url}
+  Offer ID: ${s.offer_id || 'N/A'}
+  Title: ${s.title}
+  Snippet: ${s.snippet || 'N/A'}`).join('\n')
+        : `KHÔNG tìm được URL thật — hãy ước tính 2-3 profiles từ kiến thức ngành`;
 
-    const prompt = `Bạn là chuyên gia sourcing hàng Trung Quốc cho công ty logistics THG.
+    const prompt = `Bạn là chuyên gia sourcing hàng Trung Quốc cho THG logistics.
 
-Sản phẩm: ${product.product_name_vn} (EN: ${product.product_name_en}, CN: ${product.product_name_cn})
+Sản phẩm: ${product.product_name_vn} (CN: ${product.product_name_cn}, EN: ${product.product_name_en})
 Đặc điểm: ${product.key_features || ''}
-Cân nặng ước tính: ${product.estimated_weight_kg || 'N/A'}
+Cân nặng ước tính: ${product.estimated_weight_kg || 'N/A'} kg
 
-=== DỮ LIỆU TÌM ĐƯỢC TỪ GOOGLE SEARCH ===
-${suppliersData}
+=== KẾT QUẢ TÌM KIẾM THẬT (SerpAPI/Google) ===
+${suppliersContext}
 
-Tạo profile đầy đủ cho từng supplier. QUAN TRỌNG:
-1. Trường "direct_url" PHẢI giữ NGUYÊN URL từ dữ liệu gốc — TUYỆT ĐỐI không thay đổi, không tạo URL mới
-2. Nếu weight/material chưa có → ước tính dựa trên loại sản phẩm
-3. Nếu không có supplier nào → tạo 2-3 profiles ước tính, KHÔNG có direct_url
+Nhiệm vụ: Tạo profile đầy đủ cho TỪNG supplier trên.
 
-Trả về JSON ARRAY, mỗi phần tử:
+QUAN TRỌNG:
+- Trường "direct_url": COPY NGUYÊN URL THẬT từ dữ liệu trên — KHÔNG tự bịa URL mới
+- Nếu snippet có giá/MOQ → dùng đó; nếu không → ước tính hợp lý
+- Weight: PHẢI có (ước tính nếu chưa biết)
+- Nếu không có URL thật → tạo profile ước tính, KHÔNG điền direct_url
+
+Trả về JSON ARRAY, mỗi supplier:
 {
   "rank": 1,
-  "offer_id": "ID từ URL gốc",
-  "factory_name_cn": "Tên xưởng",
-  "factory_name_vn": "Mô tả tiếng Việt",
-  "direct_url": "COPY NGUYÊN URL từ dữ liệu gốc bên trên",
+  "offer_id": "từ URL",
+  "factory_name_cn": "tên xưởng (từ title)",
+  "factory_name_vn": "mô tả tiếng Việt",
+  "direct_url": "URL THẬT từ dữ liệu gốc bên trên",
   "search_url": "${searchUrl1688}",
   "platform": "1688 hoặc alibaba",
-  "trust_score": 75,
-  "match_reason": "Lý do phù hợp",
+  "trust_score": 70,
+  "match_reason": "lý do phù hợp",
   "logistics": {
-    "weight": "vd: 0.8 kg/đơn vị",
+    "weight": "vd: 0.8 kg/đôi (bắt buộc)",
     "cbm": "vd: 0.5 m³/100 units",
-    "material": "chất liệu chính",
+    "material": "chất liệu",
     "min_order": "MOQ",
     "price_range": "giá",
-    "lead_time": "vd: 7-15 ngày",
+    "lead_time": "vd: 15-25 ngày",
     "certifications": ""
   },
   "supplier_info": {
-    "years_in_business": "số năm",
+    "years_in_business": "",
     "rating": ""
   }
 }
 
-Thêm 1 object negotiation cuối:
+Append thêm negotiation object:
 {
   "negotiation": true,
-  "script_cn": "你好，我想批量采购${product.product_name_cn}，请问贵厂可以提供报价和MOQ吗？我们是越南物流公司THG，长期合作。",
-  "script_vn": "Xin chào, tôi muốn đặt hàng sỉ ${product.product_name_vn}. Xưởng báo giá và MOQ được không? Công ty THG Việt Nam, hợp tác lâu dài.",
+  "script_cn": "你好，我想批量采购${product.product_name_cn}，请问可以提供报价和MOQ吗？我们是越南THG物流公司，长期合作。",
+  "script_vn": "Xin chào, tôi muốn đặt sỉ ${product.product_name_vn}. Xưởng báo giá + MOQ được không? Công ty THG VN, hợp tác lâu dài.",
   "qc_checklist": ["Xác nhận cân nặng thực tế", "Kiểm tra chất liệu", "Đối chiếu kích thước", "Kiểm tra đóng gói", "Yêu cầu mẫu trước đơn lớn"]
 }
 
@@ -273,20 +276,15 @@ CHỈ TRẢ JSON ARRAY.`;
     const parsed = parseJson(result.response.text());
     const arr = Array.isArray(parsed) ? parsed : [parsed];
 
-    // ─── Re-inject real URLs: Gemini may have changed them — restore from groundedSuppliers
-    const realUrlMap = {};
-    groundedSuppliers.forEach((s, i) => {
-        if (s.direct_url) realUrlMap[i] = s.direct_url;
-        if (s.offer_id) realUrlMap[`id_${s.offer_id}`] = s.direct_url;
-    });
-
+    // Safety: re-inject real URLs in case Gemini changed them
     let supplierIdx = 0;
     arr.forEach(item => {
         if (item.negotiation) return;
-        // Restore real URL if Gemini changed it
-        const originalUrl = realUrlMap[supplierIdx];
-        if (originalUrl) {
-            item.direct_url = originalUrl;
+        const realUrl = realUrls[supplierIdx];
+        if (realUrl?.url) {
+            item.direct_url = realUrl.url;         // ALWAYS use verified URL
+            item.platform = realUrl.platform;
+            item.offer_id = item.offer_id || realUrl.offer_id;
         }
         if (!item.search_url) item.search_url = searchUrl1688;
         supplierIdx++;
@@ -306,22 +304,30 @@ async function runSourcing({ imageBase64, mimeType, productName, searchType }) {
     let product;
     if (isTextSearch) {
         product = await analyzeText(productName);
-        console.log(`[Sourcing] ✅ Step 1 (Text): ${product.product_name_vn} | EN: ${product.search_keywords_en}`);
+        console.log(`[Sourcing] ✅ Step 1 (Text): ${product.product_name_vn} | CN: ${product.search_keywords_cn}`);
     } else {
         product = await analyzeImage(imageBase64, mimeType);
-        console.log(`[Sourcing] ✅ Step 1 (Image): ${product.product_name_vn} | EN: ${product.search_keywords_en} | CN: ${product.search_keywords_cn}`);
+        console.log(`[Sourcing] ✅ Step 1 (Image): ${product.product_name_vn} | EN: ${product.search_keywords_en}`);
     }
 
-    // Step 2: Find real suppliers using Gemini + Google Search grounding
-    console.log('[Sourcing] 🔍 Step 2: Gemini + Google Search grounding...');
-    const groundedSuppliers = await searchSuppliersWithGrounding(product);
-    console.log(`[Sourcing] ✅ Step 2: ${groundedSuppliers.length} suppliers found via Google Search`);
+    // Step 2: Find real supplier URLs
+    let realUrls = [];
+    if (process.env.SERPAPI_KEY) {
+        console.log('[Sourcing] 🔍 Step 2: SerpAPI search...');
+        realUrls = await findSupplierUrls(product);
+        console.log(`[Sourcing] ✅ Step 2 (SerpAPI): ${realUrls.length} real URLs found`);
+        realUrls.forEach(r => console.log(`  [${r.platform}] ${r.url}`));
+    } else {
+        console.log('[Sourcing] ⚠️ SERPAPI_KEY not set — falling back to Gemini grounding');
+        realUrls = await findSupplierUrlsViaGrounding(product);
+        console.log(`[Sourcing] ✅ Step 2 (Grounding): ${realUrls.length} real URLs found`);
+    }
 
     // Step 3: Enrich & format
-    console.log('[Sourcing] 🔍 Step 3: Enriching supplier data...');
-    const enrichedArray = await buildFinalResult(product, groundedSuppliers);
+    console.log('[Sourcing] 🔍 Step 3: Gemini enriching supplier data...');
+    const enrichedArray = await buildFinalResult(product, realUrls);
 
-    // Separate suppliers from negotiation data
+    // Separate suppliers from negotiation
     const suppliers = enrichedArray.filter(s => !s.negotiation);
     const negotiationData = enrichedArray.find(s => s.negotiation) || {};
 
@@ -344,7 +350,7 @@ async function runSourcing({ imageBase64, mimeType, productName, searchType }) {
         },
     };
 
-    console.log(`[Sourcing] ✅ Done: ${suppliers.length} suppliers found`);
+    console.log(`[Sourcing] ✅ Done: ${suppliers.length} suppliers | ${realUrls.filter(u => !!u.url).length} with real URLs`);
     return { product, result };
 }
 
