@@ -98,6 +98,7 @@ app.use('/api/', (req, res, next) => {
     if (req.path.startsWith('/auth/')) return next();
     if (req.path.startsWith('/sis/')) return next();
     if (req.path.startsWith('/dev/')) return next();
+    if (req.path.startsWith('/sourcing')) return next();
     if (req.path === '/leads/collect' && req.method === 'POST') return next();
     if (req.path.startsWith('/worker/') && req.headers['x-thg-auth-key']) return next();
     if (req.path.startsWith('/import/') && req.headers['x-thg-auth-key']) return next();
