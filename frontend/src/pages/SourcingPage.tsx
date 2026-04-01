@@ -13,7 +13,7 @@ interface SourcingResult {
         factory_name_vn: string;
         direct_url: string;
         search_url: string;
-        platform: '1688' | 'taobao';
+        platform: '1688' | 'taobao' | 'alibaba' | 'aliexpress' | 'dhgate';
         trust_score: number;
         match_reason: string;
     };
@@ -222,11 +222,16 @@ export default function SourcingPage() {
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                                                 <span style={{ background: '#10b981', color: 'white', fontSize: '0.6rem', fontWeight: 900, padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Verified Match</span>
-                                                {sourcingResult.verified_match?.platform && (
-                                                    <span style={{ background: sourcingResult.verified_match.platform === 'taobao' ? 'rgba(251,146,60,0.15)' : 'rgba(239,68,68,0.12)', color: sourcingResult.verified_match.platform === 'taobao' ? '#fb923c' : '#f87171', fontSize: '0.6rem', fontWeight: 900, padding: '2px 8px', borderRadius: '4px', border: `1px solid ${sourcingResult.verified_match.platform === 'taobao' ? 'rgba(251,146,60,0.3)' : 'rgba(239,68,68,0.25)'}`, textTransform: 'uppercase' }}>
-                                                        {sourcingResult.verified_match.platform === 'taobao' ? 'Taobao' : '1688.com'}
-                                                    </span>
-                                                )}
+                                                {sourcingResult.verified_match?.platform && (() => {
+                                                    const p = sourcingResult.verified_match.platform;
+                                                    const label: Record<string, string> = { '1688': '1688.com', taobao: 'Taobao', alibaba: 'Alibaba', aliexpress: 'AliExpress', dhgate: 'DHgate' };
+                                                    const color: Record<string, string> = { '1688': '#f87171', taobao: '#fb923c', alibaba: '#f59e0b', aliexpress: '#34d399', dhgate: '#60a5fa' };
+                                                    return (
+                                                        <span style={{ background: 'rgba(255,255,255,0.07)', color: color[p] || '#818cf8', fontSize: '0.6rem', fontWeight: 900, padding: '2px 8px', borderRadius: '4px', border: `1px solid ${color[p] || '#818cf8'}40`, textTransform: 'uppercase' }}>
+                                                            {label[p] || p}
+                                                        </span>
+                                                    );
+                                                })()}
                                                 {sourcingResult.verified_match?.offer_id ? (
                                                     <span style={{ color: '#818cf8', fontFamily: 'monospace', fontSize: '0.65rem', fontWeight: 700, background: 'rgba(99,102,241,0.1)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                         <Hash size={10} /> {sourcingResult.verified_match.offer_id}
@@ -275,7 +280,7 @@ export default function SourcingPage() {
                                                 className="btn btn-primary"
                                                 style={{ padding: '1rem', borderRadius: '1.25rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', textDecoration: 'none' }}
                                             >
-                                                Mở {sourcingResult.verified_match.platform === 'taobao' ? 'Taobao' : '1688'} <ExternalLink size={16} />
+                                                Mở {({ '1688': '1688', taobao: 'Taobao', alibaba: 'Alibaba', aliexpress: 'AliExpress', dhgate: 'DHgate' } as Record<string,string>)[sourcingResult.verified_match.platform] || sourcingResult.verified_match.platform} <ExternalLink size={16} />
                                             </a>
                                         ) : sourcingResult.verified_match?.search_url ? (
                                             <a
