@@ -54,7 +54,9 @@ Chỉ trả JSON, không giải thích.`;
     return parseJson(result.response.text());
 }
 
-// ─── Step 2: Playwright stealth scrape 1688 search ───────────────────────────
+// ─── Step 2: Tìm 1688 offer URLs qua Bing Search (tránh block IP) ────────────
+// 1688.com block IP ngoài Trung Quốc → dùng Bing tìm `site:detail.1688.com`
+// để lấy real offer URLs mà không cần vào 1688 trực tiếp
 async function scrape1688(keywords) {
     let browser;
     try {
@@ -68,23 +70,25 @@ async function scrape1688(keywords) {
         });
 
         const context = await browser.newContext({
-            locale: 'zh-CN',
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            extraHTTPHeaders: { 'Accept-Language': 'zh-CN,zh;q=0.9' },
+            locale: 'zh-CN',
+            extraHTTPHeaders: { 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' },
         });
         const page = await context.newPage();
 
-        const searchUrl = `https://s.1688.com/selloffer/offerlist.htm?keywords=${encodeURIComponent(keywords)}`;
-        console.log(`[Sourcing] Scraping: ${searchUrl}`);
+        // Tìm qua Bing: luôn accessible từ VN, index tốt 1688 pages
+        const query = `${keywords} 批发 厂家 site:detail.1688.com`;
+        const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=zh-CN&count=10`;
+        console.log(`[Sourcing] Bing search: ${query}`);
 
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        await page.waitForTimeout(2500);
+        await page.goto(bingUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.waitForTimeout(1500);
 
         const offers = await page.evaluate(() => {
             const results = [];
             const seen = new Set();
 
-            // Lấy tất cả link có offer ID thực
+            // Lấy tất cả link trong Bing results có chứa detail.1688.com/offer/
             const allLinks = document.querySelectorAll('a[href*="detail.1688.com/offer/"]');
 
             for (const link of allLinks) {
@@ -93,26 +97,60 @@ async function scrape1688(keywords) {
                 seen.add(m[1]);
 
                 const offerId = m[1];
-                // Leo lên container cha gần nhất
-                const card = link.closest('li, article, div[class*="item"], div[class*="offer"], div[class*="card"]');
+                // Lấy title và snippet từ search result card
+                const card = link.closest('li, .b_algo, [class*="result"]');
+                const title = card?.querySelector('h2, h3')?.textContent?.trim()
+                    || link.textContent?.trim() || '';
+                const snippet = card?.querySelector('.b_caption p, .b_snippet, p')?.textContent?.trim() || '';
 
-                const title = card?.querySelector('[class*="subject"], [class*="title"]')?.textContent?.trim()
-                    || link.title || link.textContent?.trim() || '';
-                const company = card?.querySelector('[class*="company"]')?.textContent?.trim() || '';
-                const price = card?.querySelector('[class*="price"]')?.textContent?.trim() || '';
-                const moq = card?.querySelector('[class*="moq"], [class*="amount"], [class*="quantity"]')?.textContent?.trim() || '';
-
-                results.push({ offer_id: offerId, title, company, price, moq, url: `https://detail.1688.com/offer/${offerId}.html` });
+                results.push({
+                    offer_id: offerId,
+                    title,
+                    company: '',
+                    price: '',
+                    moq: '',
+                    snippet,
+                    url: `https://detail.1688.com/offer/${offerId}.html`,
+                });
                 if (results.length >= 6) break;
             }
             return results;
         });
 
-        console.log(`[Sourcing] 1688 returned ${offers.length} offers`);
+        console.log(`[Sourcing] Bing found ${offers.length} 1688 offers`);
+
+        // Nếu Bing không ra kết quả, thử lại không có site: filter
+        if (offers.length === 0) {
+            const broadQuery = `1688.com ${keywords} 批发`;
+            console.log(`[Sourcing] Retry broad: ${broadQuery}`);
+            await page.goto(`https://www.bing.com/search?q=${encodeURIComponent(broadQuery)}&count=10`, {
+                waitUntil: 'domcontentloaded', timeout: 20000,
+            });
+            await page.waitForTimeout(1500);
+
+            const broadOffers = await page.evaluate(() => {
+                const results = [];
+                const seen = new Set();
+                const allLinks = document.querySelectorAll('a[href*="detail.1688.com/offer/"]');
+                for (const link of allLinks) {
+                    const m = (link.href || '').match(/detail\.1688\.com\/offer\/(\d{8,15})\.html/);
+                    if (!m || seen.has(m[1])) continue;
+                    seen.add(m[1]);
+                    const card = link.closest('li, .b_algo, [class*="result"]');
+                    const title = card?.querySelector('h2, h3')?.textContent?.trim() || link.textContent?.trim() || '';
+                    results.push({ offer_id: m[1], title, company: '', price: '', moq: '', snippet: '', url: `https://detail.1688.com/offer/${m[1]}.html` });
+                    if (results.length >= 6) break;
+                }
+                return results;
+            });
+            console.log(`[Sourcing] Broad search found ${broadOffers.length} offers`);
+            return broadOffers;
+        }
+
         return offers;
 
     } catch (err) {
-        console.error('[Sourcing] 1688 scrape error:', err.message);
+        console.error('[Sourcing] Bing scrape error:', err.message);
         return [];
     } finally {
         if (browser) await browser.close().catch(() => {});
@@ -127,7 +165,7 @@ async function pickBestSupplier(product, offers) {
     const searchUrl = `https://s.1688.com/selloffer/offerlist.htm?keywords=${kw}`;
 
     const offersText = offers.map((o, i) =>
-        `[${i + 1}] offer_id=${o.offer_id} | title="${o.title}" | company="${o.company}" | price="${o.price}" | moq="${o.moq}"`
+        `[${i + 1}] offer_id=${o.offer_id} | title="${o.title}" | company="${o.company}" | price="${o.price}" | moq="${o.moq}" | snippet="${o.snippet || ''}"`
     ).join('\n');
 
     const prompt = `Bạn là chuyên gia sourcing hàng Trung Quốc.
