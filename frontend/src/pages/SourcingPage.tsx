@@ -4,6 +4,14 @@ import {
     ExternalLink, Copy, Scale, ShieldAlert, CheckCircle2, Search, Layers
 } from 'lucide-react';
 
+interface ProductInfo {
+    product_name_vn: string;
+    product_name_cn: string;
+    search_keywords_cn: string;
+    key_features: string;
+    category: string;
+}
+
 interface SourcingResult {
     product_name: string;
     verified_match: {
@@ -11,6 +19,7 @@ interface SourcingResult {
         factory_name_cn: string;
         factory_name_vn: string;
         direct_url: string;
+        platform: '1688' | 'taobao';
         trust_score: number;
         match_reason: string;
     };
@@ -79,12 +88,21 @@ export default function SourcingPage() {
     };
 
     const extractJson = (text: string): SourcingResult => {
-        // Thử parse trực tiếp
         const stripped = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-        // Tìm block JSON đầu tiên
-        const match = stripped.match(/\{[\s\S]*\}/);
-        if (!match) throw new Error('AI không trả về JSON hợp lệ. Vui lòng thử ảnh khác.');
-        return JSON.parse(match[0]);
+        const start = stripped.indexOf('{');
+        const end = stripped.lastIndexOf('}');
+        if (start === -1 || end === -1 || end <= start) throw new Error('AI không trả về JSON hợp lệ. Vui lòng thử ảnh khác.');
+        return JSON.parse(stripped.slice(start, end + 1));
+    };
+
+    const parseProductInfo = (text: string): ProductInfo | null => {
+        try {
+            const stripped = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+            const start = stripped.indexOf('{');
+            const end = stripped.lastIndexOf('}');
+            if (start === -1 || end === -1) return null;
+            return JSON.parse(stripped.slice(start, end + 1));
+        } catch { return null; }
     };
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,36 +159,45 @@ Chỉ trả JSON, không giải thích thêm.`;
     };
 
     /**
-     * Bước 2: Gemini + google_search — tìm Offer ID chính xác trên 1688
+     * Bước 2: Gemini + google_search — tìm supplier trên 1688 HOẶC Taobao
      * KHÔNG dùng inlineData để tránh conflict với google_search
      */
-    const step2_searchSupplier = async (productInfo: string): Promise<SourcingResult> => {
-        const prompt = `Bạn là chuyên gia sourcing 1688.com.
+    const step2_searchSupplier = async (product: ProductInfo): Promise<SourcingResult> => {
+        const searchKw = product.search_keywords_cn || product.product_name_cn;
+        const prompt = `Bạn là chuyên gia sourcing hàng hóa Trung Quốc cho doanh nghiệp Việt Nam.
 
-Thông tin sản phẩm cần tìm:
-${productInfo}
+Sản phẩm cần tìm xưởng gốc:
+- Tên tiếng Việt: ${product.product_name_vn}
+- Tên tiếng Trung: ${product.product_name_cn}
+- Từ khóa tìm kiếm: ${searchKw}
+- Đặc điểm: ${product.key_features}
+- Danh mục: ${product.category}
 
-NHIỆM VỤ:
-1. Dùng Google Search tìm sản phẩm này trên 1688.com với từ khóa tiếng Trung từ thông tin trên.
-2. Tìm đúng trang detail.1688.com/offer/[ID].html của sản phẩm phù hợp nhất.
-3. TRÍCH XUẤT chính xác Offer ID (số nguyên 10-15 chữ số) từ URL thực tế.
-4. Lấy tên công ty xưởng chính xác bằng tiếng Trung.
+NHIỆM VỤ — thực hiện theo thứ tự:
+1. Search Google với query: "${searchKw} 批发 直销 厂家 site:1688.com"
+2. Nếu ít kết quả, thử thêm: "${searchKw} 厂家直销 site:taobao.com"
+3. Chọn kết quả tốt nhất — ưu tiên xưởng gốc (厂家/直销) hơn đại lý.
+4. Trích xuất chính xác ID sản phẩm từ URL thực tế tìm được:
+   - 1688: detail.1688.com/offer/[ID].html → lấy số [ID] (8-15 chữ số)
+   - Taobao: item.taobao.com/item.htm?id=[ID] → lấy số [ID]
+5. Lấy thông tin logistics từ trang sản phẩm: cân nặng, giá, MOQ.
 
 QUAN TRỌNG:
-- Offer ID PHẢI là số thực trích xuất từ URL tìm thấy, không được tự tạo.
-- Nếu không tìm thấy ID chính xác, để offer_id = "" và trust_score = 0.
-- direct_url PHẢI có dạng: https://detail.1688.com/offer/[OFFER_ID].html
+- offer_id PHẢI là số thực từ URL tìm thấy — KHÔNG tự tạo.
+- Nếu không tìm được, để offer_id = "" và trust_score = 0.
+- platform: "1688" nếu link 1688.com, "taobao" nếu link taobao.com
 
-Trả về JSON duy nhất:
+Trả về JSON duy nhất (không giải thích thêm):
 {
   "product_name": "Tên sản phẩm đầy đủ",
   "verified_match": {
-    "offer_id": "Số ID 10-15 chữ số hoặc rỗng",
-    "factory_name_cn": "Tên công ty tiếng Trung",
-    "factory_name_vn": "Dịch nghĩa tên công ty",
-    "direct_url": "https://detail.1688.com/offer/[ID].html",
+    "offer_id": "ID số nguyên hoặc rỗng",
+    "factory_name_cn": "Tên xưởng/công ty tiếng Trung",
+    "factory_name_vn": "Dịch nghĩa tên xưởng",
+    "direct_url": "URL đầy đủ trang sản phẩm",
+    "platform": "1688 hoặc taobao",
     "trust_score": 85,
-    "match_reason": "Giải thích ngắn vì sao đây là kết quả phù hợp"
+    "match_reason": "Lý do chọn xưởng này"
   },
   "logistics": {
     "weight": "0.xx kg",
@@ -178,10 +205,10 @@ Trả về JSON duy nhất:
     "price_range": "¥xx - ¥xx"
   },
   "negotiation_script": {
-    "cn": "您好，我想询问这款产品的价格和最小起订量，能否给我优惠价？",
-    "vn": "Xin chào, tôi muốn hỏi giá và số lượng đặt hàng tối thiểu, có thể cho tôi giá tốt không?"
+    "cn": "您好，我想批量采购${product.product_name_cn || '这款产品'}，请问最小起订量是多少？能否提供优惠价格？",
+    "vn": "Xin chào, tôi muốn đặt hàng số lượng lớn ${product.product_name_vn || 'sản phẩm này'}, MOQ là bao nhiêu? Có thể cho giá tốt không?"
   },
-  "qc_checklist": ["Kiểm tra 1", "Kiểm tra 2", "Kiểm tra 3"]
+  "qc_checklist": ["Kiểm tra chất liệu", "Kiểm tra kích thước theo thông số", "Kiểm tra đóng gói vận chuyển", "Đối chiếu mẫu trước khi nhận lô lớn"]
 }`;
 
         const payload = {
@@ -193,12 +220,18 @@ Trả về JSON duy nhất:
         const text = await callGemini(SEARCH_MODEL, payload);
         const result = extractJson(text);
 
-        // Làm sạch và chuẩn hóa Offer ID
+        // Làm sạch và chuẩn hóa Offer ID + URL theo platform
         if (result.verified_match?.offer_id) {
             const idMatch = String(result.verified_match.offer_id).match(/\d{8,15}/);
             if (idMatch) {
                 result.verified_match.offer_id = idMatch[0];
-                result.verified_match.direct_url = `https://detail.1688.com/offer/${idMatch[0]}.html`;
+                const platform = result.verified_match.platform || '1688';
+                if (platform === 'taobao') {
+                    result.verified_match.direct_url = `https://item.taobao.com/item.htm?id=${idMatch[0]}`;
+                } else {
+                    result.verified_match.direct_url = `https://detail.1688.com/offer/${idMatch[0]}.html`;
+                    result.verified_match.platform = '1688';
+                }
             } else {
                 result.verified_match.offer_id = '';
                 result.verified_match.trust_score = 0;
@@ -226,11 +259,15 @@ Trả về JSON duy nhất:
             setStep('analyzing');
             setStepLabel('Bước 1/2: AI đang nhận diện sản phẩm...');
             const productInfoText = await step1_analyzeImage(mimeType, base64Data);
+            const parsedProduct = parseProductInfo(productInfoText) ?? {
+                product_name_vn: '', product_name_cn: '',
+                search_keywords_cn: '', key_features: '', category: ''
+            };
 
-            // Bước 2: Tìm trên 1688
+            // Bước 2: Tìm trên 1688 / Taobao
             setStep('searching');
-            setStepLabel('Bước 2/2: Tìm kiếm xưởng trên 1688...');
-            const result = await step2_searchSupplier(productInfoText);
+            setStepLabel('Bước 2/2: Tìm xưởng gốc 1688 & Taobao...');
+            const result = await step2_searchSupplier(parsedProduct);
 
             setSourcingResult(result);
             setStep('done');
@@ -256,7 +293,7 @@ Trả về JSON duy nhất:
             <div className="page-header" style={{ marginBottom: '1.5rem' }}>
                 <h2 className="page-title">📸 AI Visual Sourcing</h2>
                 <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                    Nhận diện sản phẩm từ ảnh → Tìm xưởng gốc 1688 bằng 2 bước AI chính xác.
+                    Nhận diện sản phẩm từ ảnh → Tìm xưởng gốc trên 1688 & Taobao bằng 2 bước AI.
                 </p>
             </div>
 
@@ -334,7 +371,7 @@ Trả về JSON duy nhất:
                             <p style={{ fontSize: '0.6rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>Cách hoạt động</p>
                             {[
                                 { icon: Camera, text: 'AI nhận diện sản phẩm từ ảnh' },
-                                { icon: Search, text: 'Search 1688 lấy Offer ID thực' },
+                                { icon: Search, text: 'Search 1688 & Taobao lấy ID thực' },
                                 { icon: Factory, text: 'Trả về xưởng + link đặt hàng' },
                             ].map(({ icon: Icon, text }, i) => (
                                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -368,6 +405,11 @@ Trả về JSON duy nhất:
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                                                 <span style={{ background: '#10b981', color: 'white', fontSize: '0.6rem', fontWeight: 900, padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Verified Match</span>
+                                                {sourcingResult.verified_match?.platform && (
+                                                    <span style={{ background: sourcingResult.verified_match.platform === 'taobao' ? 'rgba(251,146,60,0.15)' : 'rgba(239,68,68,0.12)', color: sourcingResult.verified_match.platform === 'taobao' ? '#fb923c' : '#f87171', fontSize: '0.6rem', fontWeight: 900, padding: '2px 8px', borderRadius: '4px', border: `1px solid ${sourcingResult.verified_match.platform === 'taobao' ? 'rgba(251,146,60,0.3)' : 'rgba(239,68,68,0.25)'}`, textTransform: 'uppercase' }}>
+                                                        {sourcingResult.verified_match.platform === 'taobao' ? 'Taobao' : '1688.com'}
+                                                    </span>
+                                                )}
                                                 {sourcingResult.verified_match?.offer_id ? (
                                                     <span style={{ color: '#818cf8', fontFamily: 'monospace', fontSize: '0.65rem', fontWeight: 700, background: 'rgba(99,102,241,0.1)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                         <Hash size={10} /> {sourcingResult.verified_match.offer_id}
@@ -416,7 +458,7 @@ Trả về JSON duy nhất:
                                                 className="btn btn-primary"
                                                 style={{ padding: '1rem', borderRadius: '1.25rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', textDecoration: 'none' }}
                                             >
-                                                Mở trang đặt hàng <ExternalLink size={16} />
+                                                Mở {sourcingResult.verified_match.platform === 'taobao' ? 'Taobao' : '1688'} <ExternalLink size={16} />
                                             </a>
                                         ) : (
                                             <div style={{ padding: '1rem', borderRadius: '1.25rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
