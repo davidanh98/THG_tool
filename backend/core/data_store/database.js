@@ -280,6 +280,23 @@ function absoluteSync() {
         status TEXT DEFAULT 'credited',
         created_at TEXT DEFAULT (datetime('now'))
       )`
+    },
+    sourcing_results: {
+      cols: ['search_query', 'search_type', 'product_name', 'product_name_cn', 'product_name_en', 'image_thumbnail', 'suppliers_json', 'best_supplier_json', 'specs_json', 'staff_name'],
+      create: `CREATE TABLE sourcing_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        search_query TEXT,
+        search_type TEXT DEFAULT 'image',
+        product_name TEXT,
+        product_name_cn TEXT,
+        product_name_en TEXT,
+        image_thumbnail TEXT,
+        suppliers_json TEXT DEFAULT '[]',
+        best_supplier_json TEXT DEFAULT '{}',
+        specs_json TEXT DEFAULT '{}',
+        staff_name TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )`
     }
   };
 
@@ -1176,6 +1193,49 @@ const setSetting = (key, value) => {
   `).run(key, value);
 };
 
+// ─── Sourcing Results ─────────────────────────────────────────────────────────
+
+const insertSourcingResult = (result) => {
+  const stmt = db.prepare(`
+    INSERT INTO sourcing_results (
+      search_query, search_type, product_name, product_name_cn, product_name_en,
+      image_thumbnail, suppliers_json, best_supplier_json, specs_json, staff_name
+    ) VALUES (
+      @search_query, @search_type, @product_name, @product_name_cn, @product_name_en,
+      @image_thumbnail, @suppliers_json, @best_supplier_json, @specs_json, @staff_name
+    ) RETURNING id
+  `);
+  const row = stmt.get({
+    search_query: result.search_query || '',
+    search_type: result.search_type || 'image',
+    product_name: result.product_name || '',
+    product_name_cn: result.product_name_cn || '',
+    product_name_en: result.product_name_en || '',
+    image_thumbnail: result.image_thumbnail || '',
+    suppliers_json: JSON.stringify(result.suppliers || []),
+    best_supplier_json: JSON.stringify(result.best_supplier || {}),
+    specs_json: JSON.stringify(result.specs || {}),
+    staff_name: result.staff_name || null,
+  });
+  return row.id;
+};
+
+const getSourcingHistory = (limit = 20) => {
+  return db.prepare(`
+    SELECT id, search_query, search_type, product_name, product_name_cn, product_name_en,
+           image_thumbnail, suppliers_json, best_supplier_json, specs_json, staff_name, created_at
+    FROM sourcing_results
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(limit);
+};
+
+const getSourcingResultById = (id) => {
+  return db.prepare(`
+    SELECT * FROM sourcing_results WHERE id = ?
+  `).get(id);
+};
+
 module.exports = {
   db,
   insertRawPost,
@@ -1226,5 +1286,9 @@ module.exports = {
   recordMetaFirstReply,
   getExpiredMetaClaims,
   autoReleaseMetaClaim,
+  // Sourcing Results
+  insertSourcingResult,
+  getSourcingHistory,
+  getSourcingResultById,
   _db: db
 };

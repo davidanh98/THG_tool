@@ -1,14 +1,17 @@
 /**
- * THG Sourcing Service — Full Automation Pipeline
+ * THG Sourcing Service — Full Automation Pipeline v2
  *
- * Step 1: Gemini Vision (server-side) → xác định sản phẩm + Chinese keywords
- * Step 2: Playwright stealth → scrape real offers từ 1688.com
- * Step 3: Gemini text → chọn offer phù hợp nhất + generate output
+ * IMPROVEMENTS:
+ * - Multi-supplier: returns top 5 suppliers (was 1)
+ * - Text search: accepts product name OR image
+ * - Expanded specs: weight, CBM, material, lead time, supplier rating
+ * - 1688 via Google: searches Google for 1688 detail pages
+ * - DB persistence: saves all results for history
  *
- * Tại sao backend:
- * - Gemini google_search frontend không crawl được 1688 (JS-rendered, Baidu-indexed)
- * - Playwright cần Node.js environment
- * - GEMINI_API_KEY không cần expose ra client
+ * Pipeline:
+ *   Step 1: Gemini Vision/Text → product identification + keywords
+ *   Step 2: Playwright scrape Alibaba.com (multi-supplier) + 1688 via Google
+ *   Step 3: Gemini enrich missing data → format JSON array
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -19,32 +22,39 @@ function getGenAI() {
     return _genAI;
 }
 
-// ─── Parse JSON từ Gemini text ────────────────────────────────────────────────
 function parseJson(text) {
     const stripped = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    // Try array first
+    const arrStart = stripped.indexOf('[');
+    const arrEnd = stripped.lastIndexOf(']');
+    if (arrStart !== -1 && arrEnd > arrStart) {
+        try { return JSON.parse(stripped.slice(arrStart, arrEnd + 1)); } catch (e) { }
+    }
+    // Try object
     const start = stripped.indexOf('{');
     const end = stripped.lastIndexOf('}');
     if (start === -1 || end === -1) throw new Error('No JSON in response');
     return JSON.parse(stripped.slice(start, end + 1));
 }
 
-// ─── Step 1: Gemini Vision — nhận diện sản phẩm ──────────────────────────────
+// ─── Step 1a: Gemini Vision (image input) ─────────────────────────────────────
 async function analyzeImage(imageBase64, mimeType) {
     const model = getGenAI().getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    const prompt = `Phân tích ảnh sản phẩm này. Nếu có logo/số/tên custom trên sản phẩm (ví dụ: số áo team thể thao, tên thương hiệu riêng), BỎ QUA logo đó — chỉ xác định LOẠI sản phẩm gốc (base product).
+    const prompt = `Analyze this product image carefully. If there are custom logos, brand names, or team numbers on the product, IGNORE them — identify only the BASE PRODUCT TYPE.
 
-Ví dụ: áo thể thao in logo team → "áo polo thể thao", không phải "áo team X"
-
-Trả về JSON:
+Return JSON:
 {
-  "product_name_vn": "tên loại sản phẩm gốc tiếng Việt (ngắn gọn)",
-  "product_name_cn": "tên tiếng Trung ngắn (5-10 chữ Hán, VD: 运动夹克)",
-  "search_keywords_cn": "keyword tìm xưởng sỉ trên 1688 (3-5 từ Trung cách nhau dấu phẩy, VD: 运动夹克,批发,厂家)",
-  "key_features": "chất liệu chính, màu sắc, kiểu dáng nổi bật",
-  "category": "danh mục sản phẩm"
+  "product_name_vn": "tên loại sản phẩm gốc tiếng Việt",
+  "product_name_cn": "tên tiếng Trung (5-8 chữ Hán)",
+  "product_name_en": "product type in English (short, for Alibaba search)",
+  "search_keywords_cn": "keyword tìm xưởng 1688 (3-5 từ Trung, cách nhau dấu phẩy)",
+  "search_keywords_en": "english keywords for Alibaba.com search (3-5 words)",
+  "key_features": "material, color, style (no brand names)",
+  "category": "product category",
+  "estimated_weight_kg": "ước tính cân nặng 1 đơn vị (kg) — dựa trên loại sản phẩm"
 }
-Chỉ trả JSON, không giải thích.`;
+Return JSON only.`;
 
     const result = await model.generateContent([
         { text: prompt },
@@ -54,231 +64,592 @@ Chỉ trả JSON, không giải thích.`;
     return parseJson(result.response.text());
 }
 
-// ─── Step 2: Tìm supplier URLs qua Gemini grounding — 2 queries song song ─────
-// Query 1 (EN): Tìm Alibaba.com — Google index tốt, same suppliers với 1688
-// Query 2 (CN): Tìm 1688/Taobao — backup nếu Alibaba không ra
-async function findSupplierUrls(keywords, productNameVn) {
-    const axios = require('axios');
-    const apiKey = process.env.GEMINI_API_KEY;
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
-    const callSearch = async (prompt) => {
-        const res = await axios.post(apiUrl, {
-            contents: [{ parts: [{ text: prompt }] }],
-            tools: [{ google_search: {} }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 1500 },
-        }, { headers: { 'Content-Type': 'application/json' }, timeout: 45000 });
-
-        const candidate = res.data?.candidates?.[0];
-        return {
-            text: candidate?.content?.parts?.map(p => p.text || '').join('') || '',
-            chunks: candidate?.groundingMetadata?.groundingChunks || [],
-        };
-    };
-
-    // Query 1: Alibaba.com (English) — Google index tốt nhất
-    const q1 = `Find wholesale factory suppliers for "${productNameVn}" (${keywords}) on alibaba.com.
-Show supplier name, price per unit, MOQ, product weight. Prefer verified factory/manufacturer.`;
-
-    // Query 2: 1688/Taobao (Chinese) — giá gốc hơn nhưng khó index
-    const q2 = `在1688.com和taobao.com上找"${keywords}"的批发厂家供应商。
-显示供应商名称、单价、起订量(MOQ)、重量。`;
-
-    console.log('[Sourcing] Running 2 parallel search queries...');
-    const [r1, r2] = await Promise.all([callSearch(q1), callSearch(q2)]);
-
-    const allChunks = [...r1.chunks, ...r2.chunks];
-    const textResponse = r1.text + '\n' + r2.text;
-
-    console.log(`[Sourcing] Grounding chunks: Q1=${r1.chunks.length} Q2=${r2.chunks.length}`);
-
-    const offers = [];
-    const seen = new Set();
-
-    for (const chunk of allChunks) {
-        const uri = chunk.web?.uri || '';
-        const title = chunk.web?.title || '';
-
-        // Alibaba.com product/supplier page — Google index tốt nhất
-        const mAlibaba = uri.match(/alibaba\.com\/(product-detail|pla|trade\/search)\/[^?]+/);
-        if (mAlibaba && uri.includes('alibaba.com') && !seen.has(uri)) {
-            seen.add(uri);
-            // Extract product ID if present
-            const idMatch = uri.match(/_(\d{10,20})\.html/) || uri.match(/[/_](\d{10,20})[/?]/);
-            offers.push({
-                offer_id: idMatch?.[1] || '',
-                platform: 'alibaba',
-                title,
-                uri,
-                url: uri,
-            });
-        }
-
-        // 1688 offer URL
-        const m1688 = uri.match(/detail\.1688\.com\/offer\/(\d{8,15})\.html/);
-        if (m1688 && !seen.has(m1688[1])) {
-            seen.add(m1688[1]);
-            offers.push({ offer_id: m1688[1], platform: '1688', title, uri, url: `https://detail.1688.com/offer/${m1688[1]}.html` });
-        }
-
-        // Taobao item URL
-        const mTaobao = uri.match(/item\.taobao\.com\/item\.htm[^"&]*[?&]id=(\d{8,15})/);
-        if (mTaobao && !seen.has('tb_' + mTaobao[1])) {
-            seen.add('tb_' + mTaobao[1]);
-            offers.push({ offer_id: mTaobao[1], platform: 'taobao', title, uri, url: `https://item.taobao.com/item.htm?id=${mTaobao[1]}` });
-        }
-
-        // AliExpress item URL
-        const mAli = uri.match(/aliexpress\.com\/item\/(\d{8,20})\.html/);
-        if (mAli && !seen.has('ali_' + mAli[1])) {
-            seen.add('ali_' + mAli[1]);
-            offers.push({ offer_id: mAli[1], platform: 'aliexpress', title, uri, url: uri });
-        }
-
-        // DHgate product URL
-        const mDH = uri.match(/dhgate\.com\/product\/[^/]+\/(\d{8,20})\.html/);
-        if (mDH && !seen.has('dh_' + mDH[1])) {
-            seen.add('dh_' + mDH[1]);
-            offers.push({ offer_id: mDH[1], platform: 'dhgate', title, uri, url: uri });
-        }
-    }
-
-    // Ưu tiên: 1688 > alibaba > taobao > aliexpress > dhgate
-    const priority = ['1688', 'alibaba', 'taobao', 'aliexpress', 'dhgate'];
-    offers.sort((a, b) => priority.indexOf(a.platform) - priority.indexOf(b.platform));
-
-    console.log(`[Sourcing] Offers found: ${offers.length}`, offers.map(o => `${o.platform}:${o.offer_id||'?'}`).join(', '));
-    return { offers, textResponse };
-}
-
-// ─── Step 3: Gemini tổng hợp supplier data ────────────────────────────────────
-async function buildSupplierResult(product, offers, textResponse) {
+// ─── Step 1b: Gemini Text (product name input) ────────────────────────────────
+async function analyzeText(productName) {
     const model = getGenAI().getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    const kw = encodeURIComponent(product.search_keywords_cn || product.product_name_cn || '');
-    const searchUrl1688 = `https://s.1688.com/selloffer/offerlist.htm?keywords=${kw}`;
-    const best = offers[0]; // đã được sort theo priority
+    const prompt = `Bạn là chuyên gia sourcing hàng Trung Quốc. Phân tích sản phẩm: "${productName}"
 
-    const offersList = offers.slice(0, 6).map((o, i) =>
-        `[${i + 1}] platform=${o.platform} | id=${o.offer_id || 'n/a'} | title="${o.title}" | url=${o.url}`
-    ).join('\n');
-
-    const prompt = `Bạn là chuyên gia sourcing hàng Trung Quốc/Châu Á.
-
-Sản phẩm cần tìm nhà cung cấp: ${product.product_name_vn} (CN: ${product.product_name_cn})
-Đặc điểm: ${product.key_features} | Danh mục: ${product.category}
-
-DANH SÁCH URLs THẬT từ Google Search (grounding):
-${offersList || 'Không tìm được URL sản phẩm cụ thể.'}
-
-THÔNG TIN từ kết quả tìm kiếm:
-${textResponse.slice(0, 1000)}
-
-NHIỆM VỤ:
-1. Từ URLs và text trên, xác định NHÀ CUNG CẤP tốt nhất (tên công ty/xưởng)
-2. Điền thông tin logistics thực tế từ dữ liệu tìm được
-3. Nếu có URL thật trong danh sách → dùng url và id đúng từ danh sách đó
-4. Nếu không có URL cụ thể → để offer_id="" nhưng vẫn điền đầy đủ supplier name + logistics từ text
-5. KHÔNG tự bịa offer_id
-
-Trả về JSON:
+Return JSON:
 {
-  "product_name": "${product.product_name_vn}",
-  "verified_match": {
-    "offer_id": "${best?.offer_id || ''}",
-    "factory_name_cn": "Tên nhà cung cấp/xưởng tiếng Trung (extract từ title hoặc text)",
-    "factory_name_vn": "Dịch nghĩa hoặc mô tả nhà cung cấp",
-    "direct_url": "${best?.url || ''}",
-    "search_url": "${searchUrl1688}",
-    "platform": "${best?.platform || '1688'}",
-    "trust_score": ${offers.length > 0 ? 80 : 40},
-    "match_reason": "Nguồn: [tên platform] — lý do chọn supplier này"
-  },
-  "logistics": {
-    "weight": "cân nặng thực tế hoặc ước tính (vd: 0.8 kg/đôi)",
-    "min_order": "MOQ từ data (vd: 1 đôi, 5 đôi, 1 thùng)",
-    "price_range": "giá sỉ từ data (vd: ¥80-150/đôi)"
-  },
-  "negotiation_script": {
-    "cn": "Kịch bản chat tiếng Trung để mua sỉ ${product.product_name_cn}, hỏi giá và MOQ",
-    "vn": "Dịch tiếng Việt của kịch bản trên"
-  },
-  "qc_checklist": [
-    "Kiểm tra đế giày (độ bám, chất liệu)",
-    "Kiểm tra mũi giày và phần lót",
-    "Đối chiếu kích cỡ với bảng size",
-    "Kiểm tra đường may và độ bền"
-  ]
+  "product_name_vn": "tên tiếng Việt chuẩn",
+  "product_name_cn": "tên tiếng Trung (5-8 chữ Hán, phù hợp search 1688)",
+  "product_name_en": "English name (short, for Alibaba search)",
+  "search_keywords_cn": "keyword tìm xưởng 1688 (3-5 từ Trung, cách nhau dấu phẩy)",
+  "search_keywords_en": "english keywords for Alibaba.com search (3-5 words)",
+  "key_features": "material, typical features (no brand names)",
+  "category": "product category",
+  "estimated_weight_kg": "ước tính cân nặng 1 đơn vị (kg)"
 }
-Chỉ trả JSON.`;
+Return JSON only.`;
+
+    const result = await model.generateContent([{ text: prompt }]);
+    return parseJson(result.response.text());
+}
+
+// ─── Step 2a: Playwright scrape Alibaba.com (multi-supplier) ──────────────────
+async function scrapeAlibaba(product) {
+    let browser;
+    try {
+        const { chromium } = require('playwright-extra');
+        const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+        chromium.use(StealthPlugin());
+
+        browser = await chromium.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        });
+
+        const context = await browser.newContext({
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            locale: 'en-US',
+        });
+        const page = await context.newPage();
+        await page.setDefaultTimeout(30000);
+
+        // Search Alibaba.com với English keywords
+        const keywords = product.search_keywords_en || product.product_name_en;
+        const searchUrl = `https://www.alibaba.com/trade/search?SearchText=${encodeURIComponent(keywords)}&IndexArea=product_en&tab=all`;
+        console.log(`[Sourcing] Alibaba search: "${keywords}"`);
+
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+        await page.waitForTimeout(3000);
+
+        // Lấy danh sách products từ search results
+        const products = await page.evaluate(() => {
+            const results = [];
+            const seen = new Set();
+            const cardSelectors = [
+                '.J-offer-wrapper', '.organic-offer-wrapper',
+                '[class*="offer-list"] > li', '.search-card-e-wrapper',
+                '[class*="product-card"]', '.list-item',
+            ];
+
+            let cards = [];
+            for (const sel of cardSelectors) {
+                const found = [...document.querySelectorAll(sel)];
+                if (found.length > 2) { cards = found; break; }
+            }
+
+            for (const card of cards.slice(0, 15)) {
+                const links = [...card.querySelectorAll('a[href*="alibaba.com"]')];
+                const productLink = links.find(l =>
+                    l.href.includes('/product-detail/') ||
+                    l.href.includes('/p-detail/') ||
+                    l.href.includes('.html')
+                );
+                if (!productLink || seen.has(productLink.href)) continue;
+                seen.add(productLink.href);
+
+                const title = card.querySelector(
+                    '[class*="title"], h4, .subject, [class*="subject"]'
+                )?.textContent?.trim() || productLink.textContent?.trim() || '';
+
+                const price = card.querySelector('[class*="price"]')?.textContent?.trim() || '';
+                const moq = card.querySelector('[class*="moq"], [class*="min-order"]')?.textContent?.trim() || '';
+                const supplier = card.querySelector('[class*="company"], [class*="supplier"]')?.textContent?.trim() || '';
+
+                if (!title) continue;
+                results.push({ url: productLink.href, title, price, moq, supplier });
+            }
+            return results;
+        });
+
+        console.log(`[Sourcing] Alibaba search returned ${products.length} products`);
+        if (products.length === 0) return [];
+
+        // Score & sort by keyword match
+        const kw = (product.search_keywords_en || product.product_name_en || '').toLowerCase();
+        const kwParts = kw.split(/\s+/).filter(w => w.length > 2);
+        const scored = products.map(p => ({
+            ...p,
+            score: kwParts.filter(w => p.title.toLowerCase().includes(w)).length,
+        })).sort((a, b) => b.score - a.score);
+
+        // Visit top 5 product pages for detailed specs
+        const topProducts = scored.slice(0, 5);
+        const suppliers = [];
+
+        for (const prod of topProducts) {
+            try {
+                await page.goto(prod.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await page.waitForTimeout(2000);
+
+                const specs = await page.evaluate(() => {
+                    const data = {
+                        weight: '', dimensions: '', material: '',
+                        supplierName: '', supplierCountry: '',
+                        supplierYears: '', supplierRating: '',
+                        moqDetail: '', priceDetail: '', leadTime: '',
+                        certifications: '', productUrl: window.location.href,
+                    };
+
+                    // Supplier name
+                    const supplierSelectors = [
+                        '.company-name', '[class*="company-name"]',
+                        '.supplier-name', '[class*="supplier-name"]',
+                        'a[href*=".en.alibaba.com"]',
+                    ];
+                    for (const sel of supplierSelectors) {
+                        const el = document.querySelector(sel);
+                        if (el?.textContent?.trim()) { data.supplierName = el.textContent.trim(); break; }
+                    }
+
+                    // Supplier years badge
+                    const yearsBadge = document.querySelector('[class*="year"], [class*="Year"]');
+                    if (yearsBadge) data.supplierYears = yearsBadge.textContent.trim();
+
+                    const allText = document.body.innerText || '';
+
+                    // Weight — expanded patterns
+                    const weightPatterns = [
+                        /(?:gross\s+)?weight[:\s]+([0-9.]+\s*(?:kg|g|lbs?|oz|KG|G)[^\n,;]*)/i,
+                        /(?:net\s+)?weight[:\s]+([0-9.]+\s*(?:kg|g|lbs?|oz|KG|G)[^\n,;]*)/i,
+                        /weight[^:]*:\s*([0-9.]+\s*(?:kg|g|lbs?|oz)[^\n]{0,30})/i,
+                        /([0-9.]+\s*(?:kg|KG))\s*(?:\/\s*(?:pc|piece|pcs|pair|set))/i,
+                        /(\d+(?:\.\d+)?)\s*grams?\b/i,
+                    ];
+                    for (const re of weightPatterns) {
+                        const m = allText.match(re);
+                        if (m) { data.weight = m[1].trim().slice(0, 50); break; }
+                    }
+
+                    // Material
+                    const materialPatterns = [
+                        /material[:\s]+([^\n,;]{3,60})/i,
+                        /fabric[:\s]+([^\n,;]{3,60})/i,
+                        /(?:made\s+(?:of|from))[:\s]+([^\n,;]{3,60})/i,
+                    ];
+                    for (const re of materialPatterns) {
+                        const m = allText.match(re);
+                        if (m) { data.material = m[1].trim().slice(0, 60); break; }
+                    }
+
+                    // Dimensions / CBM
+                    const dimPatterns = [
+                        /(?:dimension|size|package\s+size)[:\s]+([^\n]{5,80})/i,
+                        /(\d+)\s*[x×]\s*(\d+)\s*[x×]\s*(\d+)\s*(?:cm|mm|m)\b/i,
+                        /CBM[:\s]+([0-9.]+)/i,
+                        /cubic\s+meter[:\s]+([0-9.]+)/i,
+                    ];
+                    for (const re of dimPatterns) {
+                        const m = allText.match(re);
+                        if (m) { data.dimensions = m[0].trim().slice(0, 80); break; }
+                    }
+
+                    // Lead time
+                    const leadTimePatterns = [
+                        /lead\s*time[:\s]+([^\n,;]{3,60})/i,
+                        /delivery[:\s]+(\d+[-–]\d+\s*days?)/i,
+                        /shipping[:\s]+(\d+[-–]\d+\s*(?:days?|business\s*days?))/i,
+                        /(\d+[-–]\d+\s*days?)\s*(?:after\s+(?:payment|order))/i,
+                    ];
+                    for (const re of leadTimePatterns) {
+                        const m = allText.match(re);
+                        if (m) { data.leadTime = m[1].trim().slice(0, 60); break; }
+                    }
+
+                    // Certifications
+                    const certPatterns = [
+                        /certif(?:ication|icate)[s]?[:\s]+([^\n]{3,100})/i,
+                        /(ISO\s*\d+|CE|FDA|SGS|BSCI|RoHS|REACH|GMP|LFGB|EN\s*\d+)/gi,
+                    ];
+                    for (const re of certPatterns) {
+                        const m = allText.match(re);
+                        if (m) { data.certifications = (Array.isArray(m) ? m.join(', ') : m[1]).trim().slice(0, 100); break; }
+                    }
+
+                    // Spec table extraction
+                    const rows = document.querySelectorAll('table tr, [class*="spec"] [class*="item"], [class*="attribute"] [class*="item"]');
+                    for (const row of rows) {
+                        const text = row.textContent?.toLowerCase() || '';
+                        const getVal = () => {
+                            const cells = row.querySelectorAll('td, [class*="value"], span');
+                            for (const cell of cells) {
+                                const v = cell.textContent?.trim();
+                                if (v && v.length > 1 && v.length < 80) return v;
+                            }
+                            return '';
+                        };
+                        if (!data.weight && text.includes('weight')) {
+                            const v = getVal();
+                            if (/[0-9]/.test(v) && /kg|g|lb|oz/i.test(v)) data.weight = v.slice(0, 50);
+                        }
+                        if (!data.material && (text.includes('material') || text.includes('fabric'))) {
+                            data.material = getVal().slice(0, 60);
+                        }
+                        if (!data.dimensions && (text.includes('dimension') || text.includes('size') || text.includes('cbm'))) {
+                            data.dimensions = getVal().slice(0, 80);
+                        }
+                        if (!data.leadTime && (text.includes('lead time') || text.includes('delivery'))) {
+                            data.leadTime = getVal().slice(0, 60);
+                        }
+                    }
+
+                    // MOQ + Price
+                    const moqPatterns = [
+                        /min\.?\s*order[^:]*:\s*([0-9,]+\s*(?:pieces?|pairs?|pcs?|sets?|units?)[^\n,;]*)/i,
+                        /minimum\s+order[^:]*:\s*([0-9,]+[^\n,;]{0,30})/i,
+                    ];
+                    for (const re of moqPatterns) {
+                        const m = allText.match(re);
+                        if (m) { data.moqDetail = m[1].trim().slice(0, 50); break; }
+                    }
+
+                    const priceMatch = allText.match(/\$\s*([0-9.]+)\s*[-–]\s*\$?\s*([0-9.]+)/);
+                    if (priceMatch) data.priceDetail = `$${priceMatch[1]} - $${priceMatch[2]}`;
+
+                    return data;
+                });
+
+                suppliers.push({
+                    title: prod.title,
+                    supplier: specs.supplierName || prod.supplier,
+                    supplierYears: specs.supplierYears,
+                    supplierRating: specs.supplierRating,
+                    price: specs.priceDetail || prod.price,
+                    moq: specs.moqDetail || prod.moq,
+                    weight: specs.weight,
+                    material: specs.material,
+                    dimensions: specs.dimensions,
+                    leadTime: specs.leadTime,
+                    certifications: specs.certifications,
+                    url: specs.productUrl || prod.url,
+                    platform: 'alibaba',
+                    searchScore: prod.score,
+                });
+
+                console.log(`[Sourcing] ✅ Supplier ${suppliers.length}: "${specs.supplierName || prod.supplier}" weight="${specs.weight}" material="${specs.material}"`);
+            } catch (err) {
+                console.log(`[Sourcing] ⚠️ Failed to scrape product page: ${err.message}`);
+            }
+        }
+
+        return suppliers;
+
+    } catch (err) {
+        console.error('[Sourcing] Alibaba scrape error:', err.message);
+        return [];
+    } finally {
+        if (browser) await browser.close().catch(() => { });
+    }
+}
+
+// ─── Step 2b: 1688 via Google search redirect ─────────────────────────────────
+async function search1688ViaGoogle(product) {
+    let browser;
+    try {
+        const { chromium } = require('playwright-extra');
+        const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+        chromium.use(StealthPlugin());
+
+        browser = await chromium.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        });
+
+        const context = await browser.newContext({
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            locale: 'zh-CN',
+        });
+        const page = await context.newPage();
+        await page.setDefaultTimeout(25000);
+
+        const kwCn = product.search_keywords_cn || product.product_name_cn || '';
+        if (!kwCn) return [];
+
+        // Google search for 1688 detail pages
+        const googleUrl = `https://www.google.com/search?q=site:detail.1688.com+${encodeURIComponent(kwCn)}&num=8`;
+        console.log(`[Sourcing] 1688 Google search: "${kwCn}"`);
+
+        await page.goto(googleUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
+        await page.waitForTimeout(2000);
+
+        // Extract 1688 URLs from Google results
+        const urls = await page.evaluate(() => {
+            const links = [...document.querySelectorAll('a[href*="detail.1688.com"]')];
+            const results = [];
+            const seen = new Set();
+            for (const a of links) {
+                let href = a.href;
+                // Google wraps links in redirect — extract actual URL
+                const match = href.match(/url\?q=([^&]+)/);
+                if (match) href = decodeURIComponent(match[1]);
+                if (!href.includes('detail.1688.com') || seen.has(href)) continue;
+                seen.add(href);
+                const title = a.querySelector('h3')?.textContent?.trim() || a.textContent?.trim()?.slice(0, 100) || '';
+                results.push({ url: href, title });
+            }
+            return results.slice(0, 5);
+        });
+
+        console.log(`[Sourcing] 1688 Google found ${urls.length} detail pages`);
+        if (urls.length === 0) return [];
+
+        // Visit top 3 detail pages
+        const suppliers = [];
+        for (const item of urls.slice(0, 3)) {
+            try {
+                await page.goto(item.url, { waitUntil: 'domcontentloaded', timeout: 25000 });
+                await page.waitForTimeout(2500);
+
+                const specs = await page.evaluate(() => {
+                    const data = {
+                        supplierName: '', weight: '', material: '', dimensions: '',
+                        moq: '', price: '', leadTime: '', productUrl: window.location.href,
+                    };
+
+                    const allText = document.body.innerText || '';
+
+                    // Supplier name — 1688 specific
+                    const shopSelectors = [
+                        '.shop-name', '[class*="shop-name"]',
+                        '.company-name', '[class*="company-name"]',
+                        '.supplier-name',
+                    ];
+                    for (const sel of shopSelectors) {
+                        const el = document.querySelector(sel);
+                        if (el?.textContent?.trim()) { data.supplierName = el.textContent.trim(); break; }
+                    }
+
+                    // Weight (Chinese patterns)
+                    const weightPatterns = [
+                        /(?:重量|净重|毛重)[：:]\s*([0-9.]+\s*(?:kg|g|千克|克)[^\n]*)/i,
+                        /(?:weight)[：:]\s*([0-9.]+\s*(?:kg|g)[^\n]*)/i,
+                        /([0-9.]+)\s*(?:kg|千克|公斤)\s*(?:\/\s*(?:个|件|双|套|对))/i,
+                    ];
+                    for (const re of weightPatterns) {
+                        const m = allText.match(re);
+                        if (m) { data.weight = m[1]?.trim().slice(0, 50) || m[0].slice(0, 50); break; }
+                    }
+
+                    // Material (Chinese)
+                    const matPatterns = [
+                        /(?:材质|材料|面料)[：:]\s*([^\n]{3,60})/,
+                        /material[：:]\s*([^\n]{3,60})/i,
+                    ];
+                    for (const re of matPatterns) {
+                        const m = allText.match(re);
+                        if (m) { data.material = m[1].trim().slice(0, 60); break; }
+                    }
+
+                    // Dimensions
+                    const dimPatterns = [
+                        /(?:尺寸|规格|包装尺寸)[：:]\s*([^\n]{5,80})/,
+                        /(\d+)\s*[x×*]\s*(\d+)\s*[x×*]\s*(\d+)\s*(?:cm|mm)/i,
+                    ];
+                    for (const re of dimPatterns) {
+                        const m = allText.match(re);
+                        if (m) { data.dimensions = (m[1] || m[0]).trim().slice(0, 80); break; }
+                    }
+
+                    // MOQ (Chinese)
+                    const moqPatterns = [
+                        /(?:起订量|最小起订|起批量|最低起订)[：:]\s*([0-9,]+\s*(?:件|个|双|套|对|箱)?[^\n]*)/,
+                        /(\d+)\s*(?:件|个|双)起/,
+                    ];
+                    for (const re of moqPatterns) {
+                        const m = allText.match(re);
+                        if (m) { data.moq = m[1]?.trim().slice(0, 50) || m[0].slice(0, 50); break; }
+                    }
+
+                    // Price — ¥ or 元
+                    const priceMatch = allText.match(/[¥￥]\s*([0-9.]+)\s*[-–~]\s*[¥￥]?\s*([0-9.]+)/);
+                    if (priceMatch) data.price = `¥${priceMatch[1]} - ¥${priceMatch[2]}`;
+                    else {
+                        const singlePrice = allText.match(/[¥￥]\s*([0-9.]+)/);
+                        if (singlePrice) data.price = `¥${singlePrice[1]}`;
+                    }
+
+                    // Lead time
+                    const ltMatch = allText.match(/(?:发货|交期|交货)[：:]\s*([^\n]{3,40})/);
+                    if (ltMatch) data.leadTime = ltMatch[1].trim().slice(0, 40);
+
+                    return data;
+                });
+
+                // Extract offer ID from URL
+                const offerIdMatch = item.url.match(/offer\/(\d+)/) || item.url.match(/(\d{10,20})/);
+                const offerId = offerIdMatch ? offerIdMatch[1] : '';
+
+                suppliers.push({
+                    title: item.title,
+                    supplier: specs.supplierName,
+                    price: specs.price,
+                    moq: specs.moq,
+                    weight: specs.weight,
+                    material: specs.material,
+                    dimensions: specs.dimensions,
+                    leadTime: specs.leadTime,
+                    certifications: '',
+                    url: specs.productUrl || item.url,
+                    offerId,
+                    platform: '1688',
+                    searchScore: 0,
+                });
+
+                console.log(`[Sourcing] ✅ 1688 supplier: "${specs.supplierName}" weight="${specs.weight}" price="${specs.price}"`);
+            } catch (err) {
+                console.log(`[Sourcing] ⚠️ 1688 page scrape failed: ${err.message}`);
+            }
+        }
+
+        return suppliers;
+
+    } catch (err) {
+        console.error('[Sourcing] 1688 Google search error:', err.message);
+        return [];
+    } finally {
+        if (browser) await browser.close().catch(() => { });
+    }
+}
+
+// ─── Step 3: Enrich + Format multi-supplier JSON ──────────────────────────────
+async function buildFinalResult(product, allSuppliers) {
+    const model = getGenAI().getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    const kw1688 = encodeURIComponent(product.search_keywords_cn || product.product_name_cn || '');
+    const kwAlibaba = encodeURIComponent(product.search_keywords_en || product.product_name_en || '');
+    const searchUrl1688 = `https://s.1688.com/selloffer/offerlist.htm?keywords=${kw1688}`;
+    const searchUrlAlibaba = `https://www.alibaba.com/trade/search?SearchText=${kwAlibaba}`;
+
+    const suppliersData = allSuppliers.length > 0
+        ? allSuppliers.map((s, i) => `
+Supplier ${i + 1} [${s.platform}]:
+  - Tên: ${s.supplier || 'N/A'}
+  - Sản phẩm: ${s.title || 'N/A'}
+  - Giá: ${s.price || 'N/A'}
+  - MOQ: ${s.moq || 'N/A'}
+  - Cân nặng: ${s.weight || 'chưa tìm được'}
+  - Chất liệu: ${s.material || 'N/A'}
+  - Kích thước: ${s.dimensions || 'N/A'}
+  - Lead time: ${s.leadTime || 'N/A'}
+  - Chứng nhận: ${s.certifications || 'N/A'}
+  - URL: ${s.url}
+`).join('\n')
+        : 'Không scrape được — dùng kiến thức chuyên ngành để ước tính.';
+
+    const prompt = `Bạn là chuyên gia sourcing hàng Trung Quốc cho công ty logistics THG.
+
+Sản phẩm: ${product.product_name_vn} (EN: ${product.product_name_en}, CN: ${product.product_name_cn})
+Đặc điểm: ${product.key_features}
+Cân nặng ước tính: ${product.estimated_weight_kg || 'N/A'}
+
+=== DỮ LIỆU SCRAPE THẬT ===
+${suppliersData}
+
+Dựa trên dữ liệu trên, tạo profile cho TẤT CẢ suppliers tìm được (tối đa 5).
+- Nếu weight chưa có → ước tính chính xác dựa trên loại sản phẩm
+- Nếu material chưa có → ước tính dựa trên loại sản phẩm  
+- Nếu không có supplier nào → tạo 1 profile ước tính
+
+Trả về JSON ARRAY, mỗi phần tử:
+{
+  "rank": 1,
+  "offer_id": "ID từ URL hoặc rỗng",
+  "factory_name_cn": "Tên nhà cung cấp/xưởng",
+  "factory_name_vn": "Dịch nghĩa hoặc mô tả",
+  "direct_url": "URL sản phẩm",
+  "search_url": "${searchUrl1688}",
+  "platform": "alibaba hoặc 1688",
+  "trust_score": 0-100,
+  "match_reason": "Lý do chọn supplier này",
+  "logistics": {
+    "weight": "Cân nặng (bắt buộc — vd: 0.8 kg/đôi)",
+    "cbm": "CBM ước tính cho 100 units (vd: 0.5 m³) hoặc kích thước đóng gói",
+    "material": "Chất liệu chính",
+    "min_order": "MOQ",
+    "price_range": "Giá",
+    "lead_time": "Thời gian giao hàng (vd: 7-15 ngày)",
+    "certifications": "Chứng nhận nếu có"
+  },
+  "supplier_info": {
+    "years_in_business": "Số năm hoạt động",
+    "rating": "Rating nếu có"
+  }
+}
+
+Kèm thêm 1 object cuối cùng trong array (không đếm vào supplier) với key "negotiation":
+{
+  "negotiation": true,
+  "script_cn": "你好，我想批量采购${product.product_name_cn}...",
+  "script_vn": "Xin chào, tôi muốn đặt hàng sỉ ${product.product_name_vn}...",
+  "qc_checklist": ["Xác nhận cân nặng thực tế", "Kiểm tra chất liệu", "Đối chiếu kích thước", "Kiểm tra đóng gói"]
+}
+
+CHỈ TRẢ JSON ARRAY.`;
 
     const result = await model.generateContent([{ text: prompt }]);
     const parsed = parseJson(result.response.text());
 
-    // Enforce: nếu Gemini bịa offer_id khác với danh sách thật → dùng best thật
-    const validIds = new Set(offers.map(o => o.offer_id));
-    const vm = parsed.verified_match;
-    if (vm?.offer_id && !validIds.has(vm.offer_id)) {
-        if (best) {
-            vm.offer_id = best.offer_id;
-            vm.direct_url = best.url;
-            vm.platform = best.platform;
-            vm.trust_score = 65;
-        } else {
-            vm.offer_id = '';
-            vm.direct_url = '';
-            vm.trust_score = 0;
-        }
-    }
-    if (vm && !vm.search_url) vm.search_url = searchUrl1688;
+    // Ensure it's an array
+    const arr = Array.isArray(parsed) ? parsed : [parsed];
 
-    return parsed;
-}
+    // Ensure search_url is set on all supplier entries
+    arr.forEach(item => {
+        if (item.negotiation) return;
+        if (!item.search_url) item.search_url = searchUrl1688;
+        if (!item.direct_url && item.url) item.direct_url = item.url;
+    });
 
-// ─── Fallback khi không tìm được gì ──────────────────────────────────────────
-function buildFallback(product) {
-    const kw = encodeURIComponent(product.search_keywords_cn || product.product_name_cn || '');
-    return {
-        product_name: product.product_name_vn || 'Sản phẩm',
-        verified_match: {
-            offer_id: '',
-            factory_name_cn: '',
-            factory_name_vn: 'Không tìm được — thử tìm thủ công',
-            direct_url: '',
-            search_url: `https://s.1688.com/selloffer/offerlist.htm?keywords=${kw}`,
-            platform: '1688',
-            trust_score: 0,
-            match_reason: 'Không tìm được sản phẩm phù hợp qua Google. Dùng nút "Tìm trên 1688" để tìm thủ công với keyword đã chuẩn bị.',
-        },
-        logistics: { weight: '', min_order: '', price_range: '' },
-        negotiation_script: { cn: '', vn: '' },
-        qc_checklist: [],
-    };
+    return arr;
 }
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
-async function runSourcing(imageBase64, mimeType) {
-    if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY chưa được cấu hình trong .env');
+async function runSourcing({ imageBase64, mimeType, productName, searchType }) {
+    if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY chưa cấu hình trong .env');
 
-    console.log('[Sourcing] 🔍 Pipeline bắt đầu...');
+    const isTextSearch = searchType === 'text' || (!imageBase64 && productName);
+    console.log(`[Sourcing] 🔍 Pipeline bắt đầu... mode=${isTextSearch ? 'text' : 'image'}`);
 
-    // Step 1
-    const product = await analyzeImage(imageBase64, mimeType);
-    console.log(`[Sourcing] ✅ Step 1: ${product.product_name_vn} | KW: ${product.search_keywords_cn}`);
-
-    // Step 2: Tìm URLs thật qua Gemini grounding (Google Search)
-    const keywords = product.search_keywords_cn || product.product_name_cn;
-    const { offers, textResponse } = await findSupplierUrls(keywords, product.product_name_vn);
-
-    if (offers.length === 0 && !textResponse) {
-        console.log('[Sourcing] ⚠️ Không tìm được gì — fallback');
-        return buildFallback(product);
+    // Step 1: Identify product
+    let product;
+    if (isTextSearch) {
+        product = await analyzeText(productName);
+        console.log(`[Sourcing] ✅ Step 1 (Text): ${product.product_name_vn} | EN: ${product.search_keywords_en}`);
+    } else {
+        product = await analyzeImage(imageBase64, mimeType);
+        console.log(`[Sourcing] ✅ Step 1 (Image): ${product.product_name_vn} | EN: ${product.search_keywords_en} | CN: ${product.search_keywords_cn}`);
     }
 
-    // Step 3: Tổng hợp kết quả
-    const result = await buildSupplierResult(product, offers, textResponse);
-    console.log(`[Sourcing] ✅ Done: "${result.verified_match?.factory_name_cn}" platform=${result.verified_match?.platform} offer_id=${result.verified_match?.offer_id || 'none'}`);
-    return result;
+    // Step 2: Scrape suppliers from multiple sources (parallel)
+    console.log('[Sourcing] 🔍 Step 2: Scraping Alibaba + 1688...');
+    const [alibabaSuppliers, suppliers1688] = await Promise.allSettled([
+        scrapeAlibaba(product),
+        search1688ViaGoogle(product),
+    ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
+
+    const allSuppliers = [...alibabaSuppliers, ...suppliers1688];
+    console.log(`[Sourcing] ✅ Step 2: ${alibabaSuppliers.length} Alibaba + ${suppliers1688.length} 1688 = ${allSuppliers.length} total`);
+
+    // Step 3: Enrich & format
+    const enrichedArray = await buildFinalResult(product, allSuppliers);
+
+    // Separate suppliers from negotiation data
+    const suppliers = enrichedArray.filter(s => !s.negotiation);
+    const negotiationData = enrichedArray.find(s => s.negotiation) || {};
+
+    const result = {
+        product_name: product.product_name_vn,
+        product_name_cn: product.product_name_cn,
+        product_name_en: product.product_name_en,
+        search_type: isTextSearch ? 'text' : 'image',
+        search_query: isTextSearch ? productName : product.product_name_vn,
+        suppliers,
+        negotiation_script: {
+            cn: negotiationData.script_cn || '',
+            vn: negotiationData.script_vn || '',
+        },
+        qc_checklist: negotiationData.qc_checklist || [],
+        total_suppliers: suppliers.length,
+        search_urls: {
+            alibaba: `https://www.alibaba.com/trade/search?SearchText=${encodeURIComponent(product.search_keywords_en || '')}`,
+            '1688': `https://s.1688.com/selloffer/offerlist.htm?keywords=${encodeURIComponent(product.search_keywords_cn || '')}`,
+        },
+    };
+
+    console.log(`[Sourcing] ✅ Done: ${suppliers.length} suppliers found`);
+    return { product, result };
 }
 
 module.exports = { runSourcing };

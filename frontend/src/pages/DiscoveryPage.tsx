@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { apiPost, apiGet } from '../api/client'
 
 interface AutomationPayload {
@@ -141,7 +142,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 }
 
 // ─── Web Lead Card ────────────────────────────────────────────────────────────
-function WebLeadCard({ lead }: { lead: WebLead }) {
+function WebLeadCard({ lead, onFindSupplier }: { lead: WebLead; onFindSupplier: (query: string) => void }) {
     const [expanded, setExpanded] = useState(false)
     const p = lead.automation_payload
 
@@ -206,7 +207,7 @@ function WebLeadCard({ lead }: { lead: WebLead }) {
                         </div>
                     )}
                     {p.linkedin && (
-                        <div style={{ padding: '0.875rem 1rem' }}>
+                        <div style={{ padding: '0.875rem 1rem', borderBottom: '1px solid var(--border)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0ea5e9' }}>🔗 LinkedIn (EN)</span>
                                 <CopyButton text={p.linkedin} label="Copy LinkedIn" />
@@ -214,6 +215,20 @@ function WebLeadCard({ lead }: { lead: WebLead }) {
                             <p style={{ fontSize: '0.85rem', lineHeight: 1.6, margin: 0 }}>{p.linkedin}</p>
                         </div>
                     )}
+                    {/* Find Supplier CTA */}
+                    <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border)' }}>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onFindSupplier(lead.pain_signal || lead.name); }}
+                            style={{
+                                width: '100%', padding: '0.6rem', borderRadius: 8, cursor: 'pointer',
+                                border: '1px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.08)',
+                                color: 'var(--primary-color)', fontWeight: 700, fontSize: '0.78rem',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
+                            }}
+                        >
+                            🔍 Tìm Supplier cho sản phẩm này
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
@@ -234,9 +249,9 @@ function FbHintCard({ tactic }: { tactic: FbHintTactic }) {
             <div style={{ padding: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }} onClick={() => setExpanded(!expanded)}>
                 <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>
                     {tactic.tactic_type === 'search_keyword' ? '🔍' :
-                     tactic.tactic_type === 'post_template' ? '📝' :
-                     tactic.tactic_type === 'comment_template' ? '💬' :
-                     tactic.tactic_type === 'dm_template' ? '📩' : '🎯'}
+                        tactic.tactic_type === 'post_template' ? '📝' :
+                            tactic.tactic_type === 'comment_template' ? '💬' :
+                                tactic.tactic_type === 'dm_template' ? '📩' : '🎯'}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
@@ -313,6 +328,11 @@ export default function DiscoveryPage() {
     const [error, setError] = useState<string | null>(null)
     const [history, setHistory] = useState<HistoryRow[]>([])
     const [historyLoading, setHistoryLoading] = useState(true)
+    const navigate = useNavigate()
+
+    const handleFindSupplier = (query: string) => {
+        navigate(`/sourcing?q=${encodeURIComponent(query)}`)
+    }
 
     useEffect(() => { loadHistory() }, [])
 
@@ -499,7 +519,7 @@ export default function DiscoveryPage() {
                     {result.mode === 'web' && result.leads && (
                         <>
                             {result.leads.sort((a, b) => b.ai_score - a.ai_score).map(lead => (
-                                <WebLeadCard key={lead.rawPostId} lead={lead} />
+                                <WebLeadCard key={lead.rawPostId} lead={lead} onFindSupplier={handleFindSupplier} />
                             ))}
                             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
                                 ✅ Leads đã vào SIS pipeline. Xem tại <a href="/" style={{ color: 'var(--primary-color)' }}>Dashboard → Tiềm năng</a>
