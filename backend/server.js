@@ -22,6 +22,7 @@ const devRoutes = require('./routes/dev.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const sisRoutes = require('./routes/sis.routes'); // Primary SIS v2 Routes
 const groupRoutes = require('./routes/group.routes');
+const sourcingRoutes = require('./routes/sourcing.routes');
 
 // ╔═══════════════════════════════════════════════════════════╗
 // ║  IN-MEMORY LOG CAPTURE (for Dev Dashboard)                ║
@@ -104,7 +105,7 @@ app.use('/api/', (req, res, next) => {
 });
 
 // ── Request Timeout Middleware ───────────────────────────────────────────────
-const LONG_ROUTES = ['/api/agents/generate-reply', '/api/scan', '/api/leads/classify'];
+const LONG_ROUTES = ['/api/agents/generate-reply', '/api/scan', '/api/leads/classify', '/api/sourcing'];
 app.use((req, res, next) => {
     const isLong = LONG_ROUTES.some(r => req.path.startsWith(r));
     const timeoutMs = isLong ? 120_000 : 30_000;
@@ -136,6 +137,7 @@ app.use(devRoutes);
 app.use(webhookRoutes);
 app.use(sisRoutes); // Seller Intelligence System (SIS v2)
 app.use(groupRoutes);
+app.use(sourcingRoutes);
 
 // ── Initialize Group Discovery DB ───────────────────────────────────────────
 try {

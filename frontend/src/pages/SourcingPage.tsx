@@ -3,14 +3,7 @@ import {
     Camera, ArrowRightLeft, Box, Factory, Hash, Award, Sparkles,
     ExternalLink, Copy, Scale, ShieldAlert, CheckCircle2, Search, Layers
 } from 'lucide-react';
-
-interface ProductInfo {
-    product_name_vn: string;
-    product_name_cn: string;
-    search_keywords_cn: string;
-    key_features: string;
-    category: string;
-}
+import { authFetch } from '../api/client';
 
 interface SourcingResult {
     product_name: string;
@@ -48,64 +41,6 @@ export default function SourcingPage() {
 
     const isSourcing = step === 'analyzing' || step === 'searching';
 
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-    const VISION_MODEL = 'gemini-2.5-flash';
-    const SEARCH_MODEL = 'gemini-2.5-flash';
-
-    const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 3): Promise<Response> => {
-        let lastError: unknown;
-        for (let i = 0; i < maxRetries; i++) {
-            try {
-                const response = await fetch(url, options);
-                if (response.ok) return response;
-                if (response.status === 429 || response.status >= 500) {
-                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1500));
-                    continue;
-                }
-                return response;
-            } catch (err) {
-                lastError = err;
-                await new Promise(r => setTimeout(r, Math.pow(2, i) * 1500));
-            }
-        }
-        throw lastError || new Error('Kết nối API thất bại sau 3 lần thử.');
-    };
-
-    const callGemini = async (model: string, payload: object): Promise<string> => {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        const response = await fetchWithRetry(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        if (!response.ok) {
-            const errText = await response.text().catch(() => '');
-            throw new Error(`Gemini API lỗi ${response.status}: ${errText.slice(0, 200)}`);
-        }
-        const data = await response.json();
-        const parts = data?.candidates?.[0]?.content?.parts;
-        if (!parts) throw new Error('Gemini không trả về kết quả. Hãy thử lại.');
-        return parts.map((p: any) => p.text || '').join('');
-    };
-
-    const extractJson = (text: string): SourcingResult => {
-        const stripped = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-        const start = stripped.indexOf('{');
-        const end = stripped.lastIndexOf('}');
-        if (start === -1 || end === -1 || end <= start) throw new Error('AI không trả về JSON hợp lệ. Vui lòng thử ảnh khác.');
-        return JSON.parse(stripped.slice(start, end + 1));
-    };
-
-    const parseProductInfo = (text: string): ProductInfo | null => {
-        try {
-            const stripped = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-            const start = stripped.indexOf('{');
-            const end = stripped.lastIndexOf('}');
-            if (start === -1 || end === -1) return null;
-            return JSON.parse(stripped.slice(start, end + 1));
-        } catch { return null; }
-    };
-
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -130,161 +65,11 @@ export default function SourcingPage() {
         setTimeout(() => setCopied(null), 2000);
     };
 
-    /**
-     * Bước 1: Gemini Vision — phân tích ảnh → trích xuất keyword sản phẩm
-     * KHÔNG dùng google_search để tránh conflict với inlineData
-     */
-    const step1_analyzeImage = async (mimeType: string, base64Data: string): Promise<string> => {
-        const prompt = `Phân tích ảnh sản phẩm này và trả về JSON:
-{
-  "product_name_vn": "Tên sản phẩm tiếng Việt ngắn gọn",
-  "product_name_cn": "Tên sản phẩm tiếng Trung ngắn gọn (5-10 chữ Hán)",
-  "search_keywords_cn": "keyword tìm kiếm 1688 bằng tiếng Trung (3-6 từ, phân cách dấu phẩy)",
-  "key_features": "2-3 đặc điểm nhận dạng nổi bật (màu sắc, chất liệu, kiểu dáng)",
-  "category": "danh mục sản phẩm"
-}
-Chỉ trả JSON, không giải thích thêm.`;
-
-        const payload = {
-            contents: [{
-                parts: [
-                    { text: prompt },
-                    { inlineData: { mimeType, data: base64Data } }
-                ]
-            }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 512 }
-        };
-
-        const text = await callGemini(VISION_MODEL, payload);
-        return text;
-    };
-
-    /**
-     * Bước 2: Gemini + google_search — tìm supplier trên 1688 HOẶC Taobao
-     * KHÔNG dùng inlineData để tránh conflict với google_search
-     */
-    const step2_searchSupplier = async (product: ProductInfo): Promise<SourcingResult> => {
-        const searchKw = product.search_keywords_cn || product.product_name_cn;
-        const prompt = `Bạn là chuyên gia sourcing hàng hóa Trung Quốc cho doanh nghiệp Việt Nam.
-
-Sản phẩm cần tìm xưởng gốc:
-- Tên tiếng Việt: ${product.product_name_vn}
-- Tên tiếng Trung: ${product.product_name_cn}
-- Từ khóa tìm kiếm: ${searchKw}
-- Đặc điểm: ${product.key_features}
-- Danh mục: ${product.category}
-
-NHIỆM VỤ — thực hiện theo thứ tự:
-1. Search Google với query: "${searchKw} 批发 直销 厂家 site:1688.com"
-2. Nếu ít kết quả, thử thêm: "${searchKw} 厂家直销 site:taobao.com"
-3. Chọn kết quả tốt nhất — ưu tiên xưởng gốc (厂家/直销) hơn đại lý.
-4. Trích xuất chính xác ID sản phẩm từ URL thực tế tìm được:
-   - 1688: detail.1688.com/offer/[ID].html → lấy số [ID] (8-15 chữ số)
-   - Taobao: item.taobao.com/item.htm?id=[ID] → lấy số [ID]
-5. Lấy thông tin logistics từ trang sản phẩm: cân nặng, giá, MOQ.
-
-QUAN TRỌNG:
-- offer_id PHẢI là số thực từ URL tìm thấy — KHÔNG tự tạo số.
-- Nếu không tìm được sản phẩm, để offer_id = "" và trust_score = 0 — vẫn phải trả JSON.
-- platform: "1688" nếu link 1688.com, "taobao" nếu link taobao.com
-- LUÔN LUÔN trả về JSON, dù không tìm được kết quả — KHÔNG trả text thường.
-
-Trả về JSON duy nhất (không giải thích thêm):
-{
-  "product_name": "Tên sản phẩm đầy đủ",
-  "verified_match": {
-    "offer_id": "ID số nguyên hoặc rỗng",
-    "factory_name_cn": "Tên xưởng/công ty tiếng Trung",
-    "factory_name_vn": "Dịch nghĩa tên xưởng",
-    "direct_url": "URL đầy đủ trang sản phẩm",
-    "platform": "1688 hoặc taobao",
-    "trust_score": 85,
-    "match_reason": "Lý do chọn xưởng này"
-  },
-  "logistics": {
-    "weight": "0.xx kg",
-    "min_order": "x pcs",
-    "price_range": "¥xx - ¥xx"
-  },
-  "negotiation_script": {
-    "cn": "您好，我想批量采购${product.product_name_cn || '这款产品'}，请问最小起订量是多少？能否提供优惠价格？",
-    "vn": "Xin chào, tôi muốn đặt hàng số lượng lớn ${product.product_name_vn || 'sản phẩm này'}, MOQ là bao nhiêu? Có thể cho giá tốt không?"
-  },
-  "qc_checklist": ["Kiểm tra chất liệu", "Kiểm tra kích thước theo thông số", "Kiểm tra đóng gói vận chuyển", "Đối chiếu mẫu trước khi nhận lô lớn"]
-}`;
-
-        const payload = {
-            contents: [{ parts: [{ text: prompt }] }],
-            tools: [{ google_search: {} }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
-        };
-
-        const text = await callGemini(SEARCH_MODEL, payload);
-
-        // Build search fallback URL trước — dùng ngay cả khi JSON parse fail
-        const kw = encodeURIComponent(product.search_keywords_cn || product.product_name_cn || product.product_name_vn);
-        const fallbackSearchUrl = `https://s.1688.com/selloffer/offerlist.htm?keywords=${kw}`;
-
-        let result: SourcingResult;
-        try {
-            result = extractJson(text);
-        } catch {
-            // Gemini trả về text thường thay vì JSON (thường xảy ra khi không tìm được sản phẩm)
-            return {
-                product_name: product.product_name_vn || 'Sản phẩm',
-                verified_match: {
-                    offer_id: '',
-                    factory_name_cn: '',
-                    factory_name_vn: 'Không tìm được xưởng phù hợp — thử tìm thủ công',
-                    direct_url: '',
-                    search_url: fallbackSearchUrl,
-                    platform: '1688',
-                    trust_score: 0,
-                    match_reason: 'AI không tìm được sản phẩm tương tự trên 1688/Taobao. Có thể đây là hàng custom hoặc POD.',
-                },
-                logistics: { weight: '', min_order: '', price_range: '' },
-                negotiation_script: { cn: '', vn: '' },
-                qc_checklist: [],
-            };
-        }
-        result.verified_match.search_url = fallbackSearchUrl;
-
-        // Validate và chuẩn hóa Offer ID — reject ID giả (số tròn/lặp)
-        const isFakeId = (id: string) =>
-            /^(\d)\1+$/.test(id) ||          // toàn số giống nhau: 1111111111
-            /^10*$/.test(id) ||              // 1 theo sau toàn 0: 10000000000
-            id === '0';
-
-        if (result.verified_match?.offer_id) {
-            const idMatch = String(result.verified_match.offer_id).match(/\d{8,15}/);
-            if (idMatch && !isFakeId(idMatch[0])) {
-                result.verified_match.offer_id = idMatch[0];
-                const platform = result.verified_match.platform || '1688';
-                if (platform === 'taobao') {
-                    result.verified_match.direct_url = `https://item.taobao.com/item.htm?id=${idMatch[0]}`;
-                    result.verified_match.search_url = `https://s.taobao.com/search?q=${kw}`;
-                } else {
-                    result.verified_match.direct_url = `https://detail.1688.com/offer/${idMatch[0]}.html`;
-                    result.verified_match.platform = '1688';
-                }
-            } else {
-                // ID không đáng tin — xóa để UI dùng search_url thay thế
-                result.verified_match.offer_id = '';
-                result.verified_match.direct_url = '';
-                result.verified_match.trust_score = 0;
-            }
-        }
-
-        return result;
-    };
-
     const processSourcing = async () => {
-        if (!sourcingImage || !apiKey) {
-            setErrorMessage(apiKey ? 'Chưa chọn ảnh.' : 'Thiếu VITE_GEMINI_API_KEY trong .env');
-            return;
-        }
+        if (!sourcingImage) { setErrorMessage('Chưa chọn ảnh.'); return; }
 
-        setIsSourcing_state();
+        setStep('analyzing');
+        setStepLabel('Bước 1/3: AI nhận diện sản phẩm...');
         setSourcingResult(null);
         setErrorMessage(null);
 
@@ -292,21 +77,18 @@ Trả về JSON duy nhất (không giải thích thêm):
             const mimeType = sourcingImage.substring(sourcingImage.indexOf(':') + 1, sourcingImage.indexOf(';'));
             const base64Data = sourcingImage.split(',')[1];
 
-            // Bước 1: Phân tích ảnh
-            setStep('analyzing');
-            setStepLabel('Bước 1/2: AI đang nhận diện sản phẩm...');
-            const productInfoText = await step1_analyzeImage(mimeType, base64Data);
-            const parsedProduct = parseProductInfo(productInfoText) ?? {
-                product_name_vn: '', product_name_cn: '',
-                search_keywords_cn: '', key_features: '', category: ''
-            };
-
-            // Bước 2: Tìm trên 1688 / Taobao
             setStep('searching');
-            setStepLabel('Bước 2/2: Tìm xưởng gốc 1688 & Taobao...');
-            const result = await step2_searchSupplier(parsedProduct);
+            setStepLabel('Bước 2/3: Đang scrape 1688.com...');
 
-            setSourcingResult(result);
+            const res = await authFetch('/api/sourcing', {
+                method: 'POST',
+                body: JSON.stringify({ imageBase64: base64Data, mimeType }),
+            });
+            const json = await res.json();
+
+            if (!json.success) throw new Error(json.error || `Server error ${res.status}`);
+
+            setSourcingResult(json.data);
             setStep('done');
         } catch (error: any) {
             console.error('Sourcing Error:', error);
@@ -314,9 +96,6 @@ Trả về JSON duy nhất (không giải thích thêm):
             setStep('error');
         }
     };
-
-    // Helper để set isSourcing state
-    const setIsSourcing_state = () => setStep('analyzing');
 
     const reset = () => {
         setSourcingImage(null);
@@ -330,7 +109,7 @@ Trả về JSON duy nhất (không giải thích thêm):
             <div className="page-header" style={{ marginBottom: '1.5rem' }}>
                 <h2 className="page-title">📸 AI Visual Sourcing</h2>
                 <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                    Nhận diện sản phẩm từ ảnh → Tìm xưởng gốc trên 1688 & Taobao bằng 2 bước AI.
+                    AI nhận diện → Backend scrape 1688 thật → Supplier data chính xác.
                 </p>
             </div>
 
@@ -367,8 +146,9 @@ Trả về JSON duy nhất (không giải thích thêm):
                                 <div>
                                     <p style={{ fontSize: '0.7rem', fontWeight: 800, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>{stepLabel}</p>
                                     <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
-                                        <div style={{ height: 3, flex: 1, borderRadius: 99, background: step === 'analyzing' || step === 'searching' ? '#818cf8' : 'var(--border)', transition: 'background 0.4s' }}></div>
+                                        <div style={{ height: 3, flex: 1, borderRadius: 99, background: '#818cf8', transition: 'background 0.4s' }}></div>
                                         <div style={{ height: 3, flex: 1, borderRadius: 99, background: step === 'searching' ? '#818cf8' : 'var(--border)', transition: 'background 0.4s' }}></div>
+                                        <div style={{ height: 3, flex: 1, borderRadius: 99, background: 'var(--border)', transition: 'background 0.4s' }}></div>
                                     </div>
                                 </div>
                             </div>
@@ -407,9 +187,9 @@ Trả về JSON duy nhất (không giải thích thêm):
                         <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                             <p style={{ fontSize: '0.6rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>Cách hoạt động</p>
                             {[
-                                { icon: Camera, text: 'AI nhận diện sản phẩm từ ảnh' },
-                                { icon: Search, text: 'Search 1688 & Taobao lấy ID thực' },
-                                { icon: Factory, text: 'Trả về xưởng + link đặt hàng' },
+                                { icon: Camera, text: 'Gemini Vision nhận diện sản phẩm' },
+                                { icon: Search, text: 'Playwright scrape 1688 lấy offer thật' },
+                                { icon: Factory, text: 'AI chọn xưởng tốt nhất + thông tin' },
                             ].map(({ icon: Icon, text }, i) => (
                                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

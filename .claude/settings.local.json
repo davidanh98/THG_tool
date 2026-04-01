@@ -11,7 +11,9 @@
       "Bash(node -e \":*)",
       "Bash(grep -r \"sourcing\\\\|1688\\\\|supplier\\\\|factory\" D:THGToolAIthg-lead-gen/backend/routes --include=*.js)",
       "Bash(xargs grep:*)",
-      "Bash(find D:THGToolAIthg-lead-gen -type f -name *sourcing* -o -name *1688* -o -name *supplier*)"
+      "Bash(find D:THGToolAIthg-lead-gen -type f -name *sourcing* -o -name *1688* -o -name *supplier*)",
+      "Bash(grep -r \"Authorization\\\\|Bearer\\\\|getToken\\\\|authHeader\" D:/THG/ToolAI/thg-lead-gen/frontend/src/api/ --include=*.ts -l)",
+      "Bash(node -e \"require\\(''''./backend/services/sourcingService''''\\)\")"
     ]
   }
 }
