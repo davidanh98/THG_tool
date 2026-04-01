@@ -19,6 +19,7 @@ interface SourcingResult {
         factory_name_cn: string;
         factory_name_vn: string;
         direct_url: string;
+        search_url: string;
         platform: '1688' | 'taobao';
         trust_score: number;
         match_reason: string;
@@ -220,20 +221,32 @@ Trả về JSON duy nhất (không giải thích thêm):
         const text = await callGemini(SEARCH_MODEL, payload);
         const result = extractJson(text);
 
-        // Làm sạch và chuẩn hóa Offer ID + URL theo platform
+        // Build search fallback URL từ Chinese keywords (luôn hợp lệ)
+        const kw = encodeURIComponent(product.search_keywords_cn || product.product_name_cn || product.product_name_vn);
+        result.verified_match.search_url = `https://s.1688.com/selloffer/offerlist.htm?keywords=${kw}`;
+
+        // Validate và chuẩn hóa Offer ID — reject ID giả (số tròn/lặp)
+        const isFakeId = (id: string) =>
+            /^(\d)\1+$/.test(id) ||          // toàn số giống nhau: 1111111111
+            /^10*$/.test(id) ||              // 1 theo sau toàn 0: 10000000000
+            id === '0';
+
         if (result.verified_match?.offer_id) {
             const idMatch = String(result.verified_match.offer_id).match(/\d{8,15}/);
-            if (idMatch) {
+            if (idMatch && !isFakeId(idMatch[0])) {
                 result.verified_match.offer_id = idMatch[0];
                 const platform = result.verified_match.platform || '1688';
                 if (platform === 'taobao') {
                     result.verified_match.direct_url = `https://item.taobao.com/item.htm?id=${idMatch[0]}`;
+                    result.verified_match.search_url = `https://s.taobao.com/search?q=${kw}`;
                 } else {
                     result.verified_match.direct_url = `https://detail.1688.com/offer/${idMatch[0]}.html`;
                     result.verified_match.platform = '1688';
                 }
             } else {
+                // ID không đáng tin — xóa để UI dùng search_url thay thế
                 result.verified_match.offer_id = '';
+                result.verified_match.direct_url = '';
                 result.verified_match.trust_score = 0;
             }
         }
@@ -459,6 +472,16 @@ Trả về JSON duy nhất (không giải thích thêm):
                                                 style={{ padding: '1rem', borderRadius: '1.25rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', textDecoration: 'none' }}
                                             >
                                                 Mở {sourcingResult.verified_match.platform === 'taobao' ? 'Taobao' : '1688'} <ExternalLink size={16} />
+                                            </a>
+                                        ) : sourcingResult.verified_match?.search_url ? (
+                                            <a
+                                                href={sourcingResult.verified_match.search_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="btn btn-secondary"
+                                                style={{ padding: '1rem', borderRadius: '1.25rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', textDecoration: 'none' }}
+                                            >
+                                                <Search size={14} /> Tìm trên 1688 <ExternalLink size={14} />
                                             </a>
                                         ) : (
                                             <div style={{ padding: '1rem', borderRadius: '1.25rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
