@@ -14,6 +14,7 @@ const { chromium, delay, fs, path, generateFingerprint, extractGroupId } = requi
 const accountManager = require('../../../ai/agents/accountManager');
 const { bridgeToHub } = require('./hubBridge');
 const { runPersonaSession } = require('../../../ai/squad/agents/personaAgent');
+const { applyStealthToContext } = require('../proxy/stealthScripts');
 
 // ─── RAM-aware persona guard ──────────────────────────────────────────────────
 // Chỉ chạy persona session nếu còn đủ RAM để tránh OOM
@@ -152,8 +153,9 @@ async function _scrapeWithContext(browser, account, groups) {
 
     try {
         // ═══ Proxy Injection ═══
+        // Priority: 1) account.proxy_url (from DB)  2) env var PROXY_<username>
         var proxyEnvKey = 'PROXY_' + accUsername;
-        var proxyUrl = process.env[proxyEnvKey] || '';
+        var proxyUrl = account.proxy_url || process.env[proxyEnvKey] || '';
         var proxyConfig = undefined;
 
         if (proxyUrl) {
@@ -166,7 +168,7 @@ async function _scrapeWithContext(browser, account, groups) {
                 };
                 console.log(tag + ' 🌐 Proxy: ' + parsed.hostname + ':' + parsed.port);
             } catch (e) {
-                console.warn(tag + ' ⚠️ Invalid proxy URL in ' + proxyEnvKey + ': ' + e.message);
+                console.warn(tag + ' ⚠️ Invalid proxy URL: ' + e.message);
             }
         } else {
             console.log(tag + ' 🏠 No proxy (using local IP)');
@@ -179,6 +181,13 @@ async function _scrapeWithContext(browser, account, groups) {
             timezoneId: 'America/New_York',
             ...(proxyConfig ? { proxy: proxyConfig } : {}),
         });
+
+        // ═══ Stealth Scripts Injection ═══
+        try {
+            await applyStealthToContext(context, fp);
+        } catch (stealthErr) {
+            console.warn(tag + ' ⚠️ Stealth injection partial: ' + stealthErr.message);
+        }
 
         // Load cookies
         var cookieJsonPath = path.join(__dirname, '..', '..', '..', 'data', 'fb_cookies_' + accUsername + '.json');

@@ -10,6 +10,7 @@ const {
     saveSession, loadSession
 } = require('./browserManager');
 const accountManager = require('../../../ai/agents/accountManager');
+const { applyStealthToContext } = require('../proxy/stealthScripts');
 
 /**
  * Login to Facebook via Playwright
@@ -204,6 +205,11 @@ async function getAuthContext(account = null) {
         locale: 'en-US',
         timezoneId: 'America/New_York',
     });
+
+    // Inject stealth scripts
+    try { await applyStealthToContext(state.activeContext, fp); } catch (e) {
+        console.warn('[FBScraper] ⚠️ Stealth injection partial: ' + e.message);
+    }
 
     // Block heavy resources
     await state.activeContext.route('**/*', (route) => {
