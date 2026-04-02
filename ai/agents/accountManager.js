@@ -348,6 +348,19 @@ function resetAccount(email) {
 }
 
 /**
+ * Reset ALL accounts to active — use when all accounts are stuck in resting/banned
+ * @returns {{ changes: number }}
+ */
+function resetAllAccounts() {
+    const result = db.db.prepare(`
+        UPDATE fb_accounts
+        SET status='active', trust_score=80, checkpoint_count=0
+    `).run();
+    console.log(`[AccountManager] 🔄 RESET ALL → ${result.changes} accounts set to active, trust=80`);
+    return { changes: result.changes };
+}
+
+/**
  * Human-like: Thỉnh thoảng cho bot nghỉ (simulate off-peak)
  * Xác suất 5% mỗi phiên (giảm từ 10%)
  * @param {string} accountId
@@ -412,6 +425,7 @@ module.exports = {
     addAccount,
     getPoolStatus,
     resetAccount,
+    resetAllAccounts,
     shouldRest,
     isInActiveWindow,
     SESSIONS_DIR,
