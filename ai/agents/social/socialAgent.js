@@ -16,7 +16,11 @@ const { chromium } = require('playwright-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const accountManager = require('../accountManager');
 const { generateFingerprint } = require('../../../backend/infra/proxy/fingerprint');
+const { applyStealthToContext } = require('../../../backend/infra/proxy/stealthScripts');
 const { generateAgentReply } = require('../personalAgent');
+
+// ─── Checkpoint Recovery Config ──────────────────────────────────────────────
+const MAX_RETRIES_PER_SESSION = 2;
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 const sessionMgr = require('./sessionManager');
@@ -75,15 +79,19 @@ async function createContext(account) {
     const sessionPath = accountManager.getSessionPath(account);
     const tag = `[Social:${account.email.split('@')[0]}]`;
 
+    // Build context opts from fingerprint (platform-consistent)
     const contextOpts = {
         storageState: sessionPath,
-        viewport: {
-            width: fingerprint.width || (1280 + sessionMgr.randInt(-100, 100)),
-            height: fingerprint.height || (720 + sessionMgr.randInt(-50, 50)),
+        viewport: fingerprint.viewport || {
+            width: 1280 + sessionMgr.randInt(-100, 100),
+            height: 720 + sessionMgr.randInt(-50, 50),
         },
         userAgent: fingerprint.userAgent || undefined,
-        locale: 'vi-VN',
-        timezoneId: 'Asia/Ho_Chi_Minh',
+        locale: fingerprint.language ? fingerprint.language.split(',')[0] : 'vi-VN',
+        timezoneId: fingerprint.timezone || 'Asia/Ho_Chi_Minh',
+        extraHTTPHeaders: {
+            'Accept-Language': fingerprint.language || 'vi-VN,vi;q=0.9,en;q=0.8',
+        },
     };
 
     // Add proxy if account has one
@@ -97,6 +105,14 @@ async function createContext(account) {
     }
 
     const context = await _browser.newContext(contextOpts);
+
+    // Apply stealth scripts BEFORE any navigation
+    try {
+        await applyStealthToContext(context, fingerprint);
+    } catch (e) {
+        console.warn(`${tag} ⚠️ Stealth injection partial: ${e.message}`);
+    }
+
     const page = await context.newPage();
 
     return { context, page, tag };
@@ -172,47 +188,85 @@ async function handleNewMessage(accountSalesName, senderName, message, convUrl) 
  */
 async function runSession() {
     const session = sessionMgr.startSession();
+    let retryCount = 0;
+    let account = null;
+    let context = null;
+    let page = null;
+    let tag = '';
+    let email = '';
+    let usedAccounts = new Set();
 
-    // 1. Pick an account
-    const account = accountManager.getNextAccount({ preferSocial: true });
-    if (!account) {
-        console.log(`[SocialAgent] ⚠️ No available accounts — skipping session`);
-        sessionMgr.endSession();
-        return;
-    }
-
-    // Check if account should rest
-    if (accountManager.shouldRest(account.id || account.email)) {
-        console.log(`[SocialAgent] 😴 Account ${account.email} is resting — skipping`);
-        sessionMgr.endSession();
-        return;
-    }
-
-    const tag = `[Social:${account.email.split('@')[0]}]`;
-    const email = account.email;
-
-    console.log(`\n${'═'.repeat(55)}`);
-    console.log(`  🤖 SOCIAL AGENT SESSION #${session.sessionNumber}`);
-    console.log(`  📧 Account: ${email}`);
-    console.log(`  ⏱️  Duration: ~${Math.round(session.duration / 60000)} min`);
-    console.log(`${'═'.repeat(55)}\n`);
-
-    let context, page;
-
-    try {
-        // 2. Open browser
-        logActivity(session.sessionId, 'session_start', `Account: ${email}`, email);
-        ({ context, page } = await createContext(account));
-
-        // 3. Validate session
-        const valid = await validateSession(page, tag);
-        if (!valid) {
-            accountManager.reportCheckpoint(account.id || account.email);
-            logActivity(session.sessionId, 'session_invalid', 'Session expired', email);
+    // ── Account selection with retry loop ─────────────────────────────────
+    while (retryCount <= MAX_RETRIES_PER_SESSION) {
+        // Pick an account (exclude already-tried ones)
+        account = accountManager.getNextAccount({ preferSocial: true, exclude: [...usedAccounts] });
+        if (!account) {
+            console.log(`[SocialAgent] ⚠️ No available accounts — skipping session`);
             sessionMgr.endSession();
-            await context.close();
             return;
         }
+
+        // Check if account should rest
+        if (accountManager.shouldRest(account.id || account.email)) {
+            usedAccounts.add(account.id || account.email);
+            retryCount++;
+            continue;
+        }
+
+        tag = `[Social:${account.email.split('@')[0]}]`;
+        email = account.email;
+        usedAccounts.add(account.id || account.email);
+
+        if (retryCount > 0) {
+            console.log(`${tag} 🔄 Retry #${retryCount} with different account`);
+        }
+
+        console.log(`\n${'═'.repeat(55)}`);
+        console.log(`  🤖 SOCIAL AGENT SESSION #${session.sessionNumber}${retryCount > 0 ? ` (retry ${retryCount})` : ''}`);
+        console.log(`  📧 Account: ${email}`);
+        console.log(`  ⏱️  Duration: ~${Math.round(session.duration / 60000)} min`);
+        console.log(`${'═'.repeat(55)}\n`);
+
+        try {
+            // Clean up previous context if retrying
+            if (context) { try { await context.close(); } catch { } }
+
+            // 2. Open browser
+            logActivity(session.sessionId, 'session_start', `Account: ${email}${retryCount > 0 ? ` (retry ${retryCount})` : ''}`, email);
+            ({ context, page } = await createContext(account));
+
+            // 3. Validate session
+            const valid = await validateSession(page, tag);
+            if (!valid) {
+                accountManager.reportCheckpoint(account.id || account.email);
+                logActivity(session.sessionId, 'checkpoint_detected',
+                    `Account checkpointed — ${retryCount < MAX_RETRIES_PER_SESSION ? 'retrying with another' : 'all retries exhausted'}`, email);
+                console.log(`${tag} 🚨 Checkpoint! ${retryCount < MAX_RETRIES_PER_SESSION ? 'Switching account...' : 'No more retries.'}`);
+                retryCount++;
+                continue; // Try next account
+            }
+
+            // Session valid — break out of retry loop
+            break;
+        } catch (e) {
+            console.error(`${tag} ❌ Context creation failed: ${e.message}`);
+            retryCount++;
+            continue;
+        }
+    }
+
+    // All retries exhausted
+    if (retryCount > MAX_RETRIES_PER_SESSION) {
+        console.log(`[SocialAgent] 💀 All ${MAX_RETRIES_PER_SESSION} retries exhausted — aborting session`);
+        logActivity(session.sessionId, 'session_abort', 'All accounts checkpointed', '');
+        sessionMgr.endSession();
+        sessionMgr.reportDanger(); // Signal to increase intervals
+        try { if (context) await context.close(); } catch { }
+        return;
+    }
+
+    // ── Main session flow (account validated) ─────────────────────────────
+    try {
 
         // 3.5 PROFILE SETUP (one-time) — bio, cover photo
         try {
@@ -305,6 +359,7 @@ async function runSession() {
 
         // 8. Success
         accountManager.reportSuccess(account.id || account.email, 0);
+        sessionMgr.reportSafe(); // Reduce danger level after success
         logActivity(session.sessionId, 'session_end', 'Completed successfully', email);
 
         console.log(`\n${tag} ✅ Session complete!`);

@@ -23,6 +23,7 @@ const webhookRoutes = require('./routes/webhook.routes');
 const sisRoutes = require('./routes/sis.routes'); // Primary SIS v2 Routes
 const groupRoutes = require('./routes/group.routes');
 const sourcingRoutes = require('./routes/sourcing.routes');
+const scraperRoutes = require('./routes/scraper.routes');
 
 // ╔═══════════════════════════════════════════════════════════╗
 // ║  IN-MEMORY LOG CAPTURE (for Dev Dashboard)                ║
@@ -99,6 +100,7 @@ app.use('/api/', (req, res, next) => {
     if (req.path.startsWith('/sis/')) return next();
     if (req.path.startsWith('/dev/')) return next();
     if (req.path.startsWith('/sourcing')) return next();
+    if (req.path.startsWith('/scraper')) return next();
     if (req.path === '/leads/collect' && req.method === 'POST') return next();
     if (req.path.startsWith('/worker/') && req.headers['x-thg-auth-key']) return next();
     if (req.path.startsWith('/import/') && req.headers['x-thg-auth-key']) return next();
@@ -106,7 +108,7 @@ app.use('/api/', (req, res, next) => {
 });
 
 // ── Request Timeout Middleware ───────────────────────────────────────────────
-const LONG_ROUTES = ['/api/agents/generate-reply', '/api/scan', '/api/leads/classify', '/api/sourcing'];
+const LONG_ROUTES = ['/api/agents/generate-reply', '/api/scan', '/api/leads/classify', '/api/sourcing', '/api/scraper'];
 app.use((req, res, next) => {
     const isLong = LONG_ROUTES.some(r => req.path.startsWith(r));
     const timeoutMs = isLong ? 120_000 : 30_000;
@@ -139,6 +141,7 @@ app.use(webhookRoutes);
 app.use(sisRoutes); // Seller Intelligence System (SIS v2)
 app.use(groupRoutes);
 app.use(sourcingRoutes);
+app.use(scraperRoutes);
 
 // ── Initialize Group Discovery DB ───────────────────────────────────────────
 try {

@@ -19,11 +19,16 @@ const INTERVAL_MIN_MS = 30 * 60 * 1000;     // 30 minutes between sessions
 const INTERVAL_MAX_MS = 90 * 60 * 1000;     // 90 minutes between sessions
 const SKIP_CHANCE = 0.10;                    // 10% chance to skip a session
 
-// ─── State ───────────────────────────────────────────────────────────────────
+// ─── State ─────────────────────────────────────────────────────────────────────
 let _running = false;
 let _currentSessionId = null;
 let _sessionCount = 0;
 let _timer = null;
+
+// Adaptive scheduling state
+let _dangerLevel = 0;            // 0 = normal, 1+ = danger (doubles interval)
+let _lastCheckpointTime = null;  // Track when last checkpoint happened
+let _checkpointCount = 0;        // Rolling count for this session loop
 
 /**
  * Generate a unique session ID
@@ -76,7 +81,26 @@ function getSessionDuration() {
  * @returns {number}
  */
 function getNextInterval() {
-    return Math.round(randMs(INTERVAL_MIN_MS, INTERVAL_MAX_MS));
+    const base = Math.round(randMs(INTERVAL_MIN_MS, INTERVAL_MAX_MS));
+
+    // Adaptive: multiply interval based on danger level
+    const multiplier = Math.pow(2, Math.min(_dangerLevel, 3)); // max 8x
+    const adjusted = base * multiplier;
+
+    // Auto-normalize danger: if no checkpoint in 2 hours, reduce danger
+    if (_dangerLevel > 0 && _lastCheckpointTime) {
+        const hoursSinceCheckpoint = (Date.now() - _lastCheckpointTime) / (1000 * 60 * 60);
+        if (hoursSinceCheckpoint > 2) {
+            _dangerLevel = Math.max(0, _dangerLevel - 1);
+            console.log(`[SessionMgr] 🟢 Danger reduced to ${_dangerLevel} (no checkpoint in ${hoursSinceCheckpoint.toFixed(1)}h)`);
+        }
+    }
+
+    if (_dangerLevel > 0) {
+        console.log(`[SessionMgr] ⚠️ Danger level ${_dangerLevel} — interval ${multiplier}x longer`);
+    }
+
+    return adjusted;
 }
 
 /**
@@ -162,6 +186,26 @@ function stop() {
 }
 
 /**
+ * Report danger — checkpoint(s) detected, increase intervals
+ */
+function reportDanger() {
+    _dangerLevel = Math.min(_dangerLevel + 1, 3); // max level 3 (8x)
+    _lastCheckpointTime = Date.now();
+    _checkpointCount++;
+    console.log(`[SessionMgr] 🟡 DANGER raised to level ${_dangerLevel} (total checkpoints: ${_checkpointCount})`);
+}
+
+/**
+ * Report safe — successful session, reduce danger
+ */
+function reportSafe() {
+    if (_dangerLevel > 0) {
+        _dangerLevel = Math.max(0, _dangerLevel - 1);
+        console.log(`[SessionMgr] 🟢 Danger reduced to ${_dangerLevel} after successful session`);
+    }
+}
+
+/**
  * Get current status
  */
 function getStatus() {
@@ -171,6 +215,8 @@ function getStatus() {
         totalSessions: _sessionCount,
         isActiveHour: isActiveHour(),
         activeHours: ACTIVE_HOURS,
+        dangerLevel: _dangerLevel,
+        checkpointCount: _checkpointCount,
     };
 }
 
@@ -188,4 +234,6 @@ module.exports = {
     randInt,
     randMs,
     generateSessionId,
+    reportDanger,
+    reportSafe,
 };

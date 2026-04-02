@@ -162,40 +162,69 @@ function isInActiveWindow() {
 /**
  * Lấy tài khoản tốt nhất để sử dụng ngay bây giờ.
  * Ưu tiên: trust_score cao → ít dùng gần đây → proxy sẵn sàng
- * @param {object} options - { forScraping: boolean }
+ * @param {object} options - { forScraping: boolean, preferSocial: boolean, exclude: string[] }
  * @returns {object|null} account row or null
  */
 function getNextAccount(options = {}) {
     const roleFilter = options.forScraping
         ? `AND (role = 'scraper' OR role = 'any')`
-        : `AND (role = 'social' OR role = 'any')`;
+        : options.preferSocial
+            ? `AND (role = 'social' OR role = 'any')`
+            : `AND (role = 'social' OR role = 'any')`;
 
+    // Build exclude clause for retry rotation
+    let excludeClause = '';
+    if (options.exclude && options.exclude.length > 0) {
+        const placeholders = options.exclude.map(() => '?').join(',');
+        excludeClause = `AND id NOT IN (${placeholders}) AND email NOT IN (${placeholders})`;
+    }
+    const excludeParams = options.exclude ? [...options.exclude, ...options.exclude] : [];
+
+    // Thêm cool-down: không dùng account vừa dùng trong 10 phút
     const account = db.db.prepare(`
         SELECT * FROM fb_accounts
         WHERE status = 'active'
           AND trust_score > 20
+          AND (last_used IS NULL OR datetime(last_used) < datetime('now', '-10 minutes'))
           ${roleFilter}
+          ${excludeClause}
         ORDER BY trust_score DESC, last_used ASC
         LIMIT 1
-    `).get();
+    `).get(...excludeParams);
 
     if (!account) {
-        // Kiểm tra có tài khoản đang resting có thể phục hồi không
+        // Fallback: try without cool-down
+        const fallback = db.db.prepare(`
+            SELECT * FROM fb_accounts
+            WHERE status = 'active'
+              AND trust_score > 20
+              ${roleFilter}
+              ${excludeClause}
+            ORDER BY trust_score DESC, last_used ASC
+            LIMIT 1
+        `).get(...excludeParams);
+
+        if (fallback) {
+            db.db.prepare(`UPDATE fb_accounts SET last_used=datetime('now') WHERE id=?`).run(fallback.id);
+            return fallback;
+        }
+
+        // Kiểm tra tài khoản đang resting có thể phục hồi không (2h thay vì 4h)
         const resting = db.db.prepare(`
             SELECT * FROM fb_accounts
             WHERE status = 'resting'
-              AND datetime(last_used) < datetime('now', '-4 hours')
+              AND datetime(last_used) < datetime('now', '-2 hours')
               ${roleFilter}
             LIMIT 1
         `).get();
 
         if (resting) {
-            console.log(`[AccountManager] 🔄 Phục hồi tài khoản ${resting.email} (đã nghỉ đủ)`);
+            console.log(`[AccountManager] 🔄 Phục hồi tài khoản ${resting.email} (đã nghỉ đủ 2h)`);
             db.db.prepare(`UPDATE fb_accounts SET status='active', trust_score=MIN(trust_score+30, 100) WHERE id=?`).run(resting.id);
             return resting;
         }
 
-        console.log('[AccountManager] ❌ Không có tài khoản nào sẵn sàng cho role yêu cầu!');
+        console.log('[AccountManager] ❌ Không có tài khoản nào sẵn sàng!');
         return null;
     }
 
@@ -206,29 +235,39 @@ function getNextAccount(options = {}) {
 }
 
 /**
- * Báo cáo tài khoản bị Checkpoint — giảm trust, tạm dừng dùng
+ * Báo cáo tài khoản bị Checkpoint — graduated trust penalty
+ * Lần 1: -20, Lần 2: -30, Lần 3+: -50
  * @param {string} accountId
  */
 function reportCheckpoint(accountId) {
-    const acc = db.db.prepare('SELECT * FROM fb_accounts WHERE id=?').get(accountId);
+    const acc = db.db.prepare('SELECT * FROM fb_accounts WHERE id=? OR email=?').get(accountId, accountId);
     if (!acc) return;
 
     const newCheckpointCount = (acc.checkpoint_count || 0) + 1;
-    const newTrust = Math.max(0, (acc.trust_score || 100) - 40);
-    const newStatus = newTrust <= 20 ? 'banned' : 'resting';
 
+    // Graduated penalty: lighter on first offense, heavier on repeat
+    let penalty;
+    if (newCheckpointCount === 1) penalty = 20;
+    else if (newCheckpointCount === 2) penalty = 30;
+    else penalty = 50;
+
+    const newTrust = Math.max(0, (acc.trust_score || 100) - penalty);
+    const newStatus = newTrust <= 10 ? 'banned' : 'resting';
+
+    // Rest duration adapts: 2h for first, 4h for second, 8h+ for repeat
     db.db.prepare(`
         UPDATE fb_accounts
         SET status=?, trust_score=?, checkpoint_count=?, last_used=datetime('now')
         WHERE id=?
-    `).run(newStatus, newTrust, newCheckpointCount, accountId);
+    `).run(newStatus, newTrust, newCheckpointCount, acc.id);
 
-    console.log(`[AccountManager] 🚨 CHECKPOINT: ${acc.email} → status=${newStatus}, trust=${newTrust}, count=${newCheckpointCount}`);
+    console.log(`[AccountManager] 🚨 CHECKPOINT #${newCheckpointCount}: ${acc.email} → trust=${newTrust} (penalty=-${penalty}), status=${newStatus}`);
 
     if (newStatus === 'banned') {
-        console.log(`[AccountManager] 💀 ${acc.email} bị BAN — đã bị checkpoint ${newCheckpointCount} lần. Loại khỏi vòng quay.`);
+        console.log(`[AccountManager] 💀 ${acc.email} BANNED — ${newCheckpointCount} checkpoints. Cần giải manual.`);
     } else {
-        console.log(`[AccountManager] 😴 ${acc.email} đang REST — sẽ phục hồi sau 4 giờ`);
+        const restHours = newCheckpointCount === 1 ? 2 : newCheckpointCount === 2 ? 4 : 8;
+        console.log(`[AccountManager] 😴 ${acc.email} REST — phục hồi sau ~${restHours}h`);
     }
 }
 
@@ -310,15 +349,19 @@ function resetAccount(email) {
 
 /**
  * Human-like: Thỉnh thoảng cho bot nghỉ (simulate off-peak)
- * Xác suất 10% mỗi phiên: account tự nghỉ 30-60 phút
+ * Xác suất 5% mỗi phiên (giảm từ 10%)
  * @param {string} accountId
- * @returns {boolean} true = account đang nghỉ, bỏ qua phiên này
+ * @returns {boolean} true = account đang nghỉ
  */
 function shouldRest(accountId) {
-    if (Math.random() < 0.1) {
-        db.db.prepare(`UPDATE fb_accounts SET status='resting', last_used=datetime('now','-3.5 hours') WHERE id=?`).run(accountId);
-        const acc = db.db.prepare('SELECT email FROM fb_accounts WHERE id=?').get(accountId);
-        console.log(`[AccountManager] 😴 ${acc?.email}: Nghỉ ngẫu nhiên (giống người thật)`);
+    // Check if account is already in resting state
+    const acc = db.db.prepare('SELECT status FROM fb_accounts WHERE id=? OR email=?').get(accountId, accountId);
+    if (acc && acc.status === 'resting') return true;
+
+    // 5% random rest (reduced from 10% for stability)
+    if (Math.random() < 0.05) {
+        db.db.prepare(`UPDATE fb_accounts SET status='resting', last_used=datetime('now','-1.5 hours') WHERE id=? OR email=?`).run(accountId, accountId);
+        console.log(`[AccountManager] 😴 Random rest (human-like)`);
         return true;
     }
     return false;
