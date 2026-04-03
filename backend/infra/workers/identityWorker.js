@@ -17,11 +17,11 @@
  *  - [NEW] Signal failure tracking → prevents infinite loop & OOM on unreachable profiles
  */
 
-const { chromium } = require('playwright');
 const database = require('../../core/data_store/database');
 const accountManager = require('../../../ai/agents/accountManager');
 const { getAuthContext } = require('../scraper/authContext');
 const { resolveProfile } = require('../scraper/profileScraper');
+const { state: browserState } = require('../scraper/browserManager');
 
 const POLL_INTERVAL = 60000; // 60s
 
@@ -83,12 +83,17 @@ function markAccountBlocked(account) {
     blockedAccounts.set(key, Date.now());
 }
 
-async function safeBrowserClose(browser) {
-    if (!browser) return;
+async function safeBrowserClose() {
+    // Browser is managed by authContext state — close via state
     try {
-        await browser.close();
+        if (browserState && browserState.activeBrowser) {
+            await browserState.activeBrowser.close();
+            browserState.activeBrowser = null;
+            browserState.activeContext = null;
+            browserState.isLoggedIn = false;
+        }
     } catch (e) {
-        if (process.env.DEBUG_DB) console.log('[SIS Identity] Browser already closed: ' + e.message);
+        if (process.env.DEBUG_DB) console.log('[SIS Identity] Browser cleanup: ' + e.message);
     }
 }
 
@@ -97,9 +102,19 @@ let isProcessing = false;
 
 async function runSISIdentityWorker() {
     if (isProcessing) return;
+
+    // Check if Risk Agent has paused the system
+    try {
+        const { getConfig } = require('../../../ai/agents/riskAgent');
+        if (getConfig('IS_ACTIVE') === '0') {
+            console.log('[SIS Identity] ⏸️ System paused by Risk Agent');
+            return;
+        }
+    } catch (e) { /* riskAgent not loaded */ }
+
     isProcessing = true;
 
-    let browser = null;
+    // Browser is managed by getAuthContext (includes stealth + proxy)
 
     try {
         const target = database._db.prepare(`
@@ -142,8 +157,8 @@ async function runSISIdentityWorker() {
         }
 
         try {
-            browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-            const context = await getAuthContext(account, browser);
+            // getAuthContext handles browser launch with stealth + proxy
+            const context = await getAuthContext(account);
             const page = await context.newPage();
 
             const resolved = await resolveProfile(page, target.author_profile_url);
@@ -192,7 +207,7 @@ async function runSISIdentityWorker() {
     } catch (outerErr) {
         console.error('[SIS Identity] ❌ Loop error: ' + outerErr.message);
     } finally {
-        await safeBrowserClose(browser);
+        await safeBrowserClose();
         isProcessing = false;
     }
 }

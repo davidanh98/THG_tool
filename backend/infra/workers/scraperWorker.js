@@ -115,6 +115,16 @@ async function sendSISAlert(signals) {
  */
 async function pollQueue() {
     if (isProcessing) return;
+
+    // Check if Risk Agent has paused the system
+    try {
+        const { getConfig } = require('../../../ai/agents/riskAgent');
+        if (getConfig('IS_ACTIVE') === '0') {
+            console.log('[SIS ScraperWorker] ⏸️ System paused by Risk Agent — skipping');
+            return;
+        }
+    } catch (e) { /* riskAgent not loaded */ }
+
     const job = database.claimNextScan();
     if (!job) return;
 
