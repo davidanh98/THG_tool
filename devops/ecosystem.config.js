@@ -159,5 +159,31 @@ module.exports = {
             log_date_format: 'YYYY-MM-DD HH:mm:ss',
         },
 
+        // ── Risk Agent (AI Self-healing — Lightweight) ────────────────────
+        {
+            name: 'thg-risk-agent',
+            script: 'ai/agents/riskAgent.js',
+            cwd: require('path').join(__dirname, '..'),
+
+            exec_mode: 'fork',
+            instances: 1,
+
+            env: {
+                NODE_ENV: 'production',
+            },
+
+            autorestart: true,
+            max_restarts: 10,
+            restart_delay: 5000,
+
+            // Memory — very lightweight
+            max_memory_restart: '150M',
+
+            log_file: 'logs/risk_agent_combined.log',
+            out_file: 'logs/risk_agent_out.log',
+            error_file: 'logs/risk_agent_error.log',
+            log_date_format: 'YYYY-MM-DD HH:mm:ss',
+        },
+
     ],
 };

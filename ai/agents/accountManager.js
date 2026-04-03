@@ -269,6 +269,15 @@ function reportCheckpoint(accountId) {
         const restHours = newCheckpointCount === 1 ? 2 : newCheckpointCount === 2 ? 4 : 8;
         console.log(`[AccountManager] 😴 ${acc.email} REST — phục hồi sau ~${restHours}h`);
     }
+
+    // Log to Risk Agent for pattern analysis
+    try {
+        const { logEvent } = require('./riskAgent');
+        logEvent('checkpoint', 'accountManager', `Checkpoint #${newCheckpointCount}: ${acc.email} → trust=${newTrust}, status=${newStatus}`, {
+            account_uid: acc.email,
+            error_type: 'checkpoint',
+        });
+    } catch (e) { /* riskAgent not loaded yet */ }
 }
 
 /**

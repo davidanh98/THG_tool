@@ -12,6 +12,7 @@
 
 const config = require('../../config');
 const fbScraper = require('../scraper');
+const { shadowScrapeGroups } = require('../scraper/shadowApi');
 const { contentHash } = require('../../../ai/agents/memoryStore');
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
@@ -43,7 +44,6 @@ function dedup(posts) {
 // ── Facebook ──────────────────────────────────────────────────────────────────
 
 async function scrapeFacebook(_keywords, maxPosts = 30, options = {}) {
-    console.log('[Scraper:FB] 📘 Scraping Facebook via Playwright (self-hosted)...');
     try {
         // Load groups: groups.db (source of truth) > config fallback
         let groups = config.FB_TARGET_GROUPS;
@@ -58,13 +58,37 @@ async function scrapeFacebook(_keywords, maxPosts = 30, options = {}) {
             console.warn('[Scraper:FB] ⚠️ GroupDB failed, using config fallback');
         }
 
-        // [FIX] Pass maxConcurrentAccounts to fbScraper to cap browser count
+        // ═══ Phase 1: Try Shadow API (GraphQL HTTP — fast, lightweight) ═══
+        const useShadow = process.env.SHADOW_API_ENABLED !== 'false'; // Default: enabled
+        if (useShadow) {
+            console.log('[Scraper:FB] ⚡ Trying Shadow API (GraphQL mode)...');
+            try {
+                const shadowPosts = await shadowScrapeGroups(groups, {
+                    maxPosts,
+                    ...options,
+                });
+                // shadowScrapeGroups returns null if no valid accounts → fall through to Playwright
+                if (shadowPosts !== null && shadowPosts.length > 0) {
+                    const deduped = dedup(shadowPosts);
+                    console.log(`[Scraper:FB] ✅ Shadow API: ${deduped.length} posts (before dedup: ${shadowPosts.length})`);
+                    return deduped;
+                }
+                if (shadowPosts !== null && shadowPosts.length === 0) {
+                    console.log('[Scraper:FB] 📭 Shadow API returned 0 posts — trying Playwright fallback');
+                }
+            } catch (shadowErr) {
+                console.warn(`[Scraper:FB] ⚠️ Shadow API failed: ${shadowErr.message} — falling back to Playwright`);
+            }
+        }
+
+        // ═══ Phase 2: Fallback to Playwright (browser automation) ═══
+        console.log('[Scraper:FB] 🌐 Scraping via Playwright (browser fallback)...');
         const posts = await fbScraper.scrapeFacebookGroups(maxPosts, {
             ...options,
             maxConcurrentAccounts: MAX_CONCURRENT_ACCOUNTS,
         }, groups);
         const deduped = dedup(posts);
-        console.log(`[Scraper:FB] ✅ ${deduped.length} posts (before dedup: ${posts.length})`);
+        console.log(`[Scraper:FB] ✅ Playwright: ${deduped.length} posts (before dedup: ${posts.length})`);
         return deduped;
     } catch (err) {
         console.error(`[Scraper:FB] ❌ ${err.message}`);
@@ -98,9 +122,9 @@ async function runFullScan(options = {}) {
     const maxPerPlatform = options.maxPosts || config.MAX_POSTS_PER_SCAN || 30;
 
     console.log(`\n${'═'.repeat(55)}`);
-    console.log(`  🤖 THG Self-Hosted Scraper — Playwright Engine`);
+    console.log(`  🤖 THG Lead Gen — Dual Engine Scraper`);
+    console.log(`  ⚡ Primary: Shadow API (GraphQL) | Fallback: Playwright`);
     console.log(`  📊 Platforms: ${platforms.join(', ')} | Max: ${maxPerPlatform}/platform`);
-    console.log(`  🛡️  RAM Guard: max ${MAX_CONCURRENT_ACCOUNTS} browsers concurrent`);
     console.log(`${'═'.repeat(55)}\n`);
 
     const results = {};
