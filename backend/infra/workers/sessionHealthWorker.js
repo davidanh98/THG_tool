@@ -193,18 +193,35 @@ async function reLoginAccount(account) {
         if (url.includes('checkpoint') || url.includes('two_factor') || url.includes('two_step')
             || /approvals_code|enter.*code|nhập mã/i.test(bodyText)) {
 
-            console.log(`${tag} ⚠️ 2FA detected — generating TOTP...`);
-            const totp = account['2fa_secret'] ? generateTOTP(account['2fa_secret']) : null;
+            console.log(`${tag} ⚠️ 2FA detected — generating code...`);
+            let totp = account['2fa_secret'] ? generateTOTP(account['2fa_secret']) : null;
+
+            // Fallback: dùng recovery codes nếu không có 2FA secret
+            if (!totp) {
+                const accName = account.email.split('@')[0];
+                const recPath = path.join(DATA_DIR, `recovery_codes_${accName}.json`);
+                if (fs.existsSync(recPath)) {
+                    try {
+                        let codes = JSON.parse(fs.readFileSync(recPath, 'utf8'));
+                        if (codes.length > 0) {
+                            totp = codes.shift().replace(/\s+/g, '');
+                            fs.writeFileSync(recPath, JSON.stringify(codes, null, 2));
+                            console.log(`${tag} 🔑 Recovery code used (${codes.length} remaining)`);
+                        }
+                    } catch (e) {
+                        console.warn(`${tag} ⚠️ Recovery codes error: ${e.message}`);
+                    }
+                }
+            }
 
             if (!totp) {
-                console.warn(`${tag} ❌ No 2FA secret, cannot bypass`);
+                console.warn(`${tag} ❌ No 2FA method available (no secret, no recovery codes)`);
                 await browser.close();
-                return { success: false, reason: 'no_2fa_secret' };
+                return { success: false, reason: 'no_2fa_method' };
             }
 
             console.log(`${tag} 🔑 TOTP: ${totp}`);
 
-            // "Try another way" then "Auth app"
             for (const text of ['try another way', 'thử cách khác']) {
                 if (bodyText.toLowerCase().includes(text)) {
                     await page.evaluate((t) => {
