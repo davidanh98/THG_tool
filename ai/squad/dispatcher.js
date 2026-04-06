@@ -373,7 +373,7 @@ async function runCycle() {
     console.log('█'.repeat(55));
 
     // Get all active accounts
-    const accounts = accountManager.getAllAccounts().filter(a => a.status !== 'dead');
+    const accounts = accountManager.getActiveAccounts().filter(a => a.status !== 'dead');
     if (accounts.length === 0) {
         console.log('[Squad] ⛔ No active accounts available');
         return;

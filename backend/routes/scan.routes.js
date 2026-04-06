@@ -57,7 +57,7 @@ router.get('/api/scan/queue', (req, res) => {
 // ── GET /api/infra/health — Infrastructure health check ─────────────────────
 router.get('/api/infra/health', async (req, res) => {
     try {
-        const infraAgent = require('../infra/proxy/infraAgent');
+        const infraAgent = require('../../ai/infraAgent');
         const result = await infraAgent.runHealthCheck();
         res.json({ success: true, data: result });
     } catch (err) {
@@ -72,7 +72,7 @@ router.post('/api/infra/proxies', async (req, res) => {
         if (!urls || !Array.isArray(urls) || urls.length === 0) {
             return res.status(400).json({ success: false, error: 'urls array required' });
         }
-        const infraAgent = require('../infra/proxy/infraAgent');
+        const infraAgent = require('../../ai/infraAgent');
         const pool = await infraAgent.addProxies(urls, { provider, region });
         res.json({
             success: true,

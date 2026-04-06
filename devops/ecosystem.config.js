@@ -176,12 +176,133 @@ module.exports = {
             max_restarts: 10,
             restart_delay: 5000,
 
-            // Memory — very lightweight
             max_memory_restart: '150M',
 
             log_file: 'logs/risk_agent_combined.log',
             out_file: 'logs/risk_agent_out.log',
             error_file: 'logs/risk_agent_error.log',
+            log_date_format: 'YYYY-MM-DD HH:mm:ss',
+        },
+
+        // ── Session Health Worker (Auto cookie renewal every 6h) ──────────
+        {
+            name: 'thg-session-health',
+            script: 'backend/infra/workers/sessionHealthWorker.js',
+            cwd: require('path').join(__dirname, '..'),
+
+            exec_mode: 'fork',
+            instances: 1,
+
+            env: {
+                NODE_ENV: 'production',
+            },
+
+            autorestart: true,
+            max_restarts: 5,
+            min_uptime: '30s',
+            restart_delay: 30000, // 30s delay — don't spam re-login on crash
+
+            // Playwright during re-login cycles
+            max_memory_restart: '400M',
+
+            kill_timeout: 30000,
+
+            log_file: 'logs/session_health_combined.log',
+            out_file: 'logs/session_health_out.log',
+            error_file: 'logs/session_health_error.log',
+            log_date_format: 'YYYY-MM-DD HH:mm:ss',
+        },
+
+        // ── Outreach Worker (Phase 7 Bridge: SIS v2 → Squad Queue) ────────
+        {
+            name: 'thg-outreach-worker',
+            script: 'backend/infra/workers/outreachWorker.js',
+            cwd: require('path').join(__dirname, '..'),
+
+            exec_mode: 'fork',
+            instances: 1,
+
+            env: {
+                NODE_ENV: 'production',
+            },
+
+            autorestart: true,
+            max_restarts: 15,
+            min_uptime: '10s',
+            restart_delay: 5000,
+
+            // Very lightweight — just DB polling
+            max_memory_restart: '150M',
+
+            kill_timeout: 5000,
+
+            log_file: 'logs/outreach_worker_combined.log',
+            out_file: 'logs/outreach_worker_out.log',
+            error_file: 'logs/outreach_worker_error.log',
+            log_date_format: 'YYYY-MM-DD HH:mm:ss',
+        },
+
+        // ── Squad Runner (Comment Actor — 4h cycles) ───────────────────────
+        {
+            name: 'thg-squad-runner',
+            script: 'ai/squad/squadRunner.js',
+            cwd: require('path').join(__dirname, '..'),
+
+            exec_mode: 'fork',
+            instances: 1,
+
+            args: '--cron',
+
+            env: {
+                NODE_ENV: 'production',
+                SQUAD_CYCLE_HOURS: '4',
+            },
+
+            autorestart: true,
+            max_restarts: 10,
+            min_uptime: '30s',
+            restart_delay: 10000,
+
+            // Playwright browser during comment cycles
+            max_memory_restart: '600M',
+
+            kill_timeout: 20000,
+            shutdown_with_message: true,
+
+            log_file: 'logs/squad_runner_combined.log',
+            out_file: 'logs/squad_runner_out.log',
+            error_file: 'logs/squad_runner_error.log',
+            log_date_format: 'YYYY-MM-DD HH:mm:ss',
+        },
+
+        // ── Social Worker (Inbox Monitor + AI Reply — 24/7) ────────────────
+        {
+            name: 'thg-social-worker',
+            script: 'backend/infra/workers/socialWorker.js',
+            cwd: require('path').join(__dirname, '..'),
+
+            exec_mode: 'fork',
+            instances: 1,
+
+            env: {
+                NODE_ENV: 'production',
+            },
+
+            autorestart: true,
+            max_restarts: 15,
+            min_uptime: '15s',
+            restart_delay: 8000,
+            exp_backoff_restart_delay: 100,
+
+            // Playwright for inbox reading
+            max_memory_restart: '500M',
+
+            kill_timeout: 15000,
+            shutdown_with_message: true,
+
+            log_file: 'logs/social_worker_combined.log',
+            out_file: 'logs/social_worker_out.log',
+            error_file: 'logs/social_worker_error.log',
             log_date_format: 'YYYY-MM-DD HH:mm:ss',
         },
 

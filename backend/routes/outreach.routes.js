@@ -17,7 +17,7 @@ const { generateDM, generateComment, generateFollowUp, batchGenerate } = require
 // Generate AI outreach message for a specific lead
 router.post('/api/leads/:id/generate-outreach', async (req, res) => {
     try {
-        const lead = database.getLeadById.get(req.params.id);
+        const lead = database.getLeadById(req.params.id);
         if (!lead) return res.status(404).json({ ok: false, error: 'Lead not found' });
 
         const { staffName = 'Đức Anh', tone = 'friendly', type = 'dm' } = req.body;
@@ -50,7 +50,7 @@ router.post('/api/leads/:id/generate-outreach', async (req, res) => {
 // Generate follow-up message for a lead already contacted
 router.post('/api/leads/:id/generate-followup', async (req, res) => {
     try {
-        const lead = database.getLeadById.get(req.params.id);
+        const lead = database.getLeadById(req.params.id);
         if (!lead) return res.status(404).json({ ok: false, error: 'Lead not found' });
 
         const { staffName = 'Đức Anh', previousMessage = '' } = req.body;
@@ -86,8 +86,7 @@ router.post('/api/leads/:id/log-outreach', (req, res) => {
 
         // Update lead pipeline stage
         database.db.prepare(`
-            UPDATE leads SET pipeline_stage = 'contacted', status = 'contacted',
-            contacted_at = COALESCE(contacted_at, datetime('now')), updated_at = datetime('now')
+            UPDATE post_classifications SET pipeline_stage = 'contacted'
             WHERE id = ?
         `).run(req.params.id);
         database.invalidateStatsCache();
@@ -122,7 +121,7 @@ router.post('/api/outreach/batch-generate', async (req, res) => {
 
         const MAX_BATCH = 20;
         const ids = leadIds.slice(0, MAX_BATCH);
-        const leads = ids.map(id => database.getLeadById.get(id)).filter(Boolean);
+        const leads = ids.map(id => database.getLeadById(id)).filter(Boolean);
 
         // Run in background — return immediately
         res.json({ ok: true, message: `Generating ${leads.length} messages in background`, count: leads.length });
@@ -159,8 +158,10 @@ router.get('/api/outreach/stats', (req, res) => {
             SELECT staff_name, COUNT(*) as count FROM outreach_log GROUP BY staff_name ORDER BY count DESC
         `).all();
         const recent = database.db.prepare(`
-            SELECT ol.*, l.author_name, l.score, l.category
-            FROM outreach_log ol LEFT JOIN leads l ON ol.lead_id = l.id
+            SELECT ol.*, rp.author_name, pc.sales_priority_score as score, pc.thg_service_needed as category
+            FROM outreach_log ol
+            LEFT JOIN post_classifications pc ON ol.lead_id = pc.id
+            LEFT JOIN raw_posts rp ON pc.raw_post_id = rp.id
             ORDER BY ol.created_at DESC LIMIT 10
         `).all();
 
@@ -187,7 +188,7 @@ router.patch('/api/leads/:id/pipeline', (req, res) => {
         }
 
         database.db.prepare(`
-            UPDATE leads SET pipeline_stage = ?, updated_at = datetime('now') WHERE id = ?
+            UPDATE post_classifications SET pipeline_stage = ? WHERE id = ?
         `).run(stage, req.params.id);
         database.invalidateStatsCache();
 

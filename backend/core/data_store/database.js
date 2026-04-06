@@ -124,6 +124,21 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_scan_queue_status ON scan_queue(status);
+
+  -- 10. Outreach Log (AI-generated messages, comments, DMs)
+  CREATE TABLE IF NOT EXISTS outreach_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    lead_id      INTEGER NOT NULL,  -- post_classifications.id
+    staff_name   TEXT NOT NULL,
+    channel      TEXT NOT NULL DEFAULT 'messenger', -- messenger | comment
+    message      TEXT NOT NULL,
+    ai_generated INTEGER DEFAULT 1,
+    status       TEXT DEFAULT 'draft', -- draft | sent | failed
+    sent_at      TEXT,
+    created_at   TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_outreach_log_lead ON outreach_log(lead_id);
+  CREATE INDEX IF NOT EXISTS idx_outreach_log_staff ON outreach_log(staff_name);
 `);
 
 // Indexes that depend on columns added/renamed by absoluteSync must run AFTER sync
@@ -716,6 +731,31 @@ const getSignalDetail = (raw_post_id) => {
   `).get(raw_post_id);
 };
 
+/**
+ * Get lead by post_classifications.id (used by outreach routes)
+ * Returns joined post_classifications + raw_posts record
+ */
+const getLeadById = (id) => {
+  return db.prepare(`
+    SELECT
+      pc.id, pc.recommended_lane as lane, pc.reason_summary, pc.confidence,
+      pc.seller_likelihood, pc.pain_score, pc.intent_score, pc.sales_priority_score,
+      pc.strategic_summary, pc.suggested_opener, pc.pipeline_stage,
+      pc.assigned_to, pc.sales_notes, pc.thg_service_needed, pc.identity_clues,
+      rp.id as raw_post_id, rp.author_name, rp.post_url, rp.post_text as content,
+      rp.source_platform as platform, rp.group_name, rp.author_profile_url
+    FROM post_classifications pc
+    JOIN raw_posts rp ON pc.raw_post_id = rp.id
+    WHERE pc.id = ?
+    LIMIT 1
+  `).get(id);
+};
+
+/**
+ * No-op stats cache invalidation (kept for API compatibility)
+ */
+const invalidateStatsCache = () => {};
+
 // ─── Staff Profiles & Style Learning ─────────────────────────────────────────
 
 const getStaffProfile = (staffName) => {
@@ -1264,6 +1304,8 @@ module.exports = {
   updateSalesNotes,
   updateAssignedTo,
   getSignalDetail,
+  getLeadById,
+  invalidateStatsCache,
   getStaffProfile,
   updateStaffOpenerSample,
   updateStaffServiceSample,
