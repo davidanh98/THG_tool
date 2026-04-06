@@ -162,15 +162,25 @@ async function reLoginAccount(account) {
     const sleep = (ms) => new Promise(r => setTimeout(r, ms + Math.random() * 500));
 
     try {
-        // Navigate to mobile Facebook
-        await page.goto('https://m.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 40000 });
+        // Thử mobile Facebook trước, fallback sang desktop nếu bị redirect Instagram
+        let loginBase = 'https://m.facebook.com/';
+        await page.goto(loginBase, { waitUntil: 'domcontentloaded', timeout: 40000 });
         await sleep(3000);
 
         let url = page.url();
 
+        // Detect Instagram login redirect → switch sang desktop Facebook
+        if (url.includes('ig/login_via') || url.includes('instagram.com')) {
+            console.log(`${tag} 🔄 Instagram redirect detected — switching to desktop Facebook...`);
+            loginBase = 'https://www.facebook.com/';
+            await page.goto('https://www.facebook.com/login', { waitUntil: 'domcontentloaded', timeout: 40000 });
+            await sleep(3000);
+            url = page.url();
+        }
+
         // Fill login form if present
-        const emailInput = await page.$('input[name="email"], #m_login_email');
-        const passInput = await page.$('input[name="pass"], #m_login_password');
+        const emailInput = await page.$('input[name="email"], #m_login_email, input#email');
+        const passInput = await page.$('input[name="pass"], #m_login_password, input#pass');
 
         if (emailInput && passInput) {
             await emailInput.fill(account.email);
@@ -289,8 +299,16 @@ async function reLoginAccount(account) {
         }
 
         // Verify success
-        await sleep(2000);
+        await sleep(3000);
         const finalUrl = page.url();
+
+        // Detect Instagram redirect sau khi login → failed
+        if (finalUrl.includes('ig/login_via') || finalUrl.includes('instagram.com/accounts')) {
+            console.warn(`${tag} ❌ Still stuck on Instagram login flow — cannot auto-bypass`);
+            await browser.close();
+            return { success: false, reason: 'instagram_login_flow' };
+        }
+
         const isLoggedIn = !finalUrl.includes('/login') && !finalUrl.includes('checkpoint')
             && (finalUrl.includes('facebook.com') || await page.$('a[href*="/home"]'));
 
