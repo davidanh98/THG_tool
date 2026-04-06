@@ -91,19 +91,38 @@ async function checkSessionViaShadow(cookieStr, proxyUrl = '') {
     }
 
     try {
-        const res = await axios.get('https://www.facebook.com/', config);
-        const html = res.data || '';
+        const res = await axios.get('https://www.facebook.com/', {
+            ...config,
+            validateStatus: () => true, // không throw trên bất kỳ status nào
+        });
+        const html = String(res.data || '');
+        const status = res.status;
 
-        if (html.includes('checkpoint') || html.includes('/login/?next') || html.includes('"login"')) {
-            return { valid: false, reason: 'checkpoint_or_login' };
-        }
-        // Check for logged-in indicator: "DTSGInitialData" only present when logged in
-        const isLoggedIn = html.includes('DTSGInitialData') || html.includes('"USER_ID"');
-        return { valid: isLoggedIn, reason: isLoggedIn ? 'ok' : 'not_logged_in' };
-    } catch (e) {
-        if (e.response?.status === 302 || e.response?.status === 301) {
+        // Redirect về login → definitely invalid
+        if (status === 302 || status === 301) {
             return { valid: false, reason: 'redirect_to_login' };
         }
+
+        // Check nội dung HTML
+        if (html.includes('checkpoint') || html.includes('/login/?next')) {
+            return { valid: false, reason: 'checkpoint_or_login' };
+        }
+
+        // DTSGInitialData chỉ có khi đã login
+        const isLoggedIn = html.includes('DTSGInitialData') || html.includes('"USER_ID"');
+
+        // 400 nhưng có DTSGInitialData → session vẫn valid
+        if (status === 400 && isLoggedIn) {
+            return { valid: true, reason: 'ok_400' };
+        }
+
+        // 400 không có login indicator → session hết hạn
+        if (status === 400) {
+            return { valid: false, reason: 'session_expired_400' };
+        }
+
+        return { valid: isLoggedIn, reason: isLoggedIn ? 'ok' : 'not_logged_in' };
+    } catch (e) {
         return { valid: false, reason: `network_error: ${e.message.substring(0, 50)}` };
     }
 }
