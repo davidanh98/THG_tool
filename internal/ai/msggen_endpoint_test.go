@@ -29,3 +29,30 @@ func TestMessageGeneratorChatURL(t *testing.T) {
 		t.Fatalf("NewMessageGenerator default = %q, want %q", got, defaultChatCompletionsURL)
 	}
 }
+
+// TestDisableThinkingDetection pins that DeepSeek endpoints get thinking disabled
+// (token optimization) while OpenAI/Together never receive the field.
+func TestDisableThinkingDetection(t *testing.T) {
+	cases := []struct {
+		baseURL string
+		want    bool
+	}{
+		{"", false},
+		{"https://api.openai.com/v1", false},
+		{"https://api.together.xyz/v1", false},
+		{"https://api.deepseek.com", true},
+		{"https://API.DeepSeek.com/v1", true},
+	}
+	for _, tc := range cases {
+		mg := NewMessageGeneratorWithEndpoint("k", "m", tc.baseURL)
+		if mg.disableThinking != tc.want {
+			t.Fatalf("disableThinking(%q) = %v, want %v", tc.baseURL, mg.disableThinking, tc.want)
+		}
+		body := map[string]any{"model": "m"}
+		mg.applyProviderTuning(body)
+		_, has := body["thinking"]
+		if has != tc.want {
+			t.Fatalf("applyProviderTuning(%q): thinking present=%v, want %v", tc.baseURL, has, tc.want)
+		}
+	}
+}

@@ -46,10 +46,18 @@ type Config struct {
 	// comment generation) at an OpenAI-compatible provider (e.g. Together AI).
 	// Empty LLMBaseURL keeps the built-in OpenAI default; LLMAPIKey falls back
 	// to OpenAIAPIKey. Embeddings + vision (pricer) keep OpenAIAPIKey.
-	LLMBaseURL        string // e.g. https://api.together.xyz/v1 — blank = OpenAI
-	LLMAPIKey         string // provider key for chat models; blank = OpenAIAPIKey
-	AgentBrainURL     string // optional Python sidecar planner endpoint base URL
-	AgentBrainTimeout int    // milliseconds
+	LLMBaseURL string // e.g. https://api.together.xyz/v1 — blank = OpenAI
+	LLMAPIKey  string // provider key for chat models; blank = OpenAIAPIKey
+	// Per-path provider overrides so the classifier and the comment generator
+	// can run on DIFFERENT providers (e.g. classifier on Together for strict
+	// json_schema, comment on DeepSeek for cheap free-text). Each falls back to
+	// LLMBaseURL/LLMAPIKey when blank, so the shared knob still drives both.
+	LLMClassifierBaseURL string
+	LLMClassifierAPIKey  string
+	LLMCommentBaseURL    string
+	LLMCommentAPIKey     string
+	AgentBrainURL        string // optional Python sidecar planner endpoint base URL
+	AgentBrainTimeout    int    // milliseconds
 
 	// Security
 	APISecret      string // DEPRECATED: legacy API key; replaced by JWT auth
@@ -146,6 +154,10 @@ func Load() *Config {
 		OpenAICommentModel:         getEnv("OPENAI_COMMENT_MODEL", "gpt-4.1"),
 		LLMBaseURL:                 strings.TrimRight(getEnv("LLM_BASE_URL", ""), "/"),
 		LLMAPIKey:                  getEnv("LLM_API_KEY", getEnv("OPENAI_API_KEY", "")),
+		LLMClassifierBaseURL:       strings.TrimRight(getEnv("LLM_CLASSIFIER_BASE_URL", getEnv("LLM_BASE_URL", "")), "/"),
+		LLMClassifierAPIKey:        getEnv("LLM_CLASSIFIER_API_KEY", getEnv("LLM_API_KEY", getEnv("OPENAI_API_KEY", ""))),
+		LLMCommentBaseURL:          strings.TrimRight(getEnv("LLM_COMMENT_BASE_URL", getEnv("LLM_BASE_URL", "")), "/"),
+		LLMCommentAPIKey:           getEnv("LLM_COMMENT_API_KEY", getEnv("LLM_API_KEY", getEnv("OPENAI_API_KEY", ""))),
 		AgentBrainURL:              getEnv("AGENT_BRAIN_URL", ""),
 		AgentBrainTimeout:          getEnvInt("AGENT_BRAIN_TIMEOUT_MS", 1500),
 		APISecret:                  getEnv("API_SECRET", ""),

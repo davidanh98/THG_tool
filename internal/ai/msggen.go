@@ -92,7 +92,13 @@ type MessageGenerator struct {
 	// baseURL is an OpenAI-compatible chat endpoint base (e.g.
 	// https://api.together.xyz/v1). Empty means the OpenAI default.
 	baseURL string
-	client  *http.Client
+	// disableThinking sends {"thinking":{"type":"disabled"}} to providers whose
+	// reasoning/thinking mode is ON by default (DeepSeek), where the extra
+	// reasoning tokens roughly double cost with no quality gain for short
+	// classification/comment output. Only sent to providers that accept the
+	// field — OpenAI/Together never receive it.
+	disableThinking bool
+	client          *http.Client
 }
 
 // NewMessageGenerator creates a new AI message generator against OpenAI.
@@ -104,11 +110,27 @@ func NewMessageGenerator(apiKey, model string) *MessageGenerator {
 // provider. A blank baseURL keeps the OpenAI default, so callers that pass "" behave
 // exactly like NewMessageGenerator.
 func NewMessageGeneratorWithEndpoint(apiKey, model, baseURL string) *MessageGenerator {
+	normBase := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	return &MessageGenerator{
-		apiKey:  apiKey,
-		model:   model,
-		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		client:  &http.Client{Timeout: 30 * time.Second},
+		apiKey:          apiKey,
+		model:           model,
+		baseURL:         normBase,
+		disableThinking: isDeepSeekEndpoint(normBase),
+		client:          &http.Client{Timeout: 30 * time.Second},
+	}
+}
+
+// isDeepSeekEndpoint reports whether a base URL targets DeepSeek, whose thinking
+// mode defaults ON and must be disabled to keep token cost down.
+func isDeepSeekEndpoint(baseURL string) bool {
+	return strings.Contains(strings.ToLower(baseURL), "deepseek")
+}
+
+// applyProviderTuning adds provider-specific request fields in place. Currently
+// only DeepSeek's thinking toggle; a no-op for OpenAI/Together.
+func (mg *MessageGenerator) applyProviderTuning(body map[string]any) {
+	if mg.disableThinking {
+		body["thinking"] = map[string]string{"type": "disabled"}
 	}
 }
 
@@ -604,6 +626,7 @@ func (mg *MessageGenerator) callOpenAIStrictJSON(ctx context.Context, prompt, sc
 			},
 		},
 	}
+	mg.applyProviderTuning(body)
 
 	jsonBody, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, "POST", mg.chatURL(), bytes.NewReader(jsonBody))
@@ -743,7 +766,9 @@ func isRetryableOpenAIError(err error) bool {
 }
 
 func (mg *MessageGenerator) callOpenAIOnce(ctx context.Context, prompt string) (string, error) {
-	jsonBody, _ := json.Marshal(chatCompletionBody(mg.model, prompt))
+	body := chatCompletionBody(mg.model, prompt)
+	mg.applyProviderTuning(body)
+	jsonBody, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, "POST", mg.chatURL(), bytes.NewReader(jsonBody))
 	if err != nil {
 		return "", err
