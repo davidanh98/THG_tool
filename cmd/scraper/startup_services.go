@@ -33,8 +33,12 @@ func setupAIAgent(cfg *config.Config, db *store.Store, jobStore *jobs.Store, not
 		log.Println("⚠️  OPENAI_API_KEY not set, AI Agent disabled")
 		return nil, nil, nil
 	}
-	classifierMg := ai.NewMessageGenerator(cfg.OpenAIAPIKey, cfg.OpenAIClassifierModel)
-	commentMg := ai.NewMessageGenerator(cfg.OpenAIAPIKey, cfg.OpenAICommentModel)
+	// Classifier and comment can run on DIFFERENT OpenAI-compatible providers
+	// (per-path LLM_CLASSIFIER_*/LLM_COMMENT_*, each falling back to LLM_*):
+	// e.g. classifier on Together for strict json_schema, comment on DeepSeek
+	// for cheap free-text. Blank keeps the OpenAI default unchanged.
+	classifierMg := ai.NewMessageGeneratorWithEndpoint(cfg.LLMClassifierAPIKey, cfg.OpenAIClassifierModel, cfg.LLMClassifierBaseURL)
+	commentMg := ai.NewMessageGeneratorWithEndpoint(cfg.LLMCommentAPIKey, cfg.OpenAICommentModel, cfg.LLMCommentBaseURL)
 	agent := copilot.NewAgent(cfg.OpenAIAPIKey, cfg.OpenAICommentModel, db)
 	if cfg.AgentBrainURL != "" {
 		agent.SetBrainClient(copilot.NewBrainClient(cfg.AgentBrainURL, time.Duration(cfg.AgentBrainTimeout)*time.Millisecond))

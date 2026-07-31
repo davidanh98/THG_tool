@@ -81,20 +81,65 @@ func detectLang(text string) string {
 	return "en"
 }
 
+// defaultChatCompletionsURL is the OpenAI chat-completions endpoint used when no
+// provider base URL is configured.
+const defaultChatCompletionsURL = "https://api.openai.com/v1/chat/completions"
+
 // MessageGenerator generates contextual messages for auto-commenting and auto-inbox.
 type MessageGenerator struct {
 	apiKey string
 	model  string
-	client *http.Client
+	// baseURL is an OpenAI-compatible chat endpoint base (e.g.
+	// https://api.together.xyz/v1). Empty means the OpenAI default.
+	baseURL string
+	// disableThinking sends {"thinking":{"type":"disabled"}} to providers whose
+	// reasoning/thinking mode is ON by default (DeepSeek), where the extra
+	// reasoning tokens roughly double cost with no quality gain for short
+	// classification/comment output. Only sent to providers that accept the
+	// field — OpenAI/Together never receive it.
+	disableThinking bool
+	client          *http.Client
 }
 
-// NewMessageGenerator creates a new AI message generator.
+// NewMessageGenerator creates a new AI message generator against OpenAI.
 func NewMessageGenerator(apiKey, model string) *MessageGenerator {
+	return NewMessageGeneratorWithEndpoint(apiKey, model, "")
+}
+
+// NewMessageGeneratorWithEndpoint creates a generator against any OpenAI-compatible
+// provider. A blank baseURL keeps the OpenAI default, so callers that pass "" behave
+// exactly like NewMessageGenerator.
+func NewMessageGeneratorWithEndpoint(apiKey, model, baseURL string) *MessageGenerator {
+	normBase := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	return &MessageGenerator{
-		apiKey: apiKey,
-		model:  model,
-		client: &http.Client{Timeout: 30 * time.Second},
+		apiKey:          apiKey,
+		model:           model,
+		baseURL:         normBase,
+		disableThinking: isDeepSeekEndpoint(normBase),
+		client:          &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+// isDeepSeekEndpoint reports whether a base URL targets DeepSeek, whose thinking
+// mode defaults ON and must be disabled to keep token cost down.
+func isDeepSeekEndpoint(baseURL string) bool {
+	return strings.Contains(strings.ToLower(baseURL), "deepseek")
+}
+
+// applyProviderTuning adds provider-specific request fields in place. Currently
+// only DeepSeek's thinking toggle; a no-op for OpenAI/Together.
+func (mg *MessageGenerator) applyProviderTuning(body map[string]any) {
+	if mg.disableThinking {
+		body["thinking"] = map[string]string{"type": "disabled"}
+	}
+}
+
+// chatURL returns the chat-completions endpoint for this generator's provider.
+func (mg *MessageGenerator) chatURL() string {
+	if mg.baseURL == "" {
+		return defaultChatCompletionsURL
+	}
+	return mg.baseURL + "/chat/completions"
 }
 
 // Available returns true if the generator has a valid API key.
@@ -581,9 +626,10 @@ func (mg *MessageGenerator) callOpenAIStrictJSON(ctx context.Context, prompt, sc
 			},
 		},
 	}
+	mg.applyProviderTuning(body)
 
 	jsonBody, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", mg.chatURL(), bytes.NewReader(jsonBody))
 	if err != nil {
 		return usage, err
 	}
@@ -720,8 +766,10 @@ func isRetryableOpenAIError(err error) bool {
 }
 
 func (mg *MessageGenerator) callOpenAIOnce(ctx context.Context, prompt string) (string, error) {
-	jsonBody, _ := json.Marshal(chatCompletionBody(mg.model, prompt))
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(jsonBody))
+	body := chatCompletionBody(mg.model, prompt)
+	mg.applyProviderTuning(body)
+	jsonBody, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, "POST", mg.chatURL(), bytes.NewReader(jsonBody))
 	if err != nil {
 		return "", err
 	}

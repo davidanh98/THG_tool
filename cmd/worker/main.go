@@ -102,13 +102,17 @@ func main() {
 		})
 	})
 	log.Println("✅ Telegram lead-created channel notifier wired (per-org bot)")
-	if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
+	// Classifier key/base: LLM_CLASSIFIER_* (then LLM_*, then OPENAI_API_KEY)
+	// route it at an OpenAI-compatible provider (e.g. Together AI for strict
+	// json_schema). Keep in sync with config.LLMClassifier* in cmd/scraper.
+	if apiKey := envOr("LLM_CLASSIFIER_API_KEY", envOr("LLM_API_KEY", os.Getenv("OPENAI_API_KEY"))); apiKey != "" {
 		// OPENAI_CLASSIFIER_MODEL is the canonical name; OPENAI_MODEL is the
 		// legacy alias kept for backwards compat with /etc/thg-scraper/env on
 		// production VPS. cmd/scraper/main.go reads the same pair via
 		// config.OpenAIClassifierModel — keep the resolution order in sync.
 		model := envOr("OPENAI_CLASSIFIER_MODEL", envOr("OPENAI_MODEL", "gpt-4o-mini"))
-		h.SetUniversalClassifier(mainStore, ai.NewMessageGenerator(apiKey, model))
+		baseURL := envOr("LLM_CLASSIFIER_BASE_URL", os.Getenv("LLM_BASE_URL"))
+		h.SetUniversalClassifier(mainStore, ai.NewMessageGeneratorWithEndpoint(apiKey, model, baseURL))
 		log.Printf("✅ Universal AI classifier enabled (model: %s)", model)
 	}
 
