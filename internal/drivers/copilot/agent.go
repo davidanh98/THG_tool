@@ -20,12 +20,19 @@ import (
 // and executes production workspace actions using OpenAI Function Calling.
 // It is fully prompt-driven: no hardcoded industry logic. The user's prompts
 // define what to scrape, what qualifies as a "match", and how to engage.
+// defaultChatCompletionsURL is the OpenAI endpoint used when no provider base
+// URL is configured.
+const defaultChatCompletionsURL = "https://api.openai.com/v1/chat/completions"
+
 type Agent struct {
 	apiKey string
 	model  string
-	db     *store.Store
-	client *http.Client
-	brain  *BrainClient
+	// baseURL is an OpenAI-compatible chat endpoint base (e.g.
+	// https://api.deepseek.com). Empty means the OpenAI default.
+	baseURL string
+	db      *store.Store
+	client  *http.Client
+	brain   *BrainClient
 	// ActionHandler is the legacy execution path. Kept for backwards
 	// compatibility — the Phase 6 skill registry, when present, is the
 	// preferred path. The handler is still wired for code paths that
@@ -41,12 +48,28 @@ type Agent struct {
 
 // NewAgent creates a new AI Agent powered by OpenAI.
 func NewAgent(apiKey, model string, db *store.Store) *Agent {
+	return NewAgentWithEndpoint(apiKey, model, "", db)
+}
+
+// NewAgentWithEndpoint creates an agent against any OpenAI-compatible provider,
+// mirroring [ai.NewMessageGeneratorWithEndpoint]. A blank baseURL keeps the
+// OpenAI default, so callers that pass "" behave exactly like NewAgent.
+func NewAgentWithEndpoint(apiKey, model, baseURL string, db *store.Store) *Agent {
 	return &Agent{
-		apiKey: apiKey,
-		model:  model,
-		db:     db,
-		client: &http.Client{Timeout: 30 * time.Second},
+		apiKey:  apiKey,
+		model:   model,
+		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		db:      db,
+		client:  &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+// chatURL returns the chat-completions endpoint for this agent's provider.
+func (a *Agent) chatURL() string {
+	if a.baseURL == "" {
+		return defaultChatCompletionsURL
+	}
+	return a.baseURL + "/chat/completions"
 }
 
 // Available returns true if the agent has a valid API key.
@@ -362,7 +385,7 @@ func (a *Agent) ProcessPromptForOrgWithUser(ctx context.Context, prompt, source 
 	}
 
 	jsonBody, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", a.chatURL(), bytes.NewReader(jsonBody))
 	if err != nil {
 		return "", err
 	}

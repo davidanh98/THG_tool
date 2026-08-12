@@ -21,9 +21,23 @@ var (
 
 func getInferrer() *ai.BusinessProfileInferrer {
 	inferrerOnce.Do(func() {
-		inferrer = ai.NewBusinessProfileInferrer(os.Getenv("OPENAI_API_KEY"), os.Getenv("OPENAI_MODEL"))
+		// Profile inference is free-text reasoning, so it rides the comment
+		// path's provider. Resolution order matches config.LLMComment* in
+		// cmd/scraper — keep the two in sync.
+		inferrer = ai.NewBusinessProfileInferrerWithEndpoint(
+			envOr("LLM_COMMENT_API_KEY", envOr("LLM_API_KEY", os.Getenv("OPENAI_API_KEY"))),
+			envOr("OPENAI_COMMENT_MODEL", os.Getenv("OPENAI_MODEL")),
+			envOr("LLM_COMMENT_BASE_URL", os.Getenv("LLM_BASE_URL")),
+		)
 	})
 	return inferrer
+}
+
+func envOr(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return fallback
 }
 
 // inferBusinessContext powers the "Magic Omnibox" on the Knowledge Base
@@ -52,7 +66,7 @@ func (h *Handler) inferBusinessContext(c *fiber.Ctx) error {
 	inf := getInferrer()
 	if !inf.Available() {
 		return c.Status(503).JSON(fiber.Map{
-			"error": "AI inference chưa được cấu hình (thiếu OPENAI_API_KEY).",
+			"error": "AI inference chưa được cấu hình (thiếu LLM_COMMENT_API_KEY / OPENAI_API_KEY).",
 		})
 	}
 
