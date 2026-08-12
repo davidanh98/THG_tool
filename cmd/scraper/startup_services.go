@@ -26,20 +26,28 @@ import (
 // comment/inbox/post generator (strong model). notify is an already-
 // constructed closure (built in main() around its own telegramNotify
 // variable) passed in by value — extraction does not change what it closes
-// over. Returns (nil, nil, nil) when OPENAI_API_KEY is unset, exactly
-// matching the inline version's disabled-agent behavior.
+// over. Returns (nil, nil, nil) when no LLM key resolves for either path.
 func setupAIAgent(cfg *config.Config, db *store.Store, jobStore *jobs.Store, notify func(string)) (*copilot.Agent, *ai.MessageGenerator, *ai.MessageGenerator) {
-	if cfg.OpenAIAPIKey == "" {
-		log.Println("⚠️  OPENAI_API_KEY not set, AI Agent disabled")
-		return nil, nil, nil
-	}
 	// Classifier and comment can run on DIFFERENT OpenAI-compatible providers
 	// (per-path LLM_CLASSIFIER_*/LLM_COMMENT_*, each falling back to LLM_*):
 	// e.g. classifier on Together for strict json_schema, comment on DeepSeek
 	// for cheap free-text. Blank keeps the OpenAI default unchanged.
 	classifierMg := ai.NewMessageGeneratorWithEndpoint(cfg.LLMClassifierAPIKey, cfg.OpenAIClassifierModel, cfg.LLMClassifierBaseURL)
 	commentMg := ai.NewMessageGeneratorWithEndpoint(cfg.LLMCommentAPIKey, cfg.OpenAICommentModel, cfg.LLMCommentBaseURL)
-	agent := copilot.NewAgent(cfg.OpenAIAPIKey, cfg.OpenAICommentModel, db)
+	// Gate on the RESOLVED keys, not OpenAIAPIKey: a workspace whose paths both
+	// point at other providers has no OpenAI key at all, and gating on it left
+	// the classifier and comment generator nil while the env looked correct.
+	if !classifierMg.Available() && !commentMg.Available() {
+		log.Println("⚠️  No LLM API key set (LLM_*_API_KEY / OPENAI_API_KEY), AI Agent disabled")
+		return nil, nil, nil
+	}
+	// Agent reasoning is comment-class work, so it rides the comment path's
+	// provider rather than requiring an OpenAI key of its own.
+	agent := copilot.NewAgentWithEndpoint(cfg.LLMCommentAPIKey, cfg.OpenAICommentModel, cfg.LLMCommentBaseURL, db)
+	if !agent.Available() {
+		log.Println("⚠️  No comment-path LLM key — copilot agent disabled; classifier active")
+		return nil, classifierMg, commentMg
+	}
 	if cfg.AgentBrainURL != "" {
 		agent.SetBrainClient(copilot.NewBrainClient(cfg.AgentBrainURL, time.Duration(cfg.AgentBrainTimeout)*time.Millisecond))
 		log.Printf("✅ Agent Brain sidecar enabled: %s", cfg.AgentBrainURL)

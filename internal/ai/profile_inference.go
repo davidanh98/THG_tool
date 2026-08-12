@@ -26,18 +26,37 @@ import (
 type BusinessProfileInferrer struct {
 	apiKey string
 	model  string
-	client *http.Client
+	// baseURL is an OpenAI-compatible chat endpoint base. Empty = OpenAI.
+	baseURL string
+	client  *http.Client
 }
 
 func NewBusinessProfileInferrer(apiKey, model string) *BusinessProfileInferrer {
+	return NewBusinessProfileInferrerWithEndpoint(apiKey, model, "")
+}
+
+// NewBusinessProfileInferrerWithEndpoint builds the inferrer against any
+// OpenAI-compatible provider, mirroring [NewMessageGeneratorWithEndpoint]. This
+// is free-text reasoning like comment generation, so callers wire it to the
+// comment path's provider. A blank baseURL keeps the OpenAI default.
+func NewBusinessProfileInferrerWithEndpoint(apiKey, model, baseURL string) *BusinessProfileInferrer {
 	if model == "" {
 		model = "gpt-4o-mini"
 	}
 	return &BusinessProfileInferrer{
-		apiKey: apiKey,
-		model:  model,
-		client: &http.Client{Timeout: 45 * time.Second},
+		apiKey:  apiKey,
+		model:   model,
+		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		client:  &http.Client{Timeout: 45 * time.Second},
 	}
+}
+
+// chatURL returns the chat-completions endpoint for this inferrer's provider.
+func (i *BusinessProfileInferrer) chatURL() string {
+	if i.baseURL == "" {
+		return defaultChatCompletionsURL
+	}
+	return i.baseURL + "/chat/completions"
 }
 
 func (i *BusinessProfileInferrer) Available() bool {
@@ -265,7 +284,7 @@ func (i *BusinessProfileInferrer) callOpenAI(ctx context.Context, sysPrompt, use
 		body["temperature"] = 0.2
 	}
 	jsonBody, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", i.chatURL(), bytes.NewReader(jsonBody))
 	if err != nil {
 		return "", err
 	}
@@ -278,7 +297,7 @@ func (i *BusinessProfileInferrer) callOpenAI(ctx context.Context, sysPrompt, use
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("OpenAI HTTP %d: %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("LLM HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 	var result struct {
 		Choices []struct {
@@ -291,7 +310,7 @@ func (i *BusinessProfileInferrer) callOpenAI(ctx context.Context, sysPrompt, use
 		return "", err
 	}
 	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("no response from OpenAI")
+		return "", fmt.Errorf("no response from LLM provider")
 	}
 	return result.Choices[0].Message.Content, nil
 }
