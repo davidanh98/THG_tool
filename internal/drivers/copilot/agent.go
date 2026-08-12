@@ -394,13 +394,13 @@ func (a *Agent) ProcessPromptForOrgWithUser(ctx context.Context, prompt, source 
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("OpenAI request failed: %w", err)
+		return "", fmt.Errorf("LLM request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("OpenAI HTTP %d: %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("LLM HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var result openAIResponse
@@ -409,7 +409,7 @@ func (a *Agent) ProcessPromptForOrgWithUser(ctx context.Context, prompt, source 
 	}
 
 	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("no response from OpenAI")
+		return "", fmt.Errorf("no response from LLM provider")
 	}
 
 	choice := result.Choices[0]

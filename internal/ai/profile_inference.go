@@ -297,7 +297,7 @@ func (i *BusinessProfileInferrer) callOpenAI(ctx context.Context, sysPrompt, use
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("OpenAI HTTP %d: %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("LLM HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 	var result struct {
 		Choices []struct {
@@ -310,7 +310,7 @@ func (i *BusinessProfileInferrer) callOpenAI(ctx context.Context, sysPrompt, use
 		return "", err
 	}
 	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("no response from OpenAI")
+		return "", fmt.Errorf("no response from LLM provider")
 	}
 	return result.Choices[0].Message.Content, nil
 }
