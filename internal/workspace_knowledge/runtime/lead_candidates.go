@@ -84,6 +84,7 @@ func candidateFromHit(h retrieval.Hit) models.KnowledgeCandidate {
 			if len(pv.Images) > 0 { // Images[0] is the primary — surface it (fixes cause #3)
 				c.ImageURL = strings.TrimSpace(pv.Images[0])
 			}
+			c.SourceURL = strings.TrimSpace(pv.SourceURL) // catalog PDP link for the grounded product
 		}
 		return c
 	}

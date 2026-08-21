@@ -28,7 +28,7 @@ func TestGroundSelection_DropsInventedItems(t *testing.T) {
 
 func TestGroundSelection_ValidSKUKept_SurfacesPriceAndImage(t *testing.T) {
 	candidates := []models.KnowledgeCandidate{
-		{AssetID: 5, SKU: "ABC", Kind: "POD_product", PriceText: "4.5 USD", ImageURL: "http://img/a.jpg"},
+		{AssetID: 5, SKU: "ABC", Kind: "POD_product", PriceText: "4.5 USD", ImageURL: "http://img/a.jpg", SourceURL: "https://thgfulfill.com/vi/catalog?productId=p5"},
 	}
 	prop := ProposedSelection{Products: []ProposedItem{{Label: "áo thun", SKU: "ABC"}}}
 	sel, stats := GroundSelection(prop, candidates)
@@ -38,6 +38,9 @@ func TestGroundSelection_ValidSKUKept_SurfacesPriceAndImage(t *testing.T) {
 	p := sel.Products[0]
 	if p.SKU != "ABC" || p.PriceText != "4.5 USD" || p.ImageURL != "http://img/a.jpg" || p.Label != "áo thun" {
 		t.Fatalf("grounded product must carry real sku/price/image + agent label, got %+v", p)
+	}
+	if p.SourceURL != "https://thgfulfill.com/vi/catalog?productId=p5" {
+		t.Fatalf("grounded product must carry the catalog PDP link, got %q", p.SourceURL)
 	}
 }
 

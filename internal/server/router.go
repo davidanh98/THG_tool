@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"log"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/thg/scraper/internal/ai"
 	authpkg "github.com/thg/scraper/internal/auth"
 	"github.com/thg/scraper/internal/drivers/copilot"
+	"github.com/thg/scraper/internal/leadingest"
 	"github.com/thg/scraper/internal/models"
 	serveragent "github.com/thg/scraper/internal/server/agent"
 	serverauth "github.com/thg/scraper/internal/server/auth"
@@ -28,18 +30,20 @@ import (
 	servernotifications "github.com/thg/scraper/internal/server/notifications"
 	serverobservability "github.com/thg/scraper/internal/server/observability"
 	serverorg "github.com/thg/scraper/internal/server/org"
-	serversuperadmin "github.com/thg/scraper/internal/server/superadmin"
 	serverplatform "github.com/thg/scraper/internal/server/platform"
 	serverreel "github.com/thg/scraper/internal/server/reel"
 	serverskills "github.com/thg/scraper/internal/server/skills"
+	serversuperadmin "github.com/thg/scraper/internal/server/superadmin"
 	"github.com/thg/scraper/internal/server/system"
 	servertelegram "github.com/thg/scraper/internal/server/telegram"
 	serverworkspace "github.com/thg/scraper/internal/server/workspace"
+	"github.com/thg/scraper/internal/services/facebook"
 	tgclient "github.com/thg/scraper/internal/telegram/client"
 	"github.com/thg/scraper/internal/telegram/control"
 	"github.com/thg/scraper/internal/workspace_knowledge/ingestion"
 	"github.com/thg/scraper/internal/workspace_knowledge/ingestion/csv"
 	"github.com/thg/scraper/internal/workspace_knowledge/ingestion/rest_json"
+	knowledgeRuntime "github.com/thg/scraper/internal/workspace_knowledge/runtime"
 	wsksources "github.com/thg/scraper/internal/workspace_knowledge/sources"
 )
 
@@ -109,14 +113,22 @@ func (s *Server) registerRoutes() {
 
 	pairingLimiter := servermw.ConnectorPairingRateLimit()
 	serveragent.LocalConnectorPairingRoutes(api, serveragent.LocalConnectorDeps{DB: s.db}, pairingLimiter)
+	var leadSuggestion func(context.Context, leadingest.LeadEvent) facebook.LeadSuggestion
+	if s.cfg.LeadSuggestionEnabled {
+		builder := knowledgeRuntime.NewBuilder(s.db.Knowledge())
+		leadSuggestion = func(ctx context.Context, ev leadingest.LeadEvent) facebook.LeadSuggestion {
+			return facebook.BuildLeadSuggestion(ctx, builder, s.aiClass, ai.LoadProfileForOrg(s.db, ev.OrgID), ev.OrgID, ev.Excerpt, ev.AuthorName)
+		}
+	}
 	serveragent.ConnectorRoutes(api, serveragent.Deps{
-		DB:            s.db,
-		AIClass:       func() *ai.MessageGenerator { return s.aiClass },
-		WSHub:         s.wsHub,
-		Notifier:      s.cfg.Notifier,
-		TgEvents:      tgControl, // comment/inbox/post outcome + crawl-result → per-org channel
-		BaseURL:       tgBaseURL,
-		AccountSafety: s.cfg.AccountSafety, // crawl-result → free machine slot / park account
+		DB:             s.db,
+		AIClass:        func() *ai.MessageGenerator { return s.aiClass },
+		WSHub:          s.wsHub,
+		Notifier:       s.cfg.Notifier,
+		TgEvents:       tgControl, // comment/inbox/post outcome + crawl-result → per-org channel
+		BaseURL:        tgBaseURL,
+		AccountSafety:  s.cfg.AccountSafety, // crawl-result → free machine slot / park account
+		LeadSuggestion: leadSuggestion,
 	})
 
 	authDeps := serverauth.Deps{

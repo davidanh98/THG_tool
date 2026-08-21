@@ -12,6 +12,7 @@ import (
 	"github.com/thg/scraper/internal/leadingest"
 	"github.com/thg/scraper/internal/scoring"
 	"github.com/thg/scraper/internal/server/system"
+	"github.com/thg/scraper/internal/services/facebook"
 	"github.com/thg/scraper/internal/store/app"
 	"github.com/thg/scraper/internal/telegram/control"
 )
@@ -153,9 +154,17 @@ func (h *Handler) buildConnectorCrawlIngestDeps(orgID int64, req connectorCrawlR
 			if org, _ := h.db.GetOrganization(ev.OrgID); org != nil {
 				workspace = org.Name
 			}
+			var suggestion facebook.LeadSuggestion
+			if h.leadSuggestion != nil {
+				suggestion = h.leadSuggestion(context.Background(), ev)
+			}
+			if h.tgEvents == nil {
+				return
+			}
 			h.tgEvents.NotifyLead(control.LeadNotice{
 				OrgID: ev.OrgID, LeadID: ev.LeadID, Channel: "facebook", Workspace: workspace,
 				Author: ev.AuthorName, PostURL: ev.PostURL, Excerpt: ev.Excerpt, Reason: ev.Reason, BaseURL: h.baseURL,
+				SuggestedReply: suggestion.Reply, ProductName: suggestion.ProductName, ProductURL: suggestion.ProductURL,
 			})
 		},
 	}

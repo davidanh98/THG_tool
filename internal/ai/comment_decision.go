@@ -141,6 +141,7 @@ func groundForRole(p ProposedItem, role string, byAsset map[int64]models.Knowled
 		SKU:           c.SKU,
 		PriceText:     c.PriceText,
 		ImageURL:      c.ImageURL,
+		SourceURL:     c.SourceURL,
 		Score:         c.Score,
 	}, true
 }

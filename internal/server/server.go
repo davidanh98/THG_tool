@@ -53,7 +53,8 @@ type Config struct {
 	TelegramAllowGlobalFallback bool
 
 	// ReelStudioEnabled gates the Reel Studio HTTP API (PR-R3). Default false.
-	ReelStudioEnabled bool
+	ReelStudioEnabled     bool
+	LeadSuggestionEnabled bool
 }
 
 // Server provides the REST API and serves the Web UI.

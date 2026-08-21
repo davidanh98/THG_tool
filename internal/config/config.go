@@ -41,6 +41,10 @@ type Config struct {
 	// row means no work regardless of this flag.
 	FreshLeadCampaignsEnabled bool
 
+	// LeadSuggestionEnabled gates operator-only Telegram reply suggestions.
+	// Default false: it never changes Facebook outbound behavior.
+	LeadSuggestionEnabled bool
+
 	// AI (OpenAI only).
 	//
 	// Two-model split: classifier runs on every crawled post (high volume,
@@ -147,6 +151,7 @@ func Load() *Config {
 		TelegramAllowGlobalFallback: getEnvBool("TELEGRAM_ALLOW_GLOBAL_FALLBACK", false),
 		ReelStudioEnabled:           getEnvBool("REEL_STUDIO_ENABLED", false),
 		FreshLeadCampaignsEnabled:   getEnvBool("FRESH_LEAD_CAMPAIGNS_ENABLED", false),
+		LeadSuggestionEnabled:       getEnvBool("LEAD_SUGGESTION_ENABLED", false),
 		OpenAIAPIKey:                getEnv("OPENAI_API_KEY", ""),
 		// OPENAI_CLASSIFIER_MODEL is the canonical name; OPENAI_MODEL is kept as a
 		// legacy alias so existing /etc/thg-scraper/env files on production VPS

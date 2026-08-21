@@ -60,7 +60,7 @@ func ExampleConfigTHGHub() json.RawMessage {
 			PriceMax:          "priceTo",
 			Currency:          "currency",
 			Images:            "images",
-			SourceURLTemplate: "https://www.thgfulfill.com/catalog/{id}",
+			SourceURLTemplate: "https://thgfulfill.com/vi/catalog?productId={id}",
 			SourceUpdatedAt:   "updatedAt",
 		},
 		Availability: AvailabilityConfig{

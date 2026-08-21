@@ -51,6 +51,9 @@ type LeadNotice struct {
 	OrgID, LeadID                                   int64
 	Channel, Workspace, SourceName, Author, PostURL string
 	Excerpt, Reason, BaseURL                        string
+	// Optional operator reply suggestion (generated upstream by the caller;
+	// this sink only renders it). Empty when suggestions are disabled.
+	SuggestedReply, ProductName, ProductURL string
 }
 
 // NotifyLead emits a rich "new lead" channel notification.
@@ -68,9 +71,12 @@ func (s *Service) NotifyLead(n LeadNotice) {
 		Author:       n.Author,
 		Excerpt:      SanitizeExcerpt(n.Excerpt),
 		Reason:       strings.TrimSpace(n.Reason),
-		Status:       "Sẵn sàng xử lý",
-		PostURL:      strings.TrimSpace(n.PostURL),
-		DashboardURL: dashboardLeadURL(n.BaseURL, n.LeadID),
+		Status:         "Sẵn sàng xử lý",
+		PostURL:        strings.TrimSpace(n.PostURL),
+		DashboardURL:   dashboardLeadURL(n.BaseURL, n.LeadID),
+		SuggestedReply: strings.TrimSpace(n.SuggestedReply),
+		ProductName:    strings.TrimSpace(n.ProductName),
+		ProductURL:     strings.TrimSpace(n.ProductURL),
 	})
 	_, _ = s.NotifyEvent(n.OrgID, "lead_created", channel, msg)
 }
