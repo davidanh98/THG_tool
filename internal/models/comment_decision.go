@@ -26,6 +26,7 @@ type KnowledgeCandidate struct {
 	Summary   string  `json:"summary,omitempty"`
 	PriceText string  `json:"price_text,omitempty"`
 	ImageURL  string  `json:"image_url,omitempty"`
+	SourceURL string  `json:"source_url,omitempty"` // catalog PDP link; never generated
 	Score     float64 `json:"score"`
 }
 
@@ -37,7 +38,8 @@ type GroundedItem struct {
 	SourceAssetID int64   `json:"source_asset_id"` // the KnowledgeOS asset it is grounded in
 	SKU           string  `json:"sku,omitempty"`   // catalog SKU when grounded in a product
 	PriceText     string  `json:"price_text,omitempty"`
-	ImageURL      string  `json:"image_url,omitempty"` // from the cited asset; never generated
+	ImageURL      string  `json:"image_url,omitempty"`  // from the cited asset; never generated
+	SourceURL     string  `json:"source_url,omitempty"` // catalog PDP link from the cited product; never generated
 	Score         float64 `json:"score"`
 }
 

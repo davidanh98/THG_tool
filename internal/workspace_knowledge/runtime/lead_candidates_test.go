@@ -51,6 +51,7 @@ func TestCandidateFromHit_ProductSurfacesImageAndPrice(t *testing.T) {
 		PriceMax:      &hi,
 		Currency:      "USD",
 		Images:        []string{"http://img/a.jpg", "http://img/b.jpg"},
+		SourceURL:     "https://thgfulfill.com/vi/catalog?productId=p5",
 	}
 	payload, err := json.Marshal(pv)
 	if err != nil {
@@ -66,6 +67,9 @@ func TestCandidateFromHit_ProductSurfacesImageAndPrice(t *testing.T) {
 	}
 	if c.ImageURL != "http://img/a.jpg" { // Images[0] is the primary
 		t.Fatalf("primary image not surfaced, got %q", c.ImageURL)
+	}
+	if c.SourceURL != "https://thgfulfill.com/vi/catalog?productId=p5" {
+		t.Fatalf("catalog PDP link not surfaced, got %q", c.SourceURL)
 	}
 	if c.PriceText != "4.5-9 USD" {
 		t.Fatalf("price not formatted, got %q", c.PriceText)
