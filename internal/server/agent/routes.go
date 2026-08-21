@@ -1,15 +1,18 @@
 package agent
 
 import (
+	"context"
 	"github.com/gofiber/fiber/v2"
 	"github.com/thg/scraper/internal/ai"
 	"github.com/thg/scraper/internal/drivers/copilot"
+	"github.com/thg/scraper/internal/leadingest"
 	"github.com/thg/scraper/internal/server/agent/account"
 	"github.com/thg/scraper/internal/server/agent/connector"
 	"github.com/thg/scraper/internal/server/agent/crawlingest"
 	"github.com/thg/scraper/internal/server/agent/outbox"
 	"github.com/thg/scraper/internal/server/agent/presence"
 	"github.com/thg/scraper/internal/server/agent/stream"
+	"github.com/thg/scraper/internal/services/facebook"
 	"github.com/thg/scraper/internal/session/accountsafety"
 	"github.com/thg/scraper/internal/store"
 	"github.com/thg/scraper/internal/telegram/control"
@@ -25,7 +28,8 @@ type Deps struct {
 	// nil = no channel notifications. Shared with the integrations/webhook control service.
 	TgEvents *control.Service
 	// BaseURL is the public app URL used to build dashboard/post links in notifications.
-	BaseURL string
+	BaseURL        string
+	LeadSuggestion func(context.Context, leadingest.LeadEvent) facebook.LeadSuggestion
 	// AccountSafety receives terminal crawl results so machine crawl slots free
 	// immediately (PR-C4). Optional; nil = no result feedback.
 	AccountSafety *accountsafety.Coordinator
@@ -69,6 +73,7 @@ func ConnectorRoutes(group fiber.Router, deps Deps) {
 	crawlingest.RegisterRoutes(group, agentGrp, crawlingest.Deps{
 		DB: deps.DB, AIClass: deps.AIClass, Notifier: deps.Notifier,
 		TgEvents: deps.TgEvents, BaseURL: deps.BaseURL, AccountSafety: deps.AccountSafety,
+		LeadSuggestion: deps.LeadSuggestion,
 	}, h.agentAuth)
 	// Outbound execution (outbox claim/sent/failed/pre-submit + comment reverify)
 	// lives in the outbox subpackage — same effective paths + token auth; it owns

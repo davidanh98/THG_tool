@@ -33,6 +33,9 @@ const excerptFallback = "Chưa có nội dung tóm tắt. Mở bài viết để
 // LeadMsg / ActionMsg carry the already-resolved + sanitized fields the control layer assembled.
 type LeadMsg struct {
 	Workspace, SourceLabel, Author, Excerpt, Reason, Status, PostURL, DashboardURL string
+	// SuggestedReply/ProductName/ProductURL are the optional operator-facing reply
+	// suggestion (generated upstream; the sink only renders it). Empty = omitted.
+	SuggestedReply, ProductName, ProductURL string
 }
 
 type ActionMsg struct {
@@ -59,6 +62,9 @@ func Lead(m LeadMsg) string {
 	b.WriteString(line("Người đăng", m.Author))
 	b.WriteString(block("Nội dung", "\""+excerpt+"\""))
 	b.WriteString(block("Lý do phù hợp", m.Reason))
+	b.WriteString(block("💬 Gợi ý trả lời", m.SuggestedReply))
+	b.WriteString(line("🛍 Sản phẩm gợi ý", m.ProductName))
+	b.WriteString(link("🔗 Link sản phẩm", m.ProductURL))
 	b.WriteString(line("Trạng thái", m.Status))
 	b.WriteString(link("🔗 Mở bài viết Facebook", m.PostURL))
 	b.WriteString(link("📊 Mở trong dashboard", m.DashboardURL))
