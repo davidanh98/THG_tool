@@ -1,0 +1,12 @@
+name: telegram-grounded-product-suggestions
+status: implemented-pending-ops-verification
+owner: facebook-sales-intelligence
+summary: >-
+  Send an operator-only grounded reply suggestion and THG catalog product link
+  with each new Facebook lead notification sent to Telegram.
+runtime_authority:
+  - specs/domains/facebook-sales-intelligence/roadmap.md
+  - specs/domains/facebook-sales-intelligence/features/comment-intelligence/technical.md
+implementation_commits:
+  - c33d393
+  - 6a12c4c
