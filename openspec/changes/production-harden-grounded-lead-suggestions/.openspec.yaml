@@ -1,0 +1,10 @@
+name: production-harden-grounded-lead-suggestions
+status: implementing
+owner: facebook-sales-intelligence
+summary: >-
+  Make grounded Telegram lead suggestions safe to canary and operate in
+  production without blocking lead ingestion.
+runtime_authority:
+  - specs/domains/facebook-sales-intelligence/features/account-safety/technical.md
+  - specs/domains/platform-foundation/features/runtime-topology/technical.md
+  - openspec/changes/telegram-grounded-product-suggestions/spec.md

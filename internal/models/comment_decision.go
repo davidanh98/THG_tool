@@ -19,15 +19,16 @@ const (
 // material the agent may select from — a selection that does not match a
 // candidate by AssetID/SKU is an invented claim and is dropped.
 type KnowledgeCandidate struct {
-	AssetID   int64   `json:"asset_id"`
-	SKU       string  `json:"sku,omitempty"`
-	Kind      string  `json:"kind"` // asset type: POD_product | sales_playbook | faq | pricing_rule | cta | ...
-	Title     string  `json:"title"`
-	Summary   string  `json:"summary,omitempty"`
-	PriceText string  `json:"price_text,omitempty"`
-	ImageURL  string  `json:"image_url,omitempty"`
-	SourceURL string  `json:"source_url,omitempty"` // catalog PDP link; never generated
-	Score     float64 `json:"score"`
+	AssetID      int64   `json:"asset_id"`
+	SKU          string  `json:"sku,omitempty"`
+	Kind         string  `json:"kind"` // asset type: POD_product | sales_playbook | faq | pricing_rule | cta | ...
+	Title        string  `json:"title"`
+	Summary      string  `json:"summary,omitempty"`
+	PriceText    string  `json:"price_text,omitempty"`
+	ImageURL     string  `json:"image_url,omitempty"`
+	SourceURL    string  `json:"source_url,omitempty"`   // catalog PDP link; never generated
+	Availability string  `json:"availability,omitempty"` // canonical product availability
+	Score        float64 `json:"score"`
 }
 
 // GroundedItem is the no-fabrication unit: an agent claim that points at a real

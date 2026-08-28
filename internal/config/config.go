@@ -42,8 +42,12 @@ type Config struct {
 	FreshLeadCampaignsEnabled bool
 
 	// LeadSuggestionEnabled gates operator-only Telegram reply suggestions.
-	// Default false: it never changes Facebook outbound behavior.
-	LeadSuggestionEnabled bool
+	// OrgIDs is a fail-closed canary allowlist; timeout/concurrency bound provider
+	// work off the ingest path. Default false: Facebook outbound is unchanged.
+	LeadSuggestionEnabled        bool
+	LeadSuggestionOrgIDs         string
+	LeadSuggestionTimeoutMS      int
+	LeadSuggestionMaxConcurrency int
 
 	// AI (OpenAI only).
 	//
@@ -141,18 +145,21 @@ type Config struct {
 // Load reads configuration from environment variables with sensible defaults.
 func Load() *Config {
 	cfg := &Config{
-		TelegramBotToken:            getEnv("TELEGRAM_BOT_TOKEN", ""),
-		TelegramAdminChat:           getEnvInt64("TELEGRAM_ADMIN_CHAT_ID", 0),
-		TelegramOrgID:               getEnvInt64("TELEGRAM_ORG_ID", 1),
-		TelegramBotEnabled:          getEnvBool("TELEGRAM_BOT_ENABLED", false),
-		TelegramNotifyEnabled:       getEnvBool("TELEGRAM_NOTIFY_ENABLED", true),
-		TelegramActionsEnabled:      getEnvBool("TELEGRAM_ACTIONS_ENABLED", false),
-		TelegramWebhookSecret:       getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
-		TelegramAllowGlobalFallback: getEnvBool("TELEGRAM_ALLOW_GLOBAL_FALLBACK", false),
-		ReelStudioEnabled:           getEnvBool("REEL_STUDIO_ENABLED", false),
-		FreshLeadCampaignsEnabled:   getEnvBool("FRESH_LEAD_CAMPAIGNS_ENABLED", false),
-		LeadSuggestionEnabled:       getEnvBool("LEAD_SUGGESTION_ENABLED", false),
-		OpenAIAPIKey:                getEnv("OPENAI_API_KEY", ""),
+		TelegramBotToken:             getEnv("TELEGRAM_BOT_TOKEN", ""),
+		TelegramAdminChat:            getEnvInt64("TELEGRAM_ADMIN_CHAT_ID", 0),
+		TelegramOrgID:                getEnvInt64("TELEGRAM_ORG_ID", 1),
+		TelegramBotEnabled:           getEnvBool("TELEGRAM_BOT_ENABLED", false),
+		TelegramNotifyEnabled:        getEnvBool("TELEGRAM_NOTIFY_ENABLED", true),
+		TelegramActionsEnabled:       getEnvBool("TELEGRAM_ACTIONS_ENABLED", false),
+		TelegramWebhookSecret:        getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
+		TelegramAllowGlobalFallback:  getEnvBool("TELEGRAM_ALLOW_GLOBAL_FALLBACK", false),
+		ReelStudioEnabled:            getEnvBool("REEL_STUDIO_ENABLED", false),
+		FreshLeadCampaignsEnabled:    getEnvBool("FRESH_LEAD_CAMPAIGNS_ENABLED", false),
+		LeadSuggestionEnabled:        getEnvBool("LEAD_SUGGESTION_ENABLED", false),
+		LeadSuggestionOrgIDs:         getEnv("LEAD_SUGGESTION_ORG_IDS", ""),
+		LeadSuggestionTimeoutMS:      getEnvInt("LEAD_SUGGESTION_TIMEOUT_MS", 5000),
+		LeadSuggestionMaxConcurrency: getEnvInt("LEAD_SUGGESTION_MAX_CONCURRENCY", 2),
+		OpenAIAPIKey:                 getEnv("OPENAI_API_KEY", ""),
 		// OPENAI_CLASSIFIER_MODEL is the canonical name; OPENAI_MODEL is kept as a
 		// legacy alias so existing /etc/thg-scraper/env files on production VPS
 		// don't break on the next deploy. Drop the alias once VPS env is updated.

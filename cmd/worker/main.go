@@ -11,16 +11,11 @@ import (
 	"github.com/thg/scraper/internal/ai"
 	facebookcrawl "github.com/thg/scraper/internal/jobhandlers/facebook_crawl"
 	"github.com/thg/scraper/internal/jobs"
-	"github.com/thg/scraper/internal/leadingest"
 	"github.com/thg/scraper/internal/livesession"
 	"github.com/thg/scraper/internal/runtime"
 	"github.com/thg/scraper/internal/scoring"
-	"github.com/thg/scraper/internal/services/facebook"
 	"github.com/thg/scraper/internal/session"
 	"github.com/thg/scraper/internal/store"
-	tgclient "github.com/thg/scraper/internal/telegram/client"
-	"github.com/thg/scraper/internal/telegram/control"
-	knowledgeRuntime "github.com/thg/scraper/internal/workspace_knowledge/runtime"
 )
 
 func main() {
@@ -80,47 +75,7 @@ func main() {
 	h := facebookcrawl.New(fallback, scorer, jobStore, mainStore.App())
 	h.SetAllocator(allocator, lsFactory)
 
-	// Per-ORG Telegram channel notification on each NEW lead (uses the org's own bot token). The
-	// crawler runs here in the worker, so the notifier is wired here too. Best-effort.
-	tgControl := control.NewService(mainStore.Telegram(), tgclient.Bot, control.Flags{
-		NotifyEnabled:       envOr("TELEGRAM_NOTIFY_ENABLED", "true") != "false",
-		GlobalToken:         os.Getenv("TELEGRAM_BOT_TOKEN"),
-		AllowGlobalFallback: envOr("TELEGRAM_ALLOW_GLOBAL_FALLBACK", "false") == "true",
-	})
-	// Canonical app URL is INTERNAL platform config (PUBLIC_APP_URL preferred). When unset, the
-	// renderer cleanly OMITS the dashboard link — never an empty "Mở dashboard:" line.
-	baseURL := envOr("PUBLIC_APP_URL", os.Getenv("APP_BASE_URL"))
-	if baseURL == "" {
-		log.Println("ℹ️  [PLATFORM] PUBLIC_APP_URL/APP_BASE_URL not set — Telegram lead notifications will omit the dashboard link (internal config).")
-	}
-	var leadSuggestion func(context.Context, leadingest.LeadEvent) facebook.LeadSuggestion
-	if envOr("LEAD_SUGGESTION_ENABLED", "false") == "true" {
-		builder := knowledgeRuntime.NewBuilder(mainStore.Knowledge())
-		commentKey := envOr("LLM_COMMENT_API_KEY", envOr("LLM_API_KEY", os.Getenv("OPENAI_API_KEY")))
-		commentModel := envOr("OPENAI_COMMENT_MODEL", envOr("OPENAI_MODEL", "gpt-4.1"))
-		commentBaseURL := envOr("LLM_COMMENT_BASE_URL", os.Getenv("LLM_BASE_URL"))
-		commentGen := ai.NewMessageGeneratorWithEndpoint(commentKey, commentModel, commentBaseURL)
-		leadSuggestion = func(ctx context.Context, ev leadingest.LeadEvent) facebook.LeadSuggestion {
-			return facebook.BuildLeadSuggestion(ctx, builder, commentGen, ai.LoadProfileForOrg(mainStore, ev.OrgID), ev.OrgID, ev.Excerpt, ev.AuthorName)
-		}
-		log.Println("✅ Operator lead suggestions enabled (LEAD_SUGGESTION_ENABLED=true)")
-	}
-	h.SetLeadNotifier(func(ev leadingest.LeadEvent) {
-		workspace := ""
-		if org, _ := mainStore.GetOrganization(ev.OrgID); org != nil {
-			workspace = org.Name
-		}
-		suggestion := facebook.LeadSuggestion{}
-		if leadSuggestion != nil {
-			suggestion = leadSuggestion(context.Background(), ev)
-		}
-		tgControl.NotifyLead(control.LeadNotice{
-			OrgID: ev.OrgID, LeadID: ev.LeadID, Channel: "facebook", Workspace: workspace,
-			Author: ev.AuthorName, PostURL: ev.PostURL, Excerpt: ev.Excerpt, Reason: ev.Reason, BaseURL: baseURL,
-			SuggestedReply: suggestion.Reply, ProductName: suggestion.ProductName, ProductURL: suggestion.ProductURL,
-		})
-	})
-	log.Println("✅ Telegram lead-created channel notifier wired (per-org bot)")
+	setupWorkerLeadNotifications(mainStore, h)
 	// Classifier key/base: LLM_CLASSIFIER_* (then LLM_*, then OPENAI_API_KEY)
 	// route it at an OpenAI-compatible provider (e.g. Together AI for strict
 	// json_schema). Keep in sync with config.LLMClassifier* in cmd/scraper.
