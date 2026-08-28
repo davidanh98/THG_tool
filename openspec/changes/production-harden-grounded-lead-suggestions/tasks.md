@@ -12,8 +12,8 @@
 
 ## Gates
 
-- [ ] Run focused Go tests and race tests.
-- [ ] Run repository AI preflight and validation workflows.
+- [x] Run focused Go tests and Linux race tests.
+- [x] Run repository AI preflight and validation workflows (Python guards completed in CI).
 - [x] Run extension tests and frontend production build.
 - [x] Review the final diff for tenant, outbound, browser, and data-plane invariants.
 
