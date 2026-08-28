@@ -51,6 +51,7 @@ func TestCandidateFromHit_ProductSurfacesImageAndPrice(t *testing.T) {
 		PriceMax:      &hi,
 		Currency:      "USD",
 		Images:        []string{"http://img/a.jpg", "http://img/b.jpg"},
+		Availability:  products.AvailInStock,
 		SourceURL:     "https://thgfulfill.com/vi/catalog?productId=p5",
 	}
 	payload, err := json.Marshal(pv)
@@ -70,6 +71,9 @@ func TestCandidateFromHit_ProductSurfacesImageAndPrice(t *testing.T) {
 	}
 	if c.SourceURL != "https://thgfulfill.com/vi/catalog?productId=p5" {
 		t.Fatalf("catalog PDP link not surfaced, got %q", c.SourceURL)
+	}
+	if c.Availability != string(products.AvailInStock) {
+		t.Fatalf("availability not surfaced, got %q", c.Availability)
 	}
 	if c.PriceText != "4.5-9 USD" {
 		t.Fatalf("price not formatted, got %q", c.PriceText)

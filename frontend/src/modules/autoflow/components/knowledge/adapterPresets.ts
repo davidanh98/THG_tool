@@ -73,7 +73,7 @@ const thgHubPreset: AdapterPreset = {
       price_max: 'priceTo',
       currency: 'currency',
       images: 'images',
-      source_url_template: 'https://www.thgfulfill.com/catalog/{id}',
+      source_url_template: 'https://thgfulfill.com/vi/catalog?productId={id}',
       source_updated_at: 'updatedAt',
     },
     availability: {

@@ -10,7 +10,9 @@ import (
 	"github.com/thg/scraper/internal/ai"
 	"github.com/thg/scraper/internal/drivers/copilot"
 	"github.com/thg/scraper/internal/jobs"
+	"github.com/thg/scraper/internal/leadingest"
 	"github.com/thg/scraper/internal/mailer"
+	"github.com/thg/scraper/internal/notifications"
 	agentstream "github.com/thg/scraper/internal/server/agent/stream"
 	"github.com/thg/scraper/internal/session"
 	"github.com/thg/scraper/internal/session/accountsafety"
@@ -54,7 +56,9 @@ type Config struct {
 
 	// ReelStudioEnabled gates the Reel Studio HTTP API (PR-R3). Default false.
 	ReelStudioEnabled     bool
-	LeadSuggestionEnabled bool
+	LeadSuggestion        leadingest.SuggestionBuild
+	LeadSuggestionAllowed func(int64) bool
+	LeadSuggestionRunner  *notifications.SuggestionRunner
 }
 
 // Server provides the REST API and serves the Web UI.

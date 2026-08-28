@@ -10,9 +10,9 @@ import (
 
 	"github.com/thg/scraper/internal/ai"
 	"github.com/thg/scraper/internal/leadingest"
+	"github.com/thg/scraper/internal/models"
 	"github.com/thg/scraper/internal/scoring"
 	"github.com/thg/scraper/internal/server/system"
-	"github.com/thg/scraper/internal/services/facebook"
 	"github.com/thg/scraper/internal/store/app"
 	"github.com/thg/scraper/internal/telegram/control"
 )
@@ -28,7 +28,8 @@ import (
 // processConnectorCrawlResult is the Fiber-free ingest pipeline: ownership validation, task
 // lifecycle, dependency setup, direct-post workflow resolution, the per-item loop, the
 // deterministic direct-post terminal-failure decision, the crawl summary, and forensics.
-// Synchronous — it completes before returning (no goroutines spawned on ctx).
+// Lead persistence remains synchronous. Optional Telegram enrichment is handed
+// to a bounded background runner that does not retain the request context.
 func (h *Handler) processConnectorCrawlResult(ctx context.Context, agentID, orgID int64, req connectorCrawlResultRequest) (connectorCrawlProcessResult, error) {
 	if err := h.resolveCrawlOwnership(orgID, agentID, req); err != nil {
 		return connectorCrawlProcessResult{}, err
@@ -154,18 +155,23 @@ func (h *Handler) buildConnectorCrawlIngestDeps(orgID int64, req connectorCrawlR
 			if org, _ := h.db.GetOrganization(ev.OrgID); org != nil {
 				workspace = org.Name
 			}
-			var suggestion facebook.LeadSuggestion
-			if h.leadSuggestion != nil {
-				suggestion = h.leadSuggestion(context.Background(), ev)
-			}
 			if h.tgEvents == nil {
 				return
 			}
-			h.tgEvents.NotifyLead(control.LeadNotice{
-				OrgID: ev.OrgID, LeadID: ev.LeadID, Channel: "facebook", Workspace: workspace,
-				Author: ev.AuthorName, PostURL: ev.PostURL, Excerpt: ev.Excerpt, Reason: ev.Reason, BaseURL: h.baseURL,
-				SuggestedReply: suggestion.Reply, ProductName: suggestion.ProductName, ProductURL: suggestion.ProductURL,
-			})
+			deliver := func(suggestion models.LeadSuggestion) {
+				h.tgEvents.NotifyLead(control.LeadNotice{
+					OrgID: ev.OrgID, LeadID: ev.LeadID, Channel: "facebook", Workspace: workspace,
+					Author: ev.AuthorName, PostURL: ev.PostURL, Excerpt: ev.Excerpt, Reason: ev.Reason, BaseURL: h.baseURL,
+					SuggestedReply: suggestion.Reply, ProductName: suggestion.ProductName, ProductURL: suggestion.ProductURL,
+					ProductImageURL: suggestion.ProductImageURL,
+				})
+			}
+			if h.leadSuggestion != nil && h.leadSuggestionAllowed != nil && h.leadSuggestionAllowed(ev.OrgID) && h.suggestionRunner != nil && h.suggestionRunner.Try(
+				func(ctx context.Context) models.LeadSuggestion { return h.leadSuggestion(ctx, ev) }, deliver,
+			) {
+				return
+			}
+			deliver(models.LeadSuggestion{})
 		},
 	}
 }

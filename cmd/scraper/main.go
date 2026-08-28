@@ -163,6 +163,7 @@ func main() {
 	log.Println("✅ Direct-post intake scheduler started (unknown post → import → auto-comment)")
 
 	// Start web server (non-blocking)
+	leadSuggestion, leadSuggestionAllowed, leadSuggestionRunner := setupLeadSuggestionRuntime(cfg, db, commentMg)
 	srv := server.New(db, jobStore, agent, workspaceMgr, server.Config{
 		Port:                        cfg.WebPort,
 		JWTSecret:                   cfg.JWTSecret,
@@ -182,7 +183,9 @@ func main() {
 		TelegramWebhookSecret:       cfg.TelegramWebhookSecret,
 		TelegramAllowGlobalFallback: cfg.TelegramAllowGlobalFallback,
 		ReelStudioEnabled:           cfg.ReelStudioEnabled,
-		LeadSuggestionEnabled:       cfg.LeadSuggestionEnabled,
+		LeadSuggestion:              leadSuggestion,
+		LeadSuggestionAllowed:       leadSuggestionAllowed,
+		LeadSuggestionRunner:        leadSuggestionRunner,
 		// SAME coordinator instance as the crawl scheduler above: the crawl-result
 		// ingest frees the slot the scheduler consumed (PR-C4 result feedback).
 		AccountSafety: accountSafety,

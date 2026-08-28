@@ -14,11 +14,12 @@ func TestLeadOmitsOperatorSuggestionWhenEmpty(t *testing.T) {
 
 func TestLeadRendersOperatorSuggestion(t *testing.T) {
 	got := Lead(LeadMsg{
-		SuggestedReply: "Bạn có thể xem mẫu phù hợp ở đây.",
-		ProductName:    "Áo hoodie",
-		ProductURL:     "https://catalog.example/p/hoodie",
+		SuggestedReply:  "Bạn có thể xem mẫu phù hợp ở đây.",
+		ProductName:     "Áo hoodie",
+		ProductURL:      "https://catalog.example/p/hoodie",
+		ProductImageURL: "https://cdn.example/p/hoodie.png",
 	})
-	for _, want := range []string{"Gợi ý trả lời", "Bạn có thể xem", "Áo hoodie", "https://catalog.example/p/hoodie"} {
+	for _, want := range []string{"Gợi ý trả lời", "Bạn có thể xem", "Áo hoodie", "https://catalog.example/p/hoodie", "Ảnh sản phẩm", "https://cdn.example/p/hoodie.png"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("suggestion notice missing %q:\n%s", want, got)
 		}

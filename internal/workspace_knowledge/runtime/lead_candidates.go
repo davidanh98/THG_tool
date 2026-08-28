@@ -85,6 +85,7 @@ func candidateFromHit(h retrieval.Hit) models.KnowledgeCandidate {
 				c.ImageURL = strings.TrimSpace(pv.Images[0])
 			}
 			c.SourceURL = strings.TrimSpace(pv.SourceURL) // catalog PDP link for the grounded product
+			c.Availability = string(pv.Availability)
 		}
 		return c
 	}
