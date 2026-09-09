@@ -8,7 +8,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/thg/scraper/internal/agentloop"
 	"github.com/thg/scraper/internal/ai"
-	"github.com/thg/scraper/internal/crmleadsync"
 	"github.com/thg/scraper/internal/drivers/copilot"
 	"github.com/thg/scraper/internal/jobs"
 	"github.com/thg/scraper/internal/leadingest"
@@ -60,9 +59,6 @@ type Config struct {
 	LeadSuggestion        leadingest.SuggestionBuild
 	LeadSuggestionAllowed func(int64) bool
 	LeadSuggestionRunner  *notifications.SuggestionRunner
-	// CRMLeadSync owns the durable CRM outbox shared by connector-originated
-	// leads. It receives the same finalized enrichment snapshot as Telegram.
-	CRMLeadSync *crmleadsync.Dispatcher
 }
 
 // Server provides the REST API and serves the Web UI.

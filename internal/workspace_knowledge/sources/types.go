@@ -35,10 +35,6 @@ const (
 	// platform's own catalog hub is just one config among many. See
 	// internal/workspace_knowledge/ingestion/rest_json.
 	SourceRESTJSON SourceType = "rest_json"
-	// SourceTrainingExport is a signed, scope-limited read-only export from
-	// THG Training. It is intentionally distinct from product REST JSON because
-	// it emits internal sales-playbook assets, never catalog products.
-	SourceTrainingExport SourceType = "training_export"
 )
 
 // IsKnown reports whether t is a SourceType the system currently
@@ -50,7 +46,7 @@ const (
 // this source type?".
 func (t SourceType) IsKnown() bool {
 	switch t {
-	case SourceShopify, SourceCSV, SourceGoogleSheets, SourceNotion, SourceWebsite, SourceCatalog, SourceRESTJSON, SourceTrainingExport:
+	case SourceShopify, SourceCSV, SourceGoogleSheets, SourceNotion, SourceWebsite, SourceCatalog, SourceRESTJSON:
 		return true
 	}
 	return false

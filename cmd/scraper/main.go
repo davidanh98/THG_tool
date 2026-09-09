@@ -164,7 +164,6 @@ func main() {
 
 	// Start web server (non-blocking)
 	leadSuggestion, leadSuggestionAllowed, leadSuggestionRunner := setupLeadSuggestionRuntime(cfg, db, commentMg)
-	crmLeadSync := startCRMLeadSync(ctx, db)
 	srv := server.New(db, jobStore, agent, workspaceMgr, server.Config{
 		Port:                        cfg.WebPort,
 		JWTSecret:                   cfg.JWTSecret,
@@ -187,7 +186,6 @@ func main() {
 		LeadSuggestion:              leadSuggestion,
 		LeadSuggestionAllowed:       leadSuggestionAllowed,
 		LeadSuggestionRunner:        leadSuggestionRunner,
-		CRMLeadSync:                 crmLeadSync,
 		// SAME coordinator instance as the crawl scheduler above: the crawl-result
 		// ingest frees the slot the scheduler consumed (PR-C4 result feedback).
 		AccountSafety: accountSafety,

@@ -109,7 +109,6 @@ func mirrorLegacyLead(ctx context.Context, deps Deps, in Input, content, sourceT
 			PostURL: in.PrimaryURL, PostFBID: in.PostFBID, Excerpt: content,
 			Reason:     textutil.FirstNonEmpty(out.AIReason, strings.Join(out.Signals, " / ")),
 			SourceType: sourceType, GroupFBID: in.GroupFBID, Score: out.Score, Category: out.Category,
-			OccurredAt: time.Now().UTC(),
 		})
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/thg/scraper/internal/leadingest"
-	"github.com/thg/scraper/internal/models"
 )
 
 type Store struct {
@@ -25,12 +24,8 @@ func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
 }
 
-func (s *Store) Enqueue(ctx context.Context, event leadingest.LeadEvent, suggestions ...models.LeadSuggestion) error {
-	var suggestion models.LeadSuggestion
-	if len(suggestions) > 0 {
-		suggestion = suggestions[0]
-	}
-	p, ok := payloadFor(event, suggestion)
+func (s *Store) Enqueue(ctx context.Context, event leadingest.LeadEvent) error {
+	p, ok := payloadFor(event)
 	if !ok {
 		return nil
 	}

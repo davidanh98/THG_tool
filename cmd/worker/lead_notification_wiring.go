@@ -96,18 +96,16 @@ func setupWorkerLeadNotifications(ctx context.Context, mainStore *store.Store, h
 
 func workerLeadNotifier(mainStore *store.Store, tgControl *control.Service, baseURL string, suggestion workerSuggestionRuntime, crmSync *crmleadsync.Dispatcher) func(leadingest.LeadEvent) {
 	return func(ev leadingest.LeadEvent) {
+		if crmSync != nil {
+			if err := crmSync.Enqueue(context.Background(), ev); err != nil {
+				log.Printf("CRM lead sync enqueue failed: %v", err)
+			}
+		}
 		workspace := ""
 		if org, _ := mainStore.GetOrganization(ev.OrgID); org != nil {
 			workspace = org.Name
 		}
 		deliver := func(enrichment models.LeadSuggestion) {
-			// The exact snapshot is first durably queued for CRM, then rendered for
-			// Telegram. CRM never regenerates the suggestion from the raw lead.
-			if crmSync != nil {
-				if err := crmSync.Enqueue(context.Background(), ev, enrichment); err != nil {
-					log.Printf("CRM enriched lead enqueue failed: %v", err)
-				}
-			}
 			tgControl.NotifyLead(control.LeadNotice{
 				OrgID: ev.OrgID, LeadID: ev.LeadID, Channel: "facebook", Workspace: workspace,
 				Author: ev.AuthorName, PostURL: ev.PostURL, Excerpt: ev.Excerpt, Reason: ev.Reason, BaseURL: baseURL,

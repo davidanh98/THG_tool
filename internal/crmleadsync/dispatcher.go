@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/thg/scraper/internal/leadingest"
-	"github.com/thg/scraper/internal/models"
 )
 
 type Dispatcher struct {
@@ -43,8 +42,8 @@ func (d *Dispatcher) Run(ctx context.Context) {
 	}
 }
 
-func (d *Dispatcher) Enqueue(ctx context.Context, event leadingest.LeadEvent, suggestions ...models.LeadSuggestion) error {
-	return d.store.Enqueue(ctx, event, suggestions...)
+func (d *Dispatcher) Enqueue(ctx context.Context, event leadingest.LeadEvent) error {
+	return d.store.Enqueue(ctx, event)
 }
 
 func (d *Dispatcher) Dispatch(ctx context.Context) {

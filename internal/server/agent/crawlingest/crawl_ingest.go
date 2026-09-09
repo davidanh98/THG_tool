@@ -155,17 +155,10 @@ func (h *Handler) buildConnectorCrawlIngestDeps(orgID int64, req connectorCrawlR
 			if org, _ := h.db.GetOrganization(ev.OrgID); org != nil {
 				workspace = org.Name
 			}
+			if h.tgEvents == nil {
+				return
+			}
 			deliver := func(suggestion models.LeadSuggestion) {
-				// CRM and Telegram consume the exact same completed snapshot. The
-				// durable outbox makes CRM delivery retryable without regenerating AI.
-				if h.crmLeadSync != nil {
-					if err := h.crmLeadSync.Enqueue(context.Background(), ev, suggestion); err != nil {
-						log.Printf("CRM enriched lead enqueue failed: %v", err)
-					}
-				}
-				if h.tgEvents == nil {
-					return
-				}
 				h.tgEvents.NotifyLead(control.LeadNotice{
 					OrgID: ev.OrgID, LeadID: ev.LeadID, Channel: "facebook", Workspace: workspace,
 					Author: ev.AuthorName, PostURL: ev.PostURL, Excerpt: ev.Excerpt, Reason: ev.Reason, BaseURL: h.baseURL,
