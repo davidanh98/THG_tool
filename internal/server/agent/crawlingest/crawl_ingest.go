@@ -10,11 +10,9 @@ import (
 
 	"github.com/thg/scraper/internal/ai"
 	"github.com/thg/scraper/internal/leadingest"
-	"github.com/thg/scraper/internal/models"
 	"github.com/thg/scraper/internal/scoring"
 	"github.com/thg/scraper/internal/server/system"
 	"github.com/thg/scraper/internal/store/app"
-	"github.com/thg/scraper/internal/telegram/control"
 )
 
 // Connector crawl-result ingest PROCESSOR (Fiber-free domain layer). The HTTP handler
@@ -150,36 +148,7 @@ func (h *Handler) buildConnectorCrawlIngestDeps(orgID int64, req connectorCrawlR
 		UserPrompt:      strings.TrimSpace(req.UserPrompt),
 		ExtraSignals:    []string{"chrome_extension_crawl"},
 		IntentID:        req.IntentID,
-		OnLeadCreated: func(ev leadingest.LeadEvent) {
-			workspace := ""
-			if org, _ := h.db.GetOrganization(ev.OrgID); org != nil {
-				workspace = org.Name
-			}
-			deliver := func(suggestion models.LeadSuggestion) {
-				// CRM and Telegram consume the exact same completed snapshot. The
-				// durable outbox makes CRM delivery retryable without regenerating AI.
-				if h.crmLeadSync != nil {
-					if err := h.crmLeadSync.Enqueue(context.Background(), ev, suggestion); err != nil {
-						log.Printf("CRM enriched lead enqueue failed: %v", err)
-					}
-				}
-				if h.tgEvents == nil {
-					return
-				}
-				h.tgEvents.NotifyLead(control.LeadNotice{
-					OrgID: ev.OrgID, LeadID: ev.LeadID, Channel: "facebook", Workspace: workspace,
-					Author: ev.AuthorName, PostURL: ev.PostURL, Excerpt: ev.Excerpt, Reason: ev.Reason, BaseURL: h.baseURL,
-					SuggestedReply: suggestion.Reply, ProductName: suggestion.ProductName, ProductURL: suggestion.ProductURL,
-					ProductImageURL: suggestion.ProductImageURL,
-				})
-			}
-			if h.leadSuggestion != nil && h.leadSuggestionAllowed != nil && h.leadSuggestionAllowed(ev.OrgID) && h.suggestionRunner != nil && h.suggestionRunner.Try(
-				func(ctx context.Context) models.LeadSuggestion { return h.leadSuggestion(ctx, ev) }, deliver,
-			) {
-				return
-			}
-			deliver(models.LeadSuggestion{})
-		},
+		OnLeadCreated:   h.notifyCrawlLead,
 	}
 }
 
