@@ -3,6 +3,7 @@ package agent
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/thg/scraper/internal/ai"
+	"github.com/thg/scraper/internal/crmleadsync"
 	"github.com/thg/scraper/internal/drivers/copilot"
 	"github.com/thg/scraper/internal/leadingest"
 	"github.com/thg/scraper/internal/notifications"
@@ -31,6 +32,7 @@ type Deps struct {
 	LeadSuggestion        leadingest.SuggestionBuild
 	LeadSuggestionAllowed func(int64) bool
 	SuggestionRunner      *notifications.SuggestionRunner
+	CRMLeadSync           *crmleadsync.Dispatcher
 	// AccountSafety receives terminal crawl results so machine crawl slots free
 	// immediately (PR-C4). Optional; nil = no result feedback.
 	AccountSafety *accountsafety.Coordinator
@@ -77,6 +79,7 @@ func ConnectorRoutes(group fiber.Router, deps Deps) {
 		LeadSuggestion:        deps.LeadSuggestion,
 		LeadSuggestionAllowed: deps.LeadSuggestionAllowed,
 		SuggestionRunner:      deps.SuggestionRunner,
+		CRMLeadSync:           deps.CRMLeadSync,
 	}, h.agentAuth)
 	// Outbound execution (outbox claim/sent/failed/pre-submit + comment reverify)
 	// lives in the outbox subpackage — same effective paths + token auth; it owns

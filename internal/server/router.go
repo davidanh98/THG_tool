@@ -40,6 +40,7 @@ import (
 	"github.com/thg/scraper/internal/workspace_knowledge/ingestion"
 	"github.com/thg/scraper/internal/workspace_knowledge/ingestion/csv"
 	"github.com/thg/scraper/internal/workspace_knowledge/ingestion/rest_json"
+	trainingexport "github.com/thg/scraper/internal/workspace_knowledge/ingestion/training_export"
 	wsksources "github.com/thg/scraper/internal/workspace_knowledge/sources"
 )
 
@@ -120,6 +121,7 @@ func (s *Server) registerRoutes() {
 		LeadSuggestion:        s.cfg.LeadSuggestion,
 		LeadSuggestionAllowed: s.cfg.LeadSuggestionAllowed,
 		SuggestionRunner:      s.cfg.LeadSuggestionRunner,
+		CRMLeadSync:           s.cfg.CRMLeadSync,
 	})
 
 	authDeps := serverauth.Deps{
@@ -280,6 +282,7 @@ func (s *Server) registerRoutes() {
 	// when they land; no per-adapter handler wiring needed.
 	ingestRegistry := ingestion.NewRegistry()
 	ingestRegistry.Register(rest_json.New())
+	ingestRegistry.Register(trainingexport.New())
 	// csv: implemented, inline-body ingestor that maps each row to an asset of a
 	// configurable type (sales_playbook/faq/cta/...). Enables operators to supply
 	// raw service knowledge (P2b) as a pasted CSV so the agent can ground service

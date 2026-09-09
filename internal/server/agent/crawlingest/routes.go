@@ -15,6 +15,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/thg/scraper/internal/ai"
+	"github.com/thg/scraper/internal/crmleadsync"
 	"github.com/thg/scraper/internal/leadingest"
 	"github.com/thg/scraper/internal/notifications"
 	"github.com/thg/scraper/internal/session/accountsafety"
@@ -34,6 +35,7 @@ type Deps struct {
 	LeadSuggestion        leadingest.SuggestionBuild
 	LeadSuggestionAllowed func(int64) bool
 	SuggestionRunner      *notifications.SuggestionRunner
+	CRMLeadSync           *crmleadsync.Dispatcher
 	// AccountSafety is the process-local coordinator shared with the crawl
 	// scheduler (PR-C4): every terminal crawl result reports its exit_reason so
 	// the machine slot frees immediately and risk exits park the account.
@@ -52,6 +54,7 @@ type Handler struct {
 	leadSuggestion        leadingest.SuggestionBuild
 	leadSuggestionAllowed func(int64) bool
 	suggestionRunner      *notifications.SuggestionRunner
+	crmLeadSync           *crmleadsync.Dispatcher
 	accountSafety         *accountsafety.Coordinator
 }
 
@@ -66,6 +69,7 @@ func NewHandler(deps Deps) *Handler {
 		leadSuggestion:        deps.LeadSuggestion,
 		leadSuggestionAllowed: deps.LeadSuggestionAllowed,
 		suggestionRunner:      deps.SuggestionRunner,
+		crmLeadSync:           deps.CRMLeadSync,
 		accountSafety:         deps.AccountSafety,
 	}
 }
