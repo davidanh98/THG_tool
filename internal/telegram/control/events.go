@@ -1,6 +1,7 @@
 package control
 
 import (
+	"log"
 	"strconv"
 	"strings"
 
@@ -79,7 +80,19 @@ func (s *Service) NotifyLead(n LeadNotice) {
 		ProductURL:      strings.TrimSpace(n.ProductURL),
 		ProductImageURL: strings.TrimSpace(n.ProductImageURL),
 	})
-	_, _ = s.NotifyEvent(n.OrgID, "lead_created", channel, msg)
+	delivered, err := s.NotifyEvent(n.OrgID, "lead_created", channel, msg)
+	if err != nil {
+		// Do not include post text, author, or message content in logs. Operators
+		// still need a clear signal when an eligible lead cannot reach Telegram.
+		log.Printf("Telegram lead notification failed: org_id=%d channel=%s error=%v", n.OrgID, channel, err)
+		return
+	}
+	if delivered == 0 {
+		// A zero delivery is commonly a missing org bot, destination, or event
+		// subscription. This was previously silent and made a workspace-routing
+		// mismatch look like the crawler had found no leads.
+		log.Printf("Telegram lead notification skipped: org_id=%d channel=%s delivered=0; check org bot, destination, and lead_created subscription", n.OrgID, channel)
+	}
 }
 
 // action presentation: header + status + failure flag + human-action hint, per event type. Future
