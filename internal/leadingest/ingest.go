@@ -54,13 +54,17 @@ type Deps struct {
 // LeadEvent is the data a notification needs when a new lead is created. Excerpt is RAW post text
 // (the consumer sanitizes it); Reason is the matched signal/AI reason.
 type LeadEvent struct {
-	OrgID, LeadID int64
-	AuthorName    string // author / lead name
-	PostURL       string // canonical Facebook permalink
-	Excerpt       string // raw post content (sanitized downstream)
-	Reason        string // matched signal / AI reason
-	SourceType    string // post | comment
-	GroupFBID     string // source group id, when known
+	OrgID, LeadID    int64
+	AuthorName       string  // author / lead name
+	AuthorProfileURL string  // source profile, retained for CRM identity
+	PostURL          string  // canonical Facebook permalink
+	PostFBID         string  // Facebook post id when captured by the crawler
+	Excerpt          string  // raw post content (sanitized downstream)
+	Reason           string  // matched signal / AI reason
+	SourceType       string  // post | comment
+	GroupFBID        string  // source group id, when known
+	Score            float64 // classification score at capture time
+	Category         string  // classification category at capture time
 }
 
 // SignalGate mirrors brain.MarketSignalGate but lives in this package to avoid

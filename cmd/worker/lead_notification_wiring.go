@@ -4,10 +4,12 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/thg/scraper/internal/ai"
 	"github.com/thg/scraper/internal/config"
+	"github.com/thg/scraper/internal/crmleadsync"
 	facebookcrawl "github.com/thg/scraper/internal/jobhandlers/facebook_crawl"
 	"github.com/thg/scraper/internal/leadingest"
 	"github.com/thg/scraper/internal/models"
@@ -23,6 +25,19 @@ type workerSuggestionRuntime struct {
 	build     leadingest.SuggestionBuild
 	allowlist facebook.OrgAllowlist
 	runner    *notifications.SuggestionRunner
+}
+
+const defaultCRMLeadSyncURL = "https://crm.thgfulfill.com/api/integrations/thg-tool/leads"
+
+func crmLeadSyncSecret() string {
+	if value := strings.TrimSpace(os.Getenv("CRM_LEAD_SYNC_KEY")); value != "" {
+		return value
+	}
+	value, err := os.ReadFile("/etc/thg-scraper/crm_lead_sync_key")
+	if err != nil && !os.IsNotExist(err) {
+		log.Printf("CRM lead sync key file unreadable: %v", err)
+	}
+	return strings.TrimSpace(string(value))
 }
 
 func newWorkerSuggestionRuntime(mainStore *store.Store) workerSuggestionRuntime {
@@ -57,7 +72,7 @@ func logWorkerSuggestionPolicy(allowlist facebook.OrgAllowlist) {
 	log.Println("⚠️  Operator lead suggestions enabled but LEAD_SUGGESTION_ORG_IDS is empty/invalid; no org is allowed")
 }
 
-func setupWorkerLeadNotifications(mainStore *store.Store, handler *facebookcrawl.Handler) {
+func setupWorkerLeadNotifications(ctx context.Context, mainStore *store.Store, handler *facebookcrawl.Handler, crmStore *crmleadsync.Store) {
 	tgControl := control.NewService(mainStore.Telegram(), tgclient.Bot, control.Flags{
 		NotifyEnabled:       envOr("TELEGRAM_NOTIFY_ENABLED", "true") != "false",
 		GlobalToken:         os.Getenv("TELEGRAM_BOT_TOKEN"),
@@ -68,12 +83,24 @@ func setupWorkerLeadNotifications(mainStore *store.Store, handler *facebookcrawl
 		log.Println("ℹ️  [PLATFORM] PUBLIC_APP_URL/APP_BASE_URL not set — Telegram lead notifications will omit the dashboard link (internal config).")
 	}
 	suggestion := newWorkerSuggestionRuntime(mainStore)
-	handler.SetLeadNotifier(workerLeadNotifier(mainStore, tgControl, baseURL, suggestion))
+	crmSync := crmleadsync.NewDispatcher(crmStore, envOr("CRM_LEAD_SYNC_URL", defaultCRMLeadSyncURL), crmLeadSyncSecret())
+	if crmSync != nil {
+		go crmSync.Run(ctx)
+		log.Println("CRM lead sync outbox enabled")
+	} else {
+		log.Println("CRM lead sync outbox disabled: CRM_LEAD_SYNC_KEY is not configured")
+	}
+	handler.SetLeadNotifier(workerLeadNotifier(mainStore, tgControl, baseURL, suggestion, crmSync))
 	log.Println("✅ Telegram lead-created channel notifier wired (per-org bot)")
 }
 
-func workerLeadNotifier(mainStore *store.Store, tgControl *control.Service, baseURL string, suggestion workerSuggestionRuntime) func(leadingest.LeadEvent) {
+func workerLeadNotifier(mainStore *store.Store, tgControl *control.Service, baseURL string, suggestion workerSuggestionRuntime, crmSync *crmleadsync.Dispatcher) func(leadingest.LeadEvent) {
 	return func(ev leadingest.LeadEvent) {
+		if crmSync != nil {
+			if err := crmSync.Enqueue(context.Background(), ev); err != nil {
+				log.Printf("CRM lead sync enqueue failed: %v", err)
+			}
+		}
 		workspace := ""
 		if org, _ := mainStore.GetOrganization(ev.OrgID); org != nil {
 			workspace = org.Name

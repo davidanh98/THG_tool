@@ -105,12 +105,10 @@ func mirrorLegacyLead(ctx context.Context, deps Deps, in Input, content, sourceT
 	if deps.OnLeadCreated != nil {
 		deps.OnLeadCreated(LeadEvent{
 			OrgID: in.OrgID, LeadID: leadID,
-			AuthorName: strings.TrimSpace(in.AuthorName),
-			PostURL:    in.PrimaryURL,
-			Excerpt:    content,
+			AuthorName: strings.TrimSpace(in.AuthorName), AuthorProfileURL: strings.TrimSpace(in.AuthorProfileURL),
+			PostURL: in.PrimaryURL, PostFBID: in.PostFBID, Excerpt: content,
 			Reason:     textutil.FirstNonEmpty(out.AIReason, strings.Join(out.Signals, " / ")),
-			SourceType: sourceType,
-			GroupFBID:  in.GroupFBID,
+			SourceType: sourceType, GroupFBID: in.GroupFBID, Score: out.Score, Category: out.Category,
 		})
 	}
 }

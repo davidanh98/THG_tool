@@ -9,6 +9,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/thg/scraper/internal/ai"
+	"github.com/thg/scraper/internal/crmleadsync"
 	facebookcrawl "github.com/thg/scraper/internal/jobhandlers/facebook_crawl"
 	"github.com/thg/scraper/internal/jobs"
 	"github.com/thg/scraper/internal/livesession"
@@ -52,6 +53,8 @@ func main() {
 		log.Println("⚠️  [PLATFORM] ENCRYPTION_KEY not set — per-org Telegram channel notifications from the worker are degraded until configured (internal deployment config, not customer setup).")
 	}
 	mainStore.SetEncryptionKey(encKey)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// ── Session allocator + live session factory ─────────────────────────────
 	// The allocator atomically claims idle browser sessions per job.
@@ -75,7 +78,7 @@ func main() {
 	h := facebookcrawl.New(fallback, scorer, jobStore, mainStore.App())
 	h.SetAllocator(allocator, lsFactory)
 
-	setupWorkerLeadNotifications(mainStore, h)
+	setupWorkerLeadNotifications(ctx, mainStore, h, crmleadsync.NewStore(mainStore.DB()))
 	// Classifier key/base: LLM_CLASSIFIER_* (then LLM_*, then OPENAI_API_KEY)
 	// route it at an OpenAI-compatible provider (e.g. Together AI for strict
 	// json_schema). Keep in sync with config.LLMClassifier* in cmd/scraper.
@@ -114,8 +117,6 @@ func main() {
 	// dispatches to the registered handler in a goroutine, and writes
 	// running → completed / failed back to the DB.
 	sched := jobs.NewScheduler(jobStore, registry)
-
-	ctx, cancel := context.WithCancel(context.Background())
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
